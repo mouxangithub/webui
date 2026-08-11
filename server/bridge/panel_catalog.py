@@ -10,24 +10,36 @@ PANELS: list[dict[str, Any]] = [
   {
     "id": "device",
     "title": "Device",
+    "custom": "device",
     "widgets": [
       {"type": "readonly", "param": "DongleId", "label": "Dongle ID"},
       {"type": "readonly", "param": "HardwareSerial", "label": "Serial"},
       {"type": "action", "action": "pair_device", "label": "Pair Device", "button": "PAIR",
-       "desc": "Pair with comma connect (connect.comma.ai)."},
+       "desc": "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."},
       {"type": "action", "action": "reset_calibration", "label": "Reset Calibration", "button": "RESET",
-       "desc": "Device must be mounted within 4° left/right, 5° up or 9° down.", "offroad_only": True},
-      {"type": "section", "label": "sunnypilot"},
-      {"type": "bool", "param": "OffroadMode", "label": "Always Offroad"},
-      {"type": "bool", "param": "QuietMode", "label": "Quiet Mode"},
-      {"type": "bool", "param": "OnroadUploads", "label": "Onroad Uploads"},
-      {"type": "choice", "param": "DeviceBootMode", "label": "Boot Mode",
-       "options": ["Default", "Recovery"]},
-      {"type": "action", "action": "reset_all_params", "label": "Reset All Settings", "button": "RESET",
-       "confirm": "Reset all sunnypilot settings?", "offroad_only": True},
-      {"type": "section", "label": "Power"},
-      {"type": "action", "action": "reboot", "label": "Reboot", "button": "REBOOT"},
-      {"type": "action", "action": "shutdown", "label": "Power Off", "button": "POWER OFF", "offroad_only": True},
+       "desc": "sunnypilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.",
+       "offroad_only": True, "dynamic_desc": "calibration"},
+      {"type": "custom", "custom": "device_language"},
+      {"type": "choice", "param": "DeviceBootMode", "label": "Wake Up Behavior",
+       "options": ["Default", "Offroad"],
+       "desc": "Controls state of the device after boot/sleep.\n\nDefault: Device will boot/wake-up normally & will be ready to engage.\nOffroad: Device will be in Always Offroad mode after boot/wake-up."},
+      {"type": "option", "param": "MaxTimeOffroad", "label": "Max Time Offroad",
+       "desc": "Device will automatically shutdown after set time once the engine is turned off.\n(30h is the default)",
+       "min": 0, "max": 11, "step": 1,
+       "value_map": {"0": 0, "1": 5, "2": 10, "3": 15, "4": 30, "5": 60, "6": 120, "7": 180, "8": 300, "9": 600, "10": 1440, "11": 1800}},
+      {"type": "dual_button",
+       "left": {"label": "Quiet Mode", "param": "QuietMode", "toggle": True},
+       "right": {"label": "Driver Camera Preview", "custom": "driver_camera", "offroad_only": True}},
+      {"type": "dual_button",
+       "left": {"label": "Regulatory", "action": "open_regulatory", "offroad_only": True},
+       "right": {"label": "Training Guide", "action": "open_training", "offroad_only": True}},
+      {"type": "dual_button",
+       "left": {"label": "Onroad Uploads", "param": "OnroadUploads", "toggle": True},
+       "right": {"label": "Reset Settings", "action": "reset_all_params", "offroad_only": True, "confirm_twice": True}},
+      {"type": "custom", "custom": "always_offroad"},
+      {"type": "dual_button",
+       "left": {"label": "Reboot", "action": "reboot"},
+       "right": {"label": "Power Off", "action": "shutdown", "offroad_only": True}},
     ],
   },
   {
@@ -44,6 +56,7 @@ PANELS: list[dict[str, Any]] = [
   {
     "id": "sunnylink",
     "title": "sunnylink",
+    "custom": "sunnylink",
     "widgets": [
       {"type": "bool", "param": "SunnylinkEnabled", "label": "Enable sunnylink"},
       {"type": "readonly", "param": "SunnylinkDongleId", "label": "sunnylink Dongle ID"},
@@ -109,21 +122,15 @@ PANELS: list[dict[str, Any]] = [
     "id": "steering",
     "title": "Steering",
     "widgets": [
-      {"type": "bool", "param": "Mads", "label": "MADS"},
-      {"type": "bool", "param": "MadsMainCruiseAllowed", "label": "MADS Main Cruise Allowed"},
-      {"type": "bool", "param": "MadsUnifiedEngagementMode", "label": "MADS Unified Engagement"},
-      {"type": "choice", "param": "MadsSteeringMode", "label": "MADS Steering Mode",
-       "options": ["Disengage", "Pause", "Always"]},
-      {"type": "bool", "param": "BlinkerPauseLateralControl", "label": "Pause Lateral with Blinker"},
-      {"type": "int", "param": "BlinkerMinLateralControlSpeed", "label": "Min Speed to Pause", "min": 0, "max": 255, "step": 5},
+      {"type": "bool", "param": "Mads", "label": "Modular Assistive Driving System (MADS)"},
+      {"type": "subpanel", "target": "steering__mads", "label": "Customize MADS", "button": "CUSTOMIZE"},
+      {"type": "subpanel", "target": "steering__lane_change", "label": "Customize Lane Change", "button": "CUSTOMIZE"},
+      {"type": "bool", "param": "BlinkerPauseLateralControl", "label": "Pause Lateral Control with Blinker"},
+      {"type": "int", "param": "BlinkerMinLateralControlSpeed", "label": "Minimum Speed to Pause", "min": 0, "max": 255, "step": 5},
       {"type": "int", "param": "BlinkerLateralReengageDelay", "label": "Post-Blinker Delay", "min": 0, "max": 10, "step": 1},
       {"type": "bool", "param": "EnforceTorqueControl", "label": "Enforce Torque Lateral Control"},
-      {"type": "bool", "param": "NeuralNetworkLateralControl", "label": "NNLC"},
-      {"type": "bool", "param": "LiveTorqueParamsToggle", "label": "Live Torque Params"},
-      {"type": "bool", "param": "CustomTorqueParams", "label": "Custom Torque Params"},
-      {"type": "int", "param": "AutoLaneChangeTimer", "label": "Auto Lane Change Timer", "min": 0, "max": 30, "step": 1},
-      {"type": "int", "param": "AutoLaneChangeBsmDelay", "label": "ALC BSM Delay", "min": 0, "max": 10, "step": 1},
-      {"type": "bool", "param": "LateralJerkTorqueController", "label": "Lateral Jerk Torque Controller"},
+      {"type": "subpanel", "target": "steering__torque", "label": "Customize Torque Params", "button": "CUSTOMIZE"},
+      {"type": "bool", "param": "NeuralNetworkLateralControl", "label": "Neural Network Lateral Control (NNLC)"},
     ],
   },
   {
@@ -137,13 +144,7 @@ PANELS: list[dict[str, Any]] = [
       {"type": "bool", "param": "CustomAccIncrementsEnabled", "label": "Custom ACC Increments"},
       {"type": "int", "param": "CustomAccShortPressIncrement", "label": "Short Press Increment", "min": 1, "max": 10, "step": 1},
       {"type": "int", "param": "CustomAccLongPressIncrement", "label": "Long Press Increment", "min": 1, "max": 3, "step": 1},
-      {"type": "choice", "param": "SpeedLimitMode", "label": "Speed Limit Mode",
-       "options": ["Off", "Warning", "Active"]},
-      {"type": "choice", "param": "SpeedLimitOffsetType", "label": "Speed Limit Offset Type",
-       "options": ["Fixed", "Percentage"]},
-      {"type": "int", "param": "SpeedLimitValueOffset", "label": "Speed Limit Offset", "min": -30, "max": 30, "step": 1},
-      {"type": "choice", "param": "SpeedLimitPolicy", "label": "Speed Limit Policy",
-       "options": ["Car", "Map", "Hybrid"]},
+      {"type": "subpanel", "target": "cruise__sla", "label": "Speed Limit", "button": "CUSTOMIZE"},
     ],
   },
   {
@@ -201,6 +202,7 @@ PANELS: list[dict[str, Any]] = [
   {
     "id": "vehicle",
     "title": "Vehicle",
+    "custom": "vehicle",
     "widgets": [
       {"type": "bool", "param": "ToyotaEnforceStockLongitudinal", "label": "Toyota Stock Longitudinal"},
       {"type": "bool", "param": "ToyotaStopAndGoHack", "label": "Toyota Stop and Go Hack"},
@@ -215,14 +217,7 @@ PANELS: list[dict[str, Any]] = [
     "id": "firehose",
     "title": "Firehose",
     "custom": "firehose",
-    "widgets": [
-      {"type": "html", "html": (
-        "<h2>Firehose Mode</h2><p>sunnypilot learns to drive by watching humans drive. "
-        "Firehose maximizes training data uploads.</p>"
-        "<p>Bring device inside weekly, connect USB-C charger and Wi-Fi for best results.</p>"
-      )},
-      {"type": "readonly", "param": "ApiCache_FirehoseStats", "label": "Upload Status"},
-    ],
+    "widgets": [],
   },
   {
     "id": "developer",
@@ -239,9 +234,57 @@ PANELS: list[dict[str, Any]] = [
       {"type": "bool", "param": "EnableGithubRunner", "label": "Enable GitHub Runner"},
       {"type": "bool", "param": "EnableCopyparty", "label": "Enable Copyparty"},
       {"type": "bool", "param": "QuickBootToggle", "label": "Quick Boot"},
+      {"type": "custom", "custom": "ssh_keys", "label": "SSH Keys"},
     ],
   },
 ]
+
+SUBPANELS: dict[str, dict[str, Any]] = {
+  "steering__mads": {
+    "id": "steering__mads",
+    "title": "Customize MADS",
+    "parent": "steering",
+    "widgets": [
+      {"type": "bool", "param": "MadsMainCruiseAllowed", "label": "Toggle with Main Cruise"},
+      {"type": "bool", "param": "MadsUnifiedEngagementMode", "label": "Unified Engagement Mode (UEM)"},
+      {"type": "choice", "param": "MadsSteeringMode", "label": "Steering Mode on Brake Pedal",
+       "options": ["Remain Active", "Pause", "Disengage"]},
+    ],
+  },
+  "steering__lane_change": {
+    "id": "steering__lane_change",
+    "title": "Customize Lane Change",
+    "parent": "steering",
+    "widgets": [
+      {"type": "int", "param": "AutoLaneChangeTimer", "label": "Auto Lane Change Timer", "min": 0, "max": 30, "step": 1},
+      {"type": "int", "param": "AutoLaneChangeBsmDelay", "label": "BSM Delay", "min": 0, "max": 10, "step": 1},
+    ],
+  },
+  "steering__torque": {
+    "id": "steering__torque",
+    "title": "Customize Torque Params",
+    "parent": "steering",
+    "widgets": [
+      {"type": "bool", "param": "LiveTorqueParamsToggle", "label": "Live Torque Params"},
+      {"type": "bool", "param": "CustomTorqueParams", "label": "Custom Torque Params"},
+      {"type": "bool", "param": "LateralJerkTorqueController", "label": "Lateral Jerk Torque Controller"},
+    ],
+  },
+  "cruise__sla": {
+    "id": "cruise__sla",
+    "title": "Speed Limit",
+    "parent": "cruise",
+    "widgets": [
+      {"type": "choice", "param": "SpeedLimitMode", "label": "Speed Limit Mode",
+       "options": ["Off", "Warning", "Active"]},
+      {"type": "choice", "param": "SpeedLimitOffsetType", "label": "Offset Type",
+       "options": ["Fixed", "Percentage"]},
+      {"type": "int", "param": "SpeedLimitValueOffset", "label": "Value Offset", "min": -30, "max": 30, "step": 1},
+      {"type": "choice", "param": "SpeedLimitPolicy", "label": "Policy",
+       "options": ["Car", "Map", "Hybrid"]},
+    ],
+  },
+}
 
 
 def panel_ids() -> list[str]:
@@ -249,7 +292,18 @@ def panel_ids() -> list[str]:
 
 
 def get_panel(panel_id: str) -> dict[str, Any] | None:
+  if panel_id in SUBPANELS:
+    return SUBPANELS[panel_id]
   for p in PANELS:
     if p["id"] == panel_id:
       return p
   return None
+
+
+def panel_schema() -> dict[str, Any]:
+  from webui.server.bridge.design_tokens import PANEL_ICONS, tokens_payload
+  panels_out = []
+  for p in PANELS:
+        entry = {**p, "icon": PANEL_ICONS.get(p["id"], "")}
+        panels_out.append(entry)
+  return {"ok": True, "panels": panels_out, "subpanels": list(SUBPANELS.keys()), **tokens_payload()}

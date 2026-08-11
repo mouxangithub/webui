@@ -49,7 +49,8 @@ def snapshot_ui_state() -> dict[str, Any]:
 
     services = [
       "deviceState", "selfdriveState", "carState", "controlsState",
-      "pandaStates", "managerState",
+      "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
+      "longitudinalPlanSP",
     ]
     try:
       services.append("selfdriveStateSP")
@@ -106,6 +107,47 @@ def snapshot_ui_state() -> dict[str, Any]:
 
     experimental = bool(ss.experimentalMode) if hasattr(ss, "experimentalMode") else False
 
+    sp_hud: dict[str, Any] = {}
+    try:
+      if sm.valid.get("selfdriveStateSP"):
+        ssp = sm["selfdriveStateSP"]
+        sp_hud = {
+          "speed_limit": getattr(ssp, "speedLimit", None),
+          "speed_limit_assist": str(getattr(ssp, "speedLimitAssist", "")).split(".")[-1],
+          "road_name": getattr(ssp, "roadName", "") or "",
+          "standstill_timer": getattr(ssp, "standstillTimer", None),
+          "blindspot_left": bool(getattr(ssp, "blindspotLeft", False)),
+          "blindspot_right": bool(getattr(ssp, "blindspotRight", False)),
+          "turn_signal_left": bool(getattr(ssp, "turnSignalLeft", False)),
+          "turn_signal_right": bool(getattr(ssp, "turnSignalRight", False)),
+          "rocket_fuel": getattr(ssp, "rocketFuel", None),
+        }
+    except Exception:
+      pass
+
+    dm_arc = None
+    try:
+      from openpilot.common.params import Params
+      always_dm = Params().get_bool("AlwaysOnDM")
+      alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
+      if always_dm and alert_size in ("none", "") and sm.valid.get("driverStateV2"):
+        dsv2 = sm["driverStateV2"]
+        dms = sm["driverMonitoringState"] if sm.valid.get("driverMonitoringState") else None
+        pose = getattr(dsv2, "faceOrientation", [0, 0, 0])
+        dm_arc = {
+          "visible": True,
+          "prob": float(getattr(dms, "awareProb", 0) or 0) if dms else 0.0,
+          "pose": [float(pose[0]), float(pose[1]), float(pose[2])] if len(pose) >= 3 else [0, 0, 0],
+          "engaged": engaged,
+          "rhd": bool(getattr(cs, "vegoCluster", 0)) if hasattr(cs, "vegoCluster") else False,
+        }
+    except Exception:
+      pass
+
+    alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
+    alert_heights = {"none": 0, "small": 184, "mid": 271, "full": 1080}
+    alert_height = alert_heights.get(alert_size, 271 if ss.alertText1 else 0)
+
     return {
       "ok": True,
       "started": started,
@@ -121,8 +163,9 @@ def snapshot_ui_state() -> dict[str, Any]:
       "alert": {
         "text1": ss.alertText1 or "",
         "text2": ss.alertText2 or "",
-        "size": str(ss.alertSize).split(".")[-1] if ss.alertSize else "",
+        "size": alert_size,
         "status": str(ss.alertStatus).split(".")[-1] if ss.alertStatus else "",
+        "height_px": alert_height,
       },
       "device": {
         "network_type": net_type,
@@ -140,6 +183,8 @@ def snapshot_ui_state() -> dict[str, Any]:
         "long_active": bool(ctrl.longActive) if hasattr(ctrl, "longActive") else None,
       },
       "personality": str(ss.personality).split(".")[-1] if hasattr(ss, "personality") else "",
+      "sp_hud": sp_hud,
+      "dm_arc": dm_arc,
     }
   except Exception as exc:
     return {

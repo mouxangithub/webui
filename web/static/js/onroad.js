@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "./api.js";
+import { updateSpHud } from "./hud_sp.js";
 
 let pc = null;
 let streaming = false;
@@ -11,10 +12,7 @@ export async function startRoadStream() {
 
   const boot = await apiGet("/api/opui/bootstrap").catch(() => ({}));
   if (boot.dev_pc) {
-    if (fb) {
-      const p = fb.querySelector("p");
-      if (p) p.textContent = "PC 预览模式 — 无真实相机流";
-    }
+    wrap?.classList.add("is-dev-pc");
     return;
   }
 
@@ -80,7 +78,7 @@ export function updateOnroadHud(st) {
   const unitEl = document.getElementById("hud-unit");
   const setSpeedWrap = document.getElementById("hud-set-speed");
   const setSpeedVal = document.getElementById("set-speed-val");
-  const setSpeedUnit = document.getElementById("set-speed-unit");
+  const cruiseMax = document.querySelector(".opui-hud-cruise-max");
   const expBtn = document.getElementById("btn-experimental");
   const alertBar = document.getElementById("alert-bar");
   const alertT1 = document.getElementById("alert-text1");
@@ -89,11 +87,11 @@ export function updateOnroadHud(st) {
 
   if (speedEl) speedEl.textContent = String(st.speed ?? 0);
   if (unitEl) unitEl.textContent = st.unit || "km/h";
-  if (setSpeedUnit) setSpeedUnit.textContent = st.unit || "km/h";
 
-  if (st.set_speed != null && setSpeedWrap && setSpeedVal) {
+  if (st.started && setSpeedWrap && setSpeedVal) {
     setSpeedWrap.hidden = false;
-    setSpeedVal.textContent = String(st.set_speed);
+    setSpeedVal.textContent = st.set_speed != null ? String(st.set_speed) : "–";
+    if (cruiseMax) cruiseMax.textContent = "MAX";
   } else if (setSpeedWrap) {
     setSpeedWrap.hidden = true;
   }
@@ -112,10 +110,14 @@ export function updateOnroadHud(st) {
   if (alertBar && alertT1) {
     const t1 = st.alert?.text1 || "";
     const t2 = st.alert?.text2 || "";
-    if (t1 && st.started) {
+    const size = (st.alert?.size || "").toLowerCase();
+    if (t1 && st.started && size !== "none") {
       alertBar.hidden = false;
       alertT1.textContent = t1;
       if (alertT2) alertT2.textContent = t2;
+      const h = st.alert?.height_px || (size === "small" ? 184 : size === "full" ? 1080 : 271);
+      alertBar.style.minHeight = `${h}px`;
+      alertBar.dataset.size = size;
       const status = (st.alert?.status || "").toLowerCase();
       if (status.includes("critical")) alertBar.style.background = "var(--alert-critical)";
       else if (status.includes("user")) alertBar.style.background = "var(--alert-user)";
@@ -125,30 +127,7 @@ export function updateOnroadHud(st) {
     }
   }
 
-  updateMetrics(st);
-}
-
-function updateMetrics(st) {
-  const metrics = document.getElementById("metrics");
-  if (!metrics) return;
-
-  const d = st.device || {};
-  const items = [
-    { label: "NET", value: d.network_type || "--", warn: false },
-    { label: "TEMP", value: d.cpu_temp != null ? `${d.cpu_temp}°C` : d.thermal || "--", warn: d.thermal === "yellow", danger: d.thermal === "red" },
-    { label: "CONNECT", value: d.athena_status || "OFFLINE", warn: !d.athena_status?.includes("CONNECTED") },
-    { label: "VEHICLE", value: d.panda_online ? "ONLINE" : "OFFLINE", danger: !d.panda_online },
-  ];
-
-  if (d.sunnylink_ping) {
-    items.push({ label: "SUNNYLINK", value: d.sunnylink_ping.slice(0, 16) });
-  }
-
-  metrics.innerHTML = items.map((m) => `
-    <div class="opui-metric${m.danger ? " opui-metric--danger" : m.warn ? " opui-metric--warn" : ""}">
-      <div class="opui-metric-label">${m.label}</div>
-      <div class="opui-metric-value">${m.value}</div>
-    </div>`).join("");
+  updateSpHud(st);
 }
 
 function waitIceComplete(pc) {

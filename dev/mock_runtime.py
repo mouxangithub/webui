@@ -19,15 +19,26 @@ SIM: dict[str, Any] = {
   "speed_kmh": 72,
   "set_speed_kmh": 80,
   "is_metric": True,
-  "experimental_mode": False,
+  "experimental_mode": True,
   "alert_text1": "",
   "alert_text2": "",
   "alert_status": "normal",
   "network_type": "Wi-Fi",
+  "network_strength": 5,
   "thermal": "green",
   "cpu_temp": 58,
   "athena_status": "CONNECTED",
   "panda_online": True,
+  "road_name": "Dev Preview Rd",
+  "speed_limit": 60,
+  "blindspot_left": False,
+  "blindspot_right": False,
+  "turn_signal_left": False,
+  "turn_signal_right": False,
+  "rocket_fuel": 0.35,
+  "dm_prob": 0.82,
+  "dm_pose": [0.05, -0.12, 0.02],
+  "alert_size": "none",
 }
 
 
@@ -35,7 +46,8 @@ def _seed_params() -> dict[str, bytes | str]:
   """Default param values for panel preview."""
   bool_on = {
     "OpenpilotEnabledToggle", "IsLdwEnabled", "AlwaysOnDM", "IsMetric",
-    "Mads", "BlindSpot", "SunnylinkEnabled",
+    "Mads", "BlindSpot", "SunnylinkEnabled", "DisengageOnAccelerator",
+    "RecordFront", "RecordAudio",
   }
   data: dict[str, bytes | str] = {}
   for k in bool_on:
@@ -46,6 +58,7 @@ def _seed_params() -> dict[str, bytes | str]:
     "LongitudinalPersonality": b"1",
     "DistractionDetectionLevel": b"1",
     "UpdaterCurrentDescription": b"sunnypilot dev-preview",
+    "ExperimentalMode": b"1",
     "GitBranch": b"master-c3",
     "UpdaterTargetBranch": b"master-c3",
     "UpdaterState": b"idle",
@@ -55,6 +68,12 @@ def _seed_params() -> dict[str, bytes | str]:
     "ApiCache_FirehoseStats": b'{"status":"idle"}',
     "LocalDriveStats": b'{"all":{"distance":1234.5,"routes":42,"minutes":890}}',
     "LastSunnylinkPingTime": b"2026-08-11T12:00:00Z",
+    "LanguageSetting": b"zh",
+    "MaxTimeOffroad": b"10",
+    "DeviceBootMode": b"0",
+    "QuietMode": b"0",
+    "OnroadUploads": b"1",
+    "OffroadMode": b"0",
   })
   return data
 
@@ -128,7 +147,9 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
   speed = s["speed_kmh"] if s["is_metric"] else round(s["speed_kmh"] * 0.621371)
   set_speed = s["set_speed_kmh"] if s["is_metric"] else round(s["set_speed_kmh"] * 0.621371)
 
-  alert = {"text1": s["alert_text1"], "text2": s["alert_text2"], "size": "mid", "status": s["alert_status"]}
+  alert = {"text1": s["alert_text1"], "text2": s["alert_text2"], "size": s.get("alert_size", "mid"), "status": s["alert_status"]}
+  sizes = {"none": 0, "small": 184, "mid": 271, "full": 1080}
+  alert["height_px"] = sizes.get(alert["size"], 0) if s["alert_text1"] else 0
 
   return {
     "ok": True,
@@ -146,14 +167,32 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "alert": alert,
     "device": {
       "network_type": s["network_type"],
+      "network_strength": s.get("network_strength", 5),
       "thermal": s["thermal"],
       "cpu_temp": s["cpu_temp"],
       "athena_status": s["athena_status"],
       "panda_online": s["panda_online"],
       "sunnylink_ping": "dev-preview",
+      "sunnylink_status": "ONLINE",
     },
     "controls": {"lat_active": True, "long_active": s["engaged"]},
     "personality": "standard",
+    "sp_hud": {
+      "speed_limit": s.get("speed_limit"),
+      "road_name": s.get("road_name", ""),
+      "blindspot_left": s.get("blindspot_left", False),
+      "blindspot_right": s.get("blindspot_right", False),
+      "turn_signal_left": s.get("turn_signal_left", False),
+      "turn_signal_right": s.get("turn_signal_right", False),
+      "rocket_fuel": s.get("rocket_fuel"),
+    },
+    "dm_arc": {
+      "visible": True,
+      "prob": s.get("dm_prob", 0.8),
+      "pose": s.get("dm_pose", [0, 0, 0]),
+      "engaged": s["engaged"],
+      "rhd": False,
+    } if s["started"] else None,
   }
 
 

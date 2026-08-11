@@ -6,7 +6,7 @@ from typing import Any
 
 from openpilot.common.params import Params, UnknownKeyName
 
-from webui.server.bridge.panel_catalog import PANELS, get_panel
+from webui.server.bridge.panel_catalog import PANELS, get_panel, panel_schema
 
 
 def _params() -> Params:
@@ -90,10 +90,6 @@ def list_toggle_params() -> dict[str, Any]:
   return panel_values("toggles")
 
 
-def panel_schema() -> dict[str, Any]:
-  return {"ok": True, "panels": PANELS}
-
-
 def panel_values(panel_id: str) -> dict[str, Any]:
   panel = get_panel(panel_id)
   if not panel:
@@ -105,8 +101,26 @@ def panel_values(panel_id: str) -> dict[str, Any]:
 
   for w in panel.get("widgets", []):
     wtype = w.get("type")
-    if wtype in ("section", "html", "action"):
+    if wtype in ("section", "html", "action", "subpanel"):
       widgets_out.append({**w, "available": True})
+      continue
+    if wtype == "custom":
+      widgets_out.append({**w, "available": True})
+      continue
+    if wtype == "dual_button":
+      entry = {**w, "available": True}
+      for side in ("left", "right"):
+        side_w = dict(w.get(side) or {})
+        sk = side_w.get("param")
+        if sk:
+          ptype = _param_type_name(p, sk)
+          if ptype is not None:
+            val = _serialize_value(p.get(sk))
+            values[sk] = val
+            side_w["value"] = val
+            side_w["param_type"] = ptype
+        entry[side] = side_w
+      widgets_out.append(entry)
       continue
 
     key = w.get("param")
@@ -131,7 +145,7 @@ def panel_values(panel_id: str) -> dict[str, Any]:
       **w,
       "available": True,
       "value": val,
-      "type": ptype,
+      "param_type": ptype,
       "locked": locked,
     })
 
@@ -139,6 +153,7 @@ def panel_values(panel_id: str) -> dict[str, Any]:
     "ok": True,
     "panel": panel_id,
     "title": panel.get("title", panel_id),
+    "parent": panel.get("parent"),
     "custom": panel.get("custom"),
     "values": values,
     "widgets": widgets_out,
