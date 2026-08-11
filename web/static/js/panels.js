@@ -12,16 +12,71 @@ function t(s) {
 function resolveWidgetType(w) {
   const known = new Set([
     "section", "html", "action", "subpanel", "custom", "dual_button", "option",
-    "readonly", "bool", "choice", "int",
+    "readonly", "bool", "choice", "int", "multiple_button",
   ]);
   if (known.has(w.type)) return w.type;
   const pt = String(w.param_type || w.type || "").toUpperCase();
+  if (w.buttons?.length) return "multiple_button";
   if (w.options?.length) return "choice";
   if (pt.includes("BOOL")) return "bool";
-  if (pt.includes("INT")) return "int";
+  if (pt.includes("INT") || pt.includes("FLOAT")) return w.label_format ? "option" : "int";
   if (pt.includes("STRING")) return w.options?.length ? "choice" : "readonly";
   return w.type;
 }
+
+function widgetVisible(w, panelData) {
+  if (w.advanced_if) {
+    const adv = panelData.values?.[w.advanced_if.param];
+    if (String(adv) !== String(w.advanced_if.eq)) return false;
+  }
+  if (!w.visible_if) return true;
+  const dep = panelData.values?.[w.visible_if.param];
+  if (w.visible_if.ne != null) return String(dep) !== String(w.visible_if.ne);
+  return String(dep) === String(w.visible_if.eq);
+}
+
+function formatOptionLabel(w, rawVal) {
+  const idx = parseInt(rawVal, 10);
+  const val = Number.isNaN(idx) ? rawVal : idx;
+  const fmt = w.label_format;
+  const valueMap = w.value_map || {};
+
+  if (fmt === "lane_change_timer") {
+    const map = { [-1]: t("Off"), 0: t("Nudge"), 1: t("Nudgeless"), 2: `0.5 ${t("s")}`, 3: `1 ${t("s")}`, 4: `2 ${t("s")}`, 5: `3 ${t("s")}` };
+    return map[val] ?? String(val);
+  }
+  if (fmt === "onroad_brightness") {
+    if (val === 0) return t("Auto (Default)");
+    if (val === 1) return t("Auto (Dark)");
+    if (val === 2) return t("Screen Off");
+    return `${(val - 2) * 5} %`;
+  }
+  if (fmt === "onroad_brightness_timer") {
+    const minutes = valueMap[String(val)];
+    if (minutes == null) return String(val);
+    return minutes < 60 ? `${minutes} ${t("s")}` : `${Math.floor(minutes / 60)} ${t("m")}`;
+  }
+  if (fmt === "interactivity_timeout") {
+    if (!val) return t("Default");
+    return val < 60 ? `${val} ${t("s")}` : `${Math.floor(val / 60)} ${t("m")}`;
+  }
+  if (fmt === "screensaver_timeout") return `${Math.floor(val / 60)} m`;
+  if (fmt === "lagd_delay") return `${(val / 100).toFixed(2)}s`;
+  if (fmt === "camera_offset") return `${(val / 100).toFixed(2)} m`;
+  if (fmt === "lane_turn_speed") return `${Math.round(val / 100)}`;
+  if (fmt === "torque_lat_accel") return `${(val / 100).toFixed(2)} m/s²`;
+  if (fmt === "torque_friction") return `${(val / 100).toFixed(2)}`;
+  if (fmt === "speed_limit_offset") {
+    const offsetType = panelDataRef?.values?.SpeedLimitOffsetType ?? "0";
+    if (String(offsetType) === "2") return `${val}%`;
+    if (String(offsetType) === "1") return `${val} ${globalState.is_metric ? "km/h" : "mph"}`;
+    return String(val);
+  }
+  if (Object.keys(valueMap).length) return formatMaxTimeLabel(val, valueMap);
+  return String(val);
+}
+
+let panelDataRef = null;
 
 let globalState = { started: false, engaged: false, is_offroad: true };
 let onNavigateSubpanel = null;
@@ -136,6 +191,7 @@ function renderAlwaysOffroadRow(active) {
 }
 
 function renderGenericPanel(container, data) {
+  panelDataRef = data;
   container.innerHTML = "";
   for (const w of data.widgets || []) {
     const el = renderWidget(w, data);
@@ -148,10 +204,7 @@ function renderWidget(w, panelData) {
   const offroad = globalState.is_offroad;
   if (w.offroad_only && !offroad) return null;
 
-  if (w.visible_if) {
-    const dep = panelData.values?.[w.visible_if.param];
-    if (String(dep) !== String(w.visible_if.eq)) return null;
-  }
+  if (!widgetVisible(w, panelData)) return null;
 
   if (kind === "section") {
     const row = document.createElement("div");
@@ -172,7 +225,11 @@ function renderWidget(w, panelData) {
   }
 
   if (kind === "option") {
-    return renderOptionRow(w);
+    return renderOptionRow(w, panelData);
+  }
+
+  if (kind === "multiple_button") {
+    return renderMultipleButtonRow(w, panelData);
   }
 
   if (kind === "action") {
@@ -231,6 +288,52 @@ function renderReadonlyRow(w) {
 
 function renderBoolRow(w) {
   return createSpToggle({ ...w, label: t(w.label), desc: w.desc ? t(w.desc) : "" }, {}, globalState, paramHandlers);
+}
+
+function renderMultipleButtonRow(w, panelData) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--stacked";
+  const buttons = (w.buttons || []).map((b) => t(b));
+  let idx = parseInt(w.value, 10);
+  if (Number.isNaN(idx)) idx = 0;
+
+  const text = document.createElement("div");
+  text.className = "opui-sp-row-text";
+  text.innerHTML = `
+    <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+    ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
+  row.appendChild(text);
+
+  const group = document.createElement("div");
+  group.className = "opui-multi-btn-group";
+  buttons.forEach((label, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.classList.toggle("selected", i === idx);
+    const disabled = (w.offroad_only && !globalState.is_offroad) || w.locked;
+    if (disabled) btn.disabled = true;
+    btn.addEventListener("click", async () => {
+      const res = await apiPut(`/api/opui/params/${encodeURIComponent(w.param)}`, {
+        value: String(i), needs_cycle: !!w.needs_cycle,
+      });
+      if (!res.ok) {
+        toast(res.error || t("Save failed"));
+        return;
+      }
+      w.value = String(i);
+      if (panelData.values) panelData.values[w.param] = String(i);
+      group.querySelectorAll("button").forEach((b, j) => b.classList.toggle("selected", j === i));
+      requestPanelRefresh();
+    });
+    group.appendChild(btn);
+  });
+  row.appendChild(group);
+  return row;
+}
+
+function requestPanelRefresh() {
+  window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
 }
 
 function renderChoiceRow(w) {
@@ -326,7 +429,7 @@ function formatMaxTimeLabel(index, valueMap) {
   return minutes === 1800 ? `${label}${t(" (Default)")}` : label;
 }
 
-function renderOptionRow(w) {
+function renderOptionRow(w, panelData) {
   const row = document.createElement("div");
   row.className = "opui-sp-row opui-sp-row--stacked";
   const valueMap = w.value_map || {};
@@ -349,22 +452,46 @@ function renderOptionRow(w) {
   minus.type = "button";
   minus.textContent = "−";
   const span = document.createElement("span");
-  span.textContent = formatMaxTimeLabel(idx, valueMap);
+  span.textContent = formatOptionLabel(w, idx);
   const plus = document.createElement("button");
   plus.type = "button";
   plus.textContent = "+";
 
   const save = async (v) => {
     idx = Math.max(min, Math.min(max, v));
-    span.textContent = formatMaxTimeLabel(idx, valueMap);
+    span.textContent = formatOptionLabel(w, idx);
     const res = await apiPut(`/api/opui/params/${encodeURIComponent(w.param)}`, { value: String(idx) });
     if (!res.ok) toast(res.error || t("Save failed"));
+    else {
+      w.value = String(idx);
+      if (panelData?.values) panelData.values[w.param] = String(idx);
+      requestPanelRefresh();
+    }
   };
   minus.addEventListener("click", () => save(idx - step));
   plus.addEventListener("click", () => save(idx + step));
   ctrl.append(minus, span, plus);
   row.appendChild(ctrl);
   return row;
+}
+
+async function showTrainingGuide() {
+  const pages = [
+    `<h2>${t("Training Guide")}</h2><p>${t("Review the rules, features, and limitations of sunnypilot")}</p>`,
+    `<h3>${t("Driver Monitoring")}</h3><p>${t("Keep your hands on the wheel and eyes on the road at all times.")}</p>`,
+    `<h3>${t("Takeover")}</h3><p>${t("Be ready to take over at any time. sunnypilot is not a substitute for an attentive driver.")}</p>`,
+  ];
+  for (let i = 0; i < pages.length; i++) {
+    const cont = i < pages.length - 1;
+    const ok = await showConfirm({
+      rich: true,
+      message: pages[i] + (cont ? `<br><br><i>${i + 1} / ${pages.length}</i>` : ""),
+      confirmText: cont ? t("Next") : t("Done"),
+      cancelText: t("Close"),
+      single: !cont,
+    });
+    if (!ok && cont) break;
+  }
 }
 
 async function runDualSideAction(side) {
@@ -383,11 +510,7 @@ async function runDualSideAction(side) {
     return;
   }
   if (side.action === "open_training") {
-    await showHtml({
-      title: t("Training Guide"),
-      html: `<p>${t("Review the rules, features, and limitations of sunnypilot")}</p>
-        <ul><li>${t("Keep hands on wheel")}</li><li>${t("Monitor the road")}</li><li>${t("Be ready to take over at any time")}</li></ul>`,
-    });
+    await showTrainingGuide();
     return;
   }
   if (side.action === "reset_all_params") {
@@ -438,6 +561,11 @@ function renderDualButtonRow(w) {
   }
   if (left.offroad_only && !offroad) lBtn.disabled = true;
   if (right.offroad_only && !offroad) rBtn.disabled = true;
+  if (right.hide_when_onroad && !offroad) {
+    rBtn.remove();
+  } else if (left.hide_when_onroad && !offroad) {
+    lBtn.remove();
+  }
 
   lBtn.addEventListener("click", async () => {
     if (left.toggle && left.param) {
@@ -537,6 +665,37 @@ function renderActionRow(w) {
     if (w.confirm && !(await showConfirm({ message: t(w.confirm), confirmText: t("Yes") }))) return;
     if (w.action === "pair_device") {
       window.open("https://connect.comma.ai/", "_blank");
+      return;
+    }
+    if (w.action === "developer_error_log") {
+      const log = await apiGet("/api/opui/developer/error-log");
+      if (!log.ok) {
+        toast(log.error || "Failed");
+        return;
+      }
+      await showHtml({ title: t("Error Log"), html: log.html || "" });
+      if (log.exists && (await showConfirm({ message: t("Would you like to delete this log?"), confirmText: t("Yes") }))) {
+        await apiPost("/api/opui/action/developer_delete_error_log");
+        toast(t("Log deleted"));
+      }
+      return;
+    }
+    if (w.action === "torque_tune_version") {
+      const versions = ["Default", "v1", "v2", "v3"];
+      const pick = await showMultiOption({ title: t("Torque Control Tune Version"), options: versions, selected: 0 });
+      if (pick == null) return;
+      const val = pick === 0 ? "" : String(pick);
+      if (val) await apiPut("/api/opui/params/TorqueControlTune", { value: val });
+      else await apiPut("/api/opui/params/TorqueControlTune", { value: "" });
+      toast(t("Torque tune updated"));
+      return;
+    }
+    if (w.action === "network_set_apn") {
+      const apn = await showKeyboard({ title: t("APN"), value: "", maxLen: 64 });
+      if (apn == null) return;
+      const res = await apiPost("/api/opui/action/network_set_apn", { apn });
+      if (res.ok) toast(t("APN saved"));
+      else toast(res.error || "Failed");
       return;
     }
     const res = await apiPost(`/api/opui/action/${encodeURIComponent(w.action)}`);
@@ -667,12 +826,20 @@ async function renderModelsPanel(container, data) {
   container.appendChild(pickRow);
 
   if (m.download?.name) {
-    for (const part of m.download.models || [{ type: "all", progress: 0 }]) {
-      container.appendChild(createProgressRow(
-        `${m.download.name} — ${part.type}`,
-        part.progress || 0,
-      ));
+    const types = ["Driving Model", "Vision Model", "Policy Model", "Off-Policy Model", "On-Policy Model"];
+    const parts = m.download.models?.length ? m.download.models : types.map((type) => ({ type, progress: 0 }));
+    for (const part of parts) {
+      container.appendChild(createProgressRow(`${part.type} — ${m.download.name}`, part.progress || 0));
     }
+    const cancel = document.createElement("div");
+    cancel.className = "opui-sp-row";
+    cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${t("Cancel Download")}</div></div>
+      <button type="button" class="opui-btn danger">${t("Cancel")}</button>`;
+    cancel.querySelector("button")?.addEventListener("click", async () => {
+      await apiPost("/api/opui/action/models_cancel_download");
+      toast(t("Download cancelled"));
+    });
+    container.appendChild(cancel);
   }
 }
 
@@ -693,8 +860,10 @@ async function renderOsmPanel(container, data) {
       <div class="opui-sp-row-desc">${size.size_mb} MB</div></div>
       <button type="button" class="opui-btn danger">DELETE</button>`;
     sz.querySelector("button")?.addEventListener("click", async () => {
-      if (!(await showConfirm({ message: "Delete ALL downloaded maps?", confirmText: "Delete" }))) return;
-      toast("Delete requested");
+      if (!(await showConfirm({ message: t("Delete ALL downloaded maps?"), confirmText: t("Delete") }))) return;
+      const res = await apiPost("/api/opui/osm/delete");
+      if (res.ok) toast(t("Delete requested"));
+      else toast(res.error || "Failed");
     });
     block.appendChild(sz);
   }
@@ -711,13 +880,27 @@ async function renderOsmPanel(container, data) {
       name: c.title,
       bundles: [{ ref: c.name, name: c.title }],
     }));
-    const ref = await showTree({ title: "Country", folders, searchable: true });
+    const ref = await showTree({ title: t("Country"), folders, searchable: true });
     if (!ref) return;
     const c = regions.countries.find((x) => x.name === ref);
-    if (c) {
-      await apiPost("/api/opui/osm/select", { country: c.name, country_title: c.title });
-      toast(`Country: ${c.title}`);
+    if (!c) return;
+    if (c.states?.length) {
+      const stateFolders = [{
+        name: c.title,
+        bundles: c.states.map((s) => ({ ref: `${c.name}/${s.name}`, name: s.title })),
+      }];
+      const stateRef = await showTree({ title: t("State"), folders: stateFolders, searchable: true });
+      if (!stateRef) return;
+      const [country, state] = stateRef.split("/");
+      const st = c.states.find((s) => s.name === state);
+      await apiPost("/api/opui/osm/select", {
+        country, country_title: c.title, state, state_title: st?.title || state,
+      });
+      toast(`${c.title} — ${st?.title || state}`);
+      return;
     }
+    await apiPost("/api/opui/osm/select", { country: c.name, country_title: c.title });
+    toast(`${t("Country")}: ${c.title}`);
   });
   block.appendChild(countryBtn);
   container.appendChild(block);
@@ -732,15 +915,15 @@ async function renderVehiclePanel(container, data) {
   pickRow.className = "opui-sp-row";
   pickRow.innerHTML = `
     <div class="opui-sp-row-text">
-      <div class="opui-sp-row-title">Vehicle Platform</div>
-      <div class="opui-sp-row-desc">${escapeHtml(vp.active || "Not selected")}</div>
+      <div class="opui-sp-row-title">${t("Vehicle Platform")}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(vp.active || t("Not selected"))}</div>
     </div>
-    <button type="button" class="opui-btn">${vp.active ? "REMOVE" : "SELECT"}</button>`;
+    <button type="button" class="opui-btn">${vp.active ? t("REMOVE") : t("SELECT")}</button>`;
   pickRow.querySelector("button")?.addEventListener("click", async () => {
     if (vp.active) {
-      if (!(await showConfirm({ message: "Remove manual platform fingerprint?", confirmText: "Remove" }))) return;
+      if (!(await showConfirm({ message: t("Remove manual platform fingerprint?"), confirmText: t("Remove") }))) return;
       await apiPost("/api/opui/vehicle/select", { bundle: "" });
-      toast("Platform removed");
+      toast(t("Platform removed"));
       await renderVehiclePanel(container, data);
       return;
     }
@@ -748,23 +931,36 @@ async function renderVehiclePanel(container, data) {
       name: b.name,
       bundles: (b.platforms || []).map((p) => ({ ref: p.bundle, name: p.label })),
     }));
-    const ref = await showTree({ title: "Select Vehicle", folders, searchable: true });
+    const ref = await showTree({ title: t("Select Vehicle"), folders, searchable: true });
     if (!ref) return;
-    if (!(await showConfirm({ message: "Force this vehicle fingerprint?", confirmText: "Select" }))) return;
+    if (!(await showConfirm({ message: t("Force this vehicle fingerprint?"), confirmText: t("Select") }))) return;
     const res = await apiPost("/api/opui/vehicle/select", { bundle: ref });
     if (res.ok) {
-      toast("Platform selected");
+      toast(t("Platform selected"));
       await renderVehiclePanel(container, data);
     }
   });
   container.appendChild(pickRow);
 
+  const bw = await apiGet("/api/opui/vehicle/brand-widgets");
+  if (bw.ok && bw.widgets?.length) {
+    const hdr = document.createElement("div");
+    hdr.className = "opui-row opui-row--section";
+    hdr.textContent = `${t("Brand Settings")} (${bw.brand || ""})`;
+    container.appendChild(hdr);
+    const brandData = { values: { ...data.values, ...bw.values } };
+    for (const w of bw.widgets) {
+      const el = renderWidget(w, brandData);
+      if (el) container.appendChild(el);
+    }
+  }
+
   const legend = document.createElement("div");
   legend.className = "opui-vehicle-legend";
   legend.innerHTML = `
-    <p><span class="dot green"></span> Fingerprinted automatically</p>
-    <p><span class="dot blue"></span> Manually selected</p>
-    <p><span class="dot yellow"></span> Not fingerprinted</p>`;
+    <p><span class="dot green"></span> ${t("Fingerprinted automatically")}</p>
+    <p><span class="dot blue"></span> ${t("Manually selected")}</p>
+    <p><span class="dot yellow"></span> ${t("Not fingerprinted")}</p>`;
   container.appendChild(legend);
 }
 
@@ -830,13 +1026,30 @@ async function renderSunnylinkPanel(container, data) {
   container.prepend(hdr);
 
   if (sl.backup?.status && sl.backup.status !== "idle") {
-    container.appendChild(createProgressRow(`Backup ${sl.backup.status}`, sl.backup.progress || 0));
+    container.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
   }
+
+  const dual = createDualButton(
+    { label: t("Create Backup") },
+    { label: t("Restore Latest") },
+    async () => {
+      const res = await apiPost("/api/opui/action/sunnylink_backup");
+      if (res.ok) toast(t("Backup started"));
+      else toast(res.error || "Failed");
+    },
+    async () => {
+      if (!(await showConfirm({ message: t("Restore latest backup?"), confirmText: t("Restore") }))) return;
+      const res = await apiPost("/api/opui/action/sunnylink_restore");
+      if (res.ok) toast(t("Restore started"));
+      else toast(res.error || "Failed");
+    },
+  );
+  container.appendChild(dual);
 
   const pair = document.createElement("div");
   pair.className = "opui-sp-row";
-  pair.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">Pair GitHub</div></div>
-    <button type="button" class="opui-btn">PAIR</button>`;
+  pair.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${t("Pair GitHub")}</div></div>
+    <button type="button" class="opui-btn">${t("PAIR")}</button>`;
   pair.querySelector("button")?.addEventListener("click", async () => {
     const r = await apiGet("/api/opui/sunnylink/pair");
     if (r.ok && r.url) window.open(r.url, "_blank");

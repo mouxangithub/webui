@@ -837,6 +837,35 @@ body {
   background: #1C65BA;
 }
 
+.opui-multi-btn-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.opui-multi-btn-group button {
+  min-width: 200px;
+  height: 120px;
+  padding: 12px 16px;
+  font-size: 36px;
+  border: none;
+  border-radius: 16px;
+  background: #393939;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.opui-multi-btn-group button.selected {
+  color: #fff;
+  background: #1C65BA;
+}
+
+.opui-multi-btn-group button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .opui-int-control {
   display: flex;
   align-items: center;

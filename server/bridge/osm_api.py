@@ -84,3 +84,14 @@ def osm_map_size_mb() -> dict[str, Any]:
     return {"ok": True, "size_mb": round(total / (1024 ** 2), 2)}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
+
+
+def osm_delete_maps() -> dict[str, Any]:
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    return {"ok": True, "dev_pc": True}
+  try:
+    from openpilot.common.params import Params
+    Params().put_bool("OsmDbDelete", True, block=True)
+    return {"ok": True}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}

@@ -99,7 +99,18 @@ def panel_values(panel_id: str) -> dict[str, Any]:
   values: dict[str, Any] = {}
   widgets_out: list[dict[str, Any]] = []
 
+  def _ensure_param(key: str) -> None:
+    if not key or key in values:
+      return
+    ptype = _param_type_name(p, key)
+    if ptype is not None:
+      values[key] = _serialize_value(p.get(key))
+
   for w in panel.get("widgets", []):
+    for dep_key in ("visible_if", "advanced_if"):
+      dep = w.get(dep_key)
+      if isinstance(dep, dict) and dep.get("param"):
+        _ensure_param(dep["param"])
     wtype = w.get("type")
     if wtype in ("section", "html", "action", "subpanel"):
       widgets_out.append({**w, "available": True})

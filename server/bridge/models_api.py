@@ -85,6 +85,16 @@ def _mock_models() -> dict[str, Any]:
       {"name": "Favorites", "bundles": [{"ref": "mock-1", "name": "supercombo-test", "index": 1}]},
       {"name": "Release", "bundles": [{"ref": "mock-2", "name": "release-main", "index": 2}]},
     ],
-    "download": {},
+    "download": {
+      "status": "downloading",
+      "name": "mock-bundle",
+      "models": [
+        {"type": "supercombo", "progress": 0.42},
+        {"type": "vision", "progress": 0.65},
+        {"type": "policy", "progress": 0.1},
+        {"type": "offPolicy", "progress": 0},
+        {"type": "onPolicy", "progress": 0},
+      ],
+    },
     "dev_pc": True,
   }

@@ -245,6 +245,10 @@ window.addEventListener("opui:open-settings", (ev) => {
   openSettings(ev.detail?.panel || "device");
 });
 
+window.addEventListener("opui:refresh-panel", () => {
+  if (app.dataset.screen === "settings") loadCurrentPanel();
+});
+
 $("#btn-close-settings").addEventListener("click", () => {
   setScreen(lastStarted ? "onroad" : "home");
   if (!lastStarted) pollHome();

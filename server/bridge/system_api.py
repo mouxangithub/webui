@@ -81,6 +81,26 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       p.put_bool("OsmDbUpdatesCheck", True, block=True)
       return {"ok": True, "action": action}
 
+    if action == "osm_delete_maps":
+      p.put_bool("OsmDbDelete", True, block=True)
+      return {"ok": True, "action": action}
+
+    if action == "network_set_apn":
+      apn = str(payload.get("apn", "")).strip()
+      if apn:
+        p.put("GsmApn", apn, block=True)
+      else:
+        p.remove("GsmApn")
+      return {"ok": True, "action": action, "apn": apn}
+
+    if action == "models_cancel_download":
+      p.remove("ModelManager_DownloadIndex")
+      return {"ok": True, "action": action}
+
+    if action == "developer_delete_error_log":
+      from webui.server.bridge.developer_api import developer_delete_error_log
+      return developer_delete_error_log()
+
     if action == "webrtc_enable":
       p.put_bool("IsLiveStreaming", True, block=True)
       return {"ok": True, "action": action}

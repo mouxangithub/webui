@@ -19,12 +19,14 @@ from webui.server.bridge.assets_api import resolve_asset
 from webui.server.bridge.model_overlay import snapshot_model_overlay
 from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
 from webui.server.bridge.osm_api import osm_download_progress, osm_map_size_mb, osm_regions, osm_select_region
-from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select
+from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select, vehicle_brand_widgets
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
 from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
+from webui.server.bridge.developer_api import developer_error_log
+from webui.server.bridge.osm_api import osm_delete_maps
 
 
 async def api_bootstrap(_request: web.Request) -> web.Response:
@@ -231,6 +233,18 @@ async def api_vehicle_select(request: web.Request) -> web.Response:
   return json_response(vehicle_select(bundle))
 
 
+async def api_vehicle_brand_widgets(_request: web.Request) -> web.Response:
+  return json_response(vehicle_brand_widgets())
+
+
+async def api_developer_error_log(_request: web.Request) -> web.Response:
+  return json_response(developer_error_log())
+
+
+async def api_osm_delete(_request: web.Request) -> web.Response:
+  return json_response(osm_delete_maps())
+
+
 async def api_sunnylink_status(_request: web.Request) -> web.Response:
   return json_response(sunnylink_status())
 
@@ -297,13 +311,16 @@ def register_routes(app: web.Application) -> None:
   app.router.add_post("/api/opui/osm/select", api_osm_select)
   app.router.add_get("/api/opui/osm/size", api_osm_size)
   app.router.add_get("/api/opui/osm/progress", api_osm_progress)
+  app.router.add_post("/api/opui/osm/delete", api_osm_delete)
   app.router.add_get("/api/opui/vehicle/platforms", api_vehicle_platforms)
+  app.router.add_get("/api/opui/vehicle/brand-widgets", api_vehicle_brand_widgets)
   app.router.add_post("/api/opui/vehicle/select", api_vehicle_select)
   app.router.add_get("/api/opui/sunnylink/status", api_sunnylink_status)
   app.router.add_get("/api/opui/sunnylink/pair", api_sunnylink_pair)
   app.router.add_get("/api/opui/firehose", api_firehose)
   app.router.add_get("/api/opui/device/extras", api_device_extras)
   app.router.add_get("/api/opui/device/regulatory", api_device_regulatory)
+  app.router.add_get("/api/opui/developer/error-log", api_developer_error_log)
   app.router.add_post("/api/opui/device/language", api_set_language)
   app.router.add_post("/api/opui/webrtc/offer", api_webrtc_offer)
 
