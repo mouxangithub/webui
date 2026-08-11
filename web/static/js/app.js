@@ -1,6 +1,7 @@
 import { apiGet } from "./api.js";
 import { loadPanelList, renderPanel, setGlobalState } from "./panels.js";
 import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud } from "./onroad.js";
+import { initDevPanel } from "./dev.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -15,6 +16,7 @@ const homeSub = $("#home-sub");
 let panels = [];
 let currentPanel = "device";
 let lastStarted = false;
+let devPc = false;
 
 function setScreen(name) {
   app.dataset.screen = name;
@@ -48,8 +50,10 @@ async function loadCurrentPanel() {
 async function bootstrap() {
   try {
     const meta = await apiGet("/api/opui/bootstrap");
+    devPc = !!meta.dev_pc;
     $("#home-title").textContent = "openpilot";
-    if (meta.version) homeSub.textContent = `Web UI ${meta.version}`;
+    const suffix = meta.dev_pc ? " · PC 预览" : "";
+    if (meta.version) homeSub.textContent = `Web UI ${meta.version}${suffix}`;
   } catch (_) { /* dev offline */ }
 
   panels = await loadPanelList();
@@ -73,7 +77,7 @@ async function pollState() {
     }
 
     if (st.started) {
-      if (!lastStarted) {
+      if (!lastStarted && !devPc) {
         startRoadStream().catch(() => {});
       }
       setScreen("onroad");
@@ -113,6 +117,7 @@ $("#btn-bookmark").addEventListener("click", () => {
 
 bindStreamButton();
 bootstrap().then(() => {
+  initDevPanel();
   pollState();
   setInterval(pollState, 400);
   setInterval(() => {

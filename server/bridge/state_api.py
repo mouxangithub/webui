@@ -39,6 +39,11 @@ def _derive_ui_status(ss, cs, mads_enabled: bool) -> str:
 
 
 def snapshot_ui_state() -> dict[str, Any]:
+  import os
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    from webui.dev.mock_runtime import snapshot_dev_ui_state
+    return snapshot_dev_ui_state()
+
   try:
     import openpilot.cereal.messaging as messaging
 

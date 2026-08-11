@@ -6,11 +6,19 @@ let streaming = false;
 export async function startRoadStream() {
   const video = document.getElementById("road-video");
   const wrap = document.getElementById("camera-wrap");
+  const fb = document.getElementById("camera-fallback");
   if (!video || streaming) return;
 
-  await apiPost("/api/opui/action/webrtc_enable");
+  const boot = await apiGet("/api/opui/bootstrap").catch(() => ({}));
+  if (boot.dev_pc) {
+    if (fb) {
+      const p = fb.querySelector("p");
+      if (p) p.textContent = "PC 预览模式 — 无真实相机流";
+    }
+    return;
+  }
 
-  // Wait for webrtcd
+  await apiPost("/api/opui/action/webrtc_enable");
   for (let i = 0; i < 20; i++) {
     const schema = await apiGet("/api/opui/webrtc/schema");
     if (schema.ok) break;

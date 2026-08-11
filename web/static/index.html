@@ -76,6 +76,23 @@
         <button type="button" id="confirm-ok" class="opui-btn opui-btn--primary">确认</button>
       </div>
     </dialog>
+
+    <!-- PC dev simulation (visible when dev_pc from bootstrap) -->
+    <aside id="dev-panel" class="opui-dev-panel" hidden>
+      <div class="opui-dev-title">PC Dev 模拟</div>
+      <div class="opui-dev-presets">
+        <button type="button" data-preset="home">离路</button>
+        <button type="button" data-preset="onroad_engaged">行驶·激活</button>
+        <button type="button" data-preset="onroad_disengaged">行驶·未激活</button>
+        <button type="button" data-preset="override">Override</button>
+        <button type="button" data-preset="lat_only">仅横向</button>
+        <button type="button" data-preset="alert_critical">严重告警</button>
+      </div>
+      <label class="opui-dev-row"><input type="checkbox" id="dev-started" /> 已上路 (started)</label>
+      <label class="opui-dev-row"><input type="checkbox" id="dev-engaged" /> 已激活 (engaged)</label>
+      <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> Experimental</label>
+      <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
+    </aside>
   </div>
   <script type="module" src="/static/js/app.js"></script>
 </body>

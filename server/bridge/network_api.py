@@ -20,6 +20,12 @@ def _manager():
 
 
 def wifi_status() -> dict[str, Any]:
+  import os
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    from webui.dev.mock_runtime import mock_wifi_networks
+    nets = mock_wifi_networks()
+    connected = next((n["ssid"] for n in nets if n["connected"]), None)
+    return {"ok": True, "connected": connected, "ipv4": "192.168.1.100", "dev_pc": True}
   try:
     wm = _manager()
     wm.set_active(True)
@@ -35,6 +41,10 @@ def wifi_status() -> dict[str, Any]:
 
 
 def wifi_scan() -> dict[str, Any]:
+  import os
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    from webui.dev.mock_runtime import mock_wifi_networks
+    return {"ok": True, "networks": mock_wifi_networks(), "dev_pc": True}
   try:
     wm = _manager()
     wm.set_active(True)

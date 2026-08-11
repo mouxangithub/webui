@@ -504,6 +504,57 @@ html, body {
   margin-top: 32px;
 }
 
+/* PC dev simulation panel */
+.opui-dev-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 200;
+  width: 280px;
+  background: #1a1a2e;
+  border: 2px solid #4a4a6a;
+  border-radius: 16px;
+  padding: 16px;
+  font-size: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  /* Outside scaled opui — use fixed positioning on body */
+}
+
+.opui-dev-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #a0a0ff;
+}
+
+.opui-dev-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.opui-dev-presets button {
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: #2a2a3e;
+  color: #eee;
+  cursor: pointer;
+}
+
+.opui-dev-presets button:hover { background: #3a3a5e; }
+
+.opui-dev-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: #ccc;
+}
+
+.opui-dev-row input[type="range"] { flex: 1; }
+
 @media (max-width: 900px) {
   :root { --opui-scale: min(100vw / var(--opui-w), 100vh / var(--opui-h)); }
 }

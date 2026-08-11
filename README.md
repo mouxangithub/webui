@@ -29,13 +29,26 @@ Device · Network · sunnylink · Toggles · Software · Models · Steering · C
 - 告警条（normal / user / critical）
 - WebRTC 前路相机（`webrtcd:5001`，自动拉起 `IsLiveStreaming`）
 
-## 快速开始
+## PC 本地预览（类似 `ai/dev/run_pc.py`）
+
+无需车机，开发机上预览布局与状态机：
+
+```bash
+py -3 webui/dev/run_pc.py --port 5080
+# 浏览器 http://127.0.0.1:5080
+```
+
+右下角 **Dev 模拟面板** 可切换离路/行驶/边框色/告警。详见 [dev/README.md](dev/README.md)。
+
+**是否 1:1 还原车机 UI？** **否** — 完整差距见 [docs/GAP_VS_DEVICE.md](docs/GAP_VS_DEVICE.md)。
+
+## 快速开始（车机）
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mouxangithub/webui/main/install/install.sh | bash
 ```
 
-PC 开发：
+车机 / 完整 openpilot 环境：
 
 ```bash
 export OPENPILOT_ROOT=/path/to/openpilot
