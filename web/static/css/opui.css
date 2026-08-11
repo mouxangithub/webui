@@ -1,10 +1,11 @@
-/* Design tokens from openpilot/selfdrive/ui (BIG 2160×1080, scaled to viewport) */
+/* openpilot BIG UI (2160×1080) — web mirror */
 
 :root {
   --opui-w: 2160;
   --opui-h: 1080;
   --opui-scale: min(100vw / var(--opui-w), 100vh / var(--opui-h));
   --sidebar-w: 500px;
+  --onroad-sidebar-w: 300px;
   --panel-bg: #292929;
   --sidebar-bg: #000000;
   --text-muted: #808080;
@@ -12,16 +13,17 @@
   --engaged: #167f40;
   --disengaged: #122839;
   --override: #89928d;
+  --lat-only: #00c8c8;
+  --long-only: #961ca8;
   --alert-normal: #151515f1;
   --alert-user: #da6f25;
   --alert-critical: #c92231;
-  --hud-speed: 176px;
-  --font: "Inter", system-ui, sans-serif;
+  --hud-speed-size: 176px;
+  --border-w: 30px;
+  --font: "Inter", system-ui, -apple-system, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html, body {
   margin: 0;
@@ -38,8 +40,7 @@ html, body {
   height: calc(var(--opui-h) * 1px);
   transform: scale(var(--opui-scale));
   transform-origin: top left;
-  margin: 0 auto;
-  background: var(--sidebar-bg);
+  background: #000;
 }
 
 .opui-main {
@@ -53,37 +54,44 @@ html, body {
   width: calc(100% - var(--sidebar-w));
 }
 
+.opui[data-screen="onroad"] .opui-main {
+  left: var(--onroad-sidebar-w);
+  width: calc(100% - var(--onroad-sidebar-w));
+}
+
+/* Settings sidebar */
 .opui-sidebar {
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 0; top: 0;
   width: var(--sidebar-w);
   height: 100%;
   background: var(--sidebar-bg);
-  z-index: 10;
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  padding: 50px 0;
+  padding: 50px 0 30px;
 }
 
 .opui-nav {
   flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   padding: 0 40px;
 }
 
 .opui-nav button {
-  height: 110px;
+  height: 100px;
   border: none;
   border-radius: 20px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 48px;
+  font-size: 44px;
   text-align: left;
-  padding: 0 32px;
+  padding: 0 28px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .opui-nav button.active {
@@ -92,129 +100,409 @@ html, body {
 }
 
 .opui-close {
-  width: 200px;
-  height: 200px;
-  margin: 40px auto;
+  width: 180px;
+  height: 180px;
+  margin: 20px auto 0;
   border: none;
   border-radius: 24px;
   background: var(--panel-bg);
   color: var(--text);
-  font-size: 80px;
+  font-size: 72px;
   cursor: pointer;
 }
 
+/* Onroad sidebar */
+.opui-onroad-sidebar {
+  position: absolute;
+  left: 0; top: 0;
+  width: var(--onroad-sidebar-w);
+  height: 100%;
+  background: #000;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 35px 0;
+}
+
+.opui-sidebar-btn {
+  width: 200px;
+  height: 117px;
+  border: none;
+  border-radius: 16px;
+  background: var(--panel-bg);
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.opui-sidebar-btn--settings { margin-bottom: auto; }
+.opui-sidebar-btn--flag { margin-top: auto; }
+
+.opui-metrics {
+  flex: 1;
+  width: 100%;
+  padding: 20px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.opui-metric {
+  border: 2px solid rgba(255,255,255,0.33);
+  border-radius: 16px;
+  padding: 16px 20px;
+  min-height: 100px;
+}
+
+.opui-metric-label {
+  font-size: 28px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.opui-metric-value {
+  font-size: 36px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.opui-metric--warn .opui-metric-value { color: #daca25; }
+.opui-metric--danger .opui-metric-value { color: #c92231; }
+
+/* Screens */
 .opui-screen {
   height: 100%;
-  padding: 40px;
+  position: relative;
 }
 
-.opui-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 80px;
-  font-size: 36px;
-}
-
-.opui-btn {
-  background: var(--panel-bg);
-  border: none;
-  color: var(--text);
-  padding: 16px 40px;
-  border-radius: 16px;
-  font-size: 32px;
-  cursor: pointer;
-}
-
-.opui-panel {
-  background: var(--panel-bg);
-  border-radius: 30px;
-  height: calc(100% - 80px);
-  padding: 48px;
-  overflow: auto;
-}
-
-.opui-toggle-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 120px;
-  font-size: 42px;
-  border-bottom: 1px solid #3a3a3a;
-}
-
-.opui-toggle-row input {
-  width: 48px;
-  height: 48px;
-}
-
-.opui-muted {
-  color: var(--text-muted);
-  font-size: 40px;
-}
-
-.opui-state-line {
-  font-size: 48px;
-  margin-top: 24px;
-}
-
-.opui-camera {
-  position: absolute;
-  inset: 30px;
-  background: #111;
+.opui-screen--home {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.opui-camera-placeholder {
-  color: var(--text-muted);
-  font-size: 48px;
+.opui-home-center {
+  text-align: center;
 }
+
+.opui-home-center h1 {
+  font-size: 120px;
+  font-weight: 300;
+  margin: 0 0 24px;
+}
+
+.opui-muted { color: var(--text-muted); font-size: 40px; }
+
+.opui-panel-header {
+  padding: 32px 48px 0;
+}
+
+.opui-panel-header h2 {
+  margin: 0;
+  font-size: 56px;
+  font-weight: 500;
+}
+
+.opui-panel {
+  margin: 24px 48px 48px;
+  background: var(--panel-bg);
+  border-radius: 30px;
+  height: calc(100% - 120px);
+  padding: 24px 0;
+  overflow-y: auto;
+}
+
+/* List items */
+.opui-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 110px;
+  padding: 20px 48px;
+  border-bottom: 1px solid #3a3a3a;
+  gap: 24px;
+}
+
+.opui-row--section {
+  background: #1f1f1f;
+  min-height: 64px;
+  font-size: 32px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.opui-row-label {
+  font-size: 40px;
+  flex: 1;
+}
+
+.opui-row-desc {
+  font-size: 28px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.opui-row-value {
+  font-size: 36px;
+  color: #aaa;
+  max-width: 50%;
+  text-align: right;
+  word-break: break-all;
+}
+
+.opui-row-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.opui-btn {
+  background: #3a3a3a;
+  border: none;
+  color: var(--text);
+  padding: 14px 32px;
+  border-radius: 14px;
+  font-size: 30px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.opui-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.opui-btn--primary { background: var(--engaged); }
+.opui-btn--large { font-size: 44px; padding: 24px 64px; margin-top: 40px; }
+
+.opui-toggle {
+  width: 88px;
+  height: 48px;
+  accent-color: var(--engaged);
+  cursor: pointer;
+}
+
+.opui-choice-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.opui-choice-group button {
+  padding: 12px 20px;
+  font-size: 28px;
+  border: 2px solid #555;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.opui-choice-group button.selected {
+  border-color: var(--engaged);
+  color: var(--text);
+  background: rgba(22,127,64,0.25);
+}
+
+.opui-int-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.opui-int-control button {
+  width: 56px;
+  height: 56px;
+  font-size: 32px;
+  border: none;
+  border-radius: 12px;
+  background: #444;
+  color: #fff;
+  cursor: pointer;
+}
+
+.opui-int-control span {
+  font-size: 36px;
+  min-width: 80px;
+  text-align: center;
+}
+
+.opui-html-block {
+  padding: 32px 48px;
+  font-size: 34px;
+  line-height: 1.5;
+}
+
+.opui-html-block h2 { font-size: 48px; margin-top: 0; }
+
+/* WiFi */
+.opui-wifi-list {
+  padding: 0 24px;
+}
+
+.opui-wifi-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #444;
+  cursor: pointer;
+}
+
+.opui-wifi-item:hover { background: #333; }
+.opui-wifi-item.connected { color: var(--engaged); }
+
+/* Onroad */
+.opui-screen--onroad { padding: 0; }
+
+.opui-camera-wrap {
+  position: absolute;
+  inset: var(--border-w);
+  background: #0a0a0a;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.opui-camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.opui-camera-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+  font-size: 40px;
+  color: var(--text-muted);
+  gap: 24px;
+}
+
+.opui-camera-wrap.streaming .opui-camera-fallback { display: none; }
 
 .opui-hud {
   position: absolute;
-  bottom: 120px;
+  bottom: 100px;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
   pointer-events: none;
+  z-index: 10;
 }
 
-.opui-hud #hud-speed {
-  font-size: var(--hud-speed);
-  font-weight: 600;
+.opui-hud-speed-block {
   line-height: 1;
 }
 
-.opui-hud #hud-unit {
+#hud-speed {
+  font-size: var(--hud-speed-size);
+  font-weight: 600;
+}
+
+.opui-hud-unit {
+  display: block;
   font-size: 48px;
   color: #80d8a6;
+  margin-top: 8px;
+}
+
+.opui-hud-set {
+  position: absolute;
+  right: 120px;
+  bottom: 280px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 20px;
+  padding: 16px 24px;
+  font-size: 72px;
+  font-weight: 600;
+}
+
+.opui-hud-set-unit { font-size: 32px; color: #aaa; }
+
+.opui-exp-btn {
+  position: absolute;
+  top: -400px;
+  right: -200px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 48px;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .opui-alert {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  bottom: var(--border-w);
+  left: var(--onroad-sidebar-w);
   right: 0;
-  min-height: 271px;
-  padding: 32px 48px;
-  font-size: 56px;
+  min-height: 200px;
+  padding: 28px 48px;
+  font-size: 52px;
   background: var(--alert-normal);
   border-radius: 30px 30px 0 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+.opui-alert-sub { font-size: 40px; color: #ccc; }
 
 .opui-border {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  border: 30px solid var(--disengaged);
-  z-index: 20;
+  border: var(--border-w) solid var(--disengaged);
+  z-index: 40;
+  border-radius: 4px;
 }
 
 .opui-border--engaged { border-color: var(--engaged); }
 .opui-border--override { border-color: var(--override); }
+.opui-border--lat_only { border-color: var(--lat-only); }
+.opui-border--long_only { border-color: var(--long-only); }
 .opui-border--disengaged { border-color: var(--disengaged); }
+
+.opui-toast {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  padding: 16px 32px;
+  border-radius: 12px;
+  font-size: 28px;
+  z-index: 100;
+}
+
+.opui-dialog {
+  border: none;
+  border-radius: 20px;
+  background: var(--panel-bg);
+  color: var(--text);
+  padding: 40px;
+  max-width: 600px;
+  font-size: 32px;
+}
+
+.opui-dialog::backdrop { background: rgba(0,0,0,0.7); }
+
+.opui-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 32px;
+}
 
 @media (max-width: 900px) {
   :root { --opui-scale: min(100vw / var(--opui-w), 100vh / var(--opui-h)); }

@@ -1,141 +1,121 @@
-/**
- * op Web UI shell — mirrors BIG layout state machine: home | settings | onroad
- */
-
-const PANELS = [
-  { id: "device", label: "Device" },
-  { id: "network", label: "Network" },
-  { id: "toggles", label: "Toggles" },
-  { id: "software", label: "Software" },
-  { id: "firehose", label: "Firehose" },
-  { id: "developer", label: "Developer" },
-];
+import { apiGet } from "./api.js";
+import { loadPanelList, renderPanel, setGlobalState } from "./panels.js";
+import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud } from "./onroad.js";
 
 const $ = (sel) => document.querySelector(sel);
 
 const app = $("#app");
-const sidebar = $("#sidebar");
+const settingsSidebar = $("#settings-sidebar");
+const onroadSidebar = $("#onroad-sidebar");
 const nav = $("#nav");
 const panelContent = $("#panel-content");
-const stateLine = $("#state-line");
-const hudSpeed = $("#hud-speed");
-const alertBar = $("#alert-bar");
-const border = $("#border");
+const panelTitle = $("#panel-title");
+const homeSub = $("#home-sub");
 
-let currentPanel = "toggles";
+let panels = [];
+let currentPanel = "device";
+let lastStarted = false;
 
 function setScreen(name) {
   app.dataset.screen = name;
   $("#screen-home").hidden = name !== "home";
   $("#screen-settings").hidden = name !== "settings";
   $("#screen-onroad").hidden = name !== "onroad";
-  sidebar.hidden = name !== "settings";
+  settingsSidebar.hidden = name !== "settings";
+  onroadSidebar.hidden = name !== "onroad";
 }
 
 function renderNav() {
   nav.innerHTML = "";
-  for (const p of PANELS) {
+  for (const p of panels) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = p.label;
+    btn.textContent = p.title;
     btn.classList.toggle("active", p.id === currentPanel);
     btn.addEventListener("click", () => {
       currentPanel = p.id;
       renderNav();
-      loadPanel();
+      loadCurrentPanel();
     });
     nav.appendChild(btn);
   }
 }
 
-async function loadPanel() {
-  if (currentPanel !== "toggles") {
-    panelContent.innerHTML = `<p class="opui-muted">${currentPanel} 面板开发中</p>`;
-    return;
-  }
-  const res = await fetch("/api/opui/params/toggles").then((r) => r.json());
-  if (!res.ok) {
-    panelContent.innerHTML = `<p class="opui-muted">Params 不可用: ${res.error || "?"}</p>`;
-    return;
-  }
-  panelContent.innerHTML = res.params
-    .map(
-      (p) => `
-    <label class="opui-toggle-row">
-      <span>${p.key}</span>
-      <input type="checkbox" data-key="${p.key}" ${p.value === "1" ? "checked" : ""} />
-    </label>`
-    )
-    .join("");
-  panelContent.querySelectorAll("input[type=checkbox]").forEach((el) => {
-    el.addEventListener("change", async () => {
-      const key = el.dataset.key;
-      const value = el.checked ? "1" : "0";
-      await fetch(`/api/opui/params/${encodeURIComponent(key)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
-      });
-    });
-  });
-}
-
-function updateBorder(engaged, override) {
-  border.className = "opui-border";
-  if (override) border.classList.add("opui-border--override");
-  else if (engaged) border.classList.add("opui-border--engaged");
-  else border.classList.add("opui-border--disengaged");
-}
-
-async function pollState() {
-  try {
-    const st = await fetch("/api/opui/state").then((r) => r.json());
-    if (!st.ok) {
-      stateLine.textContent = st.error || "状态不可用";
-      return;
-    }
-    const speed = Math.round((st.speed || 0) * 3.6);
-    hudSpeed.textContent = String(speed);
-    stateLine.textContent = st.started
-      ? (st.engaged ? "行驶中 · 已激活" : "行驶中 · 未激活")
-      : "离路";
-    updateBorder(st.engaged, false);
-    if (st.started) {
-      setScreen("onroad");
-      if (st.alert?.text1) {
-        alertBar.hidden = false;
-        alertBar.textContent = [st.alert.text1, st.alert.text2].filter(Boolean).join(" — ");
-        if (st.alert.status?.includes("critical")) alertBar.style.background = "var(--alert-critical)";
-        else if (st.alert.size?.includes("mid")) alertBar.style.background = "var(--alert-user)";
-        else alertBar.style.background = "var(--alert-normal)";
-      } else {
-        alertBar.hidden = true;
-      }
-    } else if (app.dataset.screen === "onroad") {
-      setScreen("home");
-    }
-  } catch (_) {
-    stateLine.textContent = "无法连接设备状态 API";
-  }
+async function loadCurrentPanel() {
+  await renderPanel(currentPanel, panelContent, panelTitle);
 }
 
 async function bootstrap() {
   try {
-    const meta = await fetch("/api/opui/bootstrap").then((r) => r.json());
-    $("#version-label").textContent = `op Web UI ${meta.version || ""}`;
+    const meta = await apiGet("/api/opui/bootstrap");
+    $("#home-title").textContent = "openpilot";
+    if (meta.version) homeSub.textContent = `Web UI ${meta.version}`;
+  } catch (_) { /* dev offline */ }
+
+  panels = await loadPanelList();
+  if (!panels.length) {
+    panels = [
+      { id: "device", title: "Device" },
+      { id: "toggles", title: "Toggles" },
+    ];
+  }
+  currentPanel = panels[0]?.id || "device";
+}
+
+async function pollState() {
+  try {
+    const st = await apiGet("/api/opui/state");
+    setGlobalState(st);
+
+    if (!st.ok) {
+      homeSub.textContent = st.error || "状态不可用";
+      return;
+    }
+
+    if (st.started) {
+      if (!lastStarted) {
+        startRoadStream().catch(() => {});
+      }
+      setScreen("onroad");
+      updateOnroadHud(st);
+    } else {
+      if (lastStarted) {
+        stopRoadStream().catch(() => {});
+      }
+      if (app.dataset.screen === "onroad") {
+        setScreen("home");
+      }
+      homeSub.textContent = st.engaged ? "已激活（离路）" : "离路";
+    }
+    lastStarted = !!st.started;
   } catch (_) {
-    /* offline dev */
+    homeSub.textContent = "无法连接设备";
   }
 }
 
 $("#btn-settings").addEventListener("click", () => {
   setScreen("settings");
   renderNav();
-  loadPanel();
+  loadCurrentPanel();
 });
 
 $("#btn-close-settings").addEventListener("click", () => setScreen("home"));
 
-bootstrap();
-pollState();
-setInterval(pollState, 500);
+$("#btn-onroad-settings").addEventListener("click", () => {
+  setScreen("settings");
+  renderNav();
+  loadCurrentPanel();
+});
+
+$("#btn-bookmark").addEventListener("click", () => {
+  /* cereal bookmarkButton — future WS */
+});
+
+bindStreamButton();
+bootstrap().then(() => {
+  pollState();
+  setInterval(pollState, 400);
+  setInterval(() => {
+    if (app.dataset.screen === "settings") loadCurrentPanel();
+  }, 5000);
+});

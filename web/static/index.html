@@ -8,36 +8,74 @@
 </head>
 <body>
   <div id="app" class="opui" data-screen="home">
-    <aside id="sidebar" class="opui-sidebar" hidden>
+    <!-- Offroad / settings sidebar (left 500px when settings) -->
+    <aside id="settings-sidebar" class="opui-sidebar" hidden>
       <nav class="opui-nav" id="nav"></nav>
       <button type="button" id="btn-close-settings" class="opui-close" aria-label="Close">×</button>
     </aside>
+
+    <!-- Onroad metrics sidebar (300px, like device UI) -->
+    <aside id="onroad-sidebar" class="opui-onroad-sidebar" hidden>
+      <button type="button" id="btn-onroad-settings" class="opui-sidebar-btn opui-sidebar-btn--settings" title="Settings"></button>
+      <div id="metrics" class="opui-metrics"></div>
+      <button type="button" id="btn-bookmark" class="opui-sidebar-btn opui-sidebar-btn--flag" title="Bookmark"></button>
+    </aside>
+
     <main id="main" class="opui-main">
-      <section id="screen-home" class="opui-screen">
-        <header class="opui-header">
-          <span id="version-label">openpilot</span>
-          <button type="button" id="btn-settings" class="opui-btn">设置</button>
-        </header>
-        <div class="opui-home-body">
-          <p class="opui-muted">Web 镜像 · 与车机 raylib UI 对齐开发中</p>
-          <p id="state-line" class="opui-state-line">—</p>
+      <!-- HOME -->
+      <section id="screen-home" class="opui-screen opui-screen--home">
+        <div class="opui-home-center">
+          <h1 id="home-title">openpilot</h1>
+          <p id="home-sub" class="opui-muted">离路</p>
+          <button type="button" id="btn-settings" class="opui-btn opui-btn--large">设置</button>
         </div>
       </section>
+
+      <!-- SETTINGS -->
       <section id="screen-settings" class="opui-screen" hidden>
+        <header class="opui-panel-header">
+          <h2 id="panel-title">Settings</h2>
+        </header>
         <div id="panel-content" class="opui-panel"></div>
       </section>
-      <section id="screen-onroad" class="opui-screen" hidden>
-        <div id="camera-slot" class="opui-camera">
-          <p class="opui-camera-placeholder">相机 · WebRTC 接入中</p>
+
+      <!-- ONROAD -->
+      <section id="screen-onroad" class="opui-screen opui-screen--onroad" hidden>
+        <div id="camera-wrap" class="opui-camera-wrap">
+          <video id="road-video" class="opui-camera-video" autoplay playsinline muted></video>
+          <div id="camera-fallback" class="opui-camera-fallback">
+            <p>相机加载中…</p>
+            <button type="button" id="btn-start-stream" class="opui-btn">启动 WebRTC 流</button>
+          </div>
         </div>
+        <div id="model-overlay" class="opui-model-overlay" hidden></div>
         <div id="hud" class="opui-hud">
-          <span id="hud-speed">0</span>
-          <span id="hud-unit">km/h</span>
+          <div id="hud-set-speed" class="opui-hud-set" hidden>
+            <span id="set-speed-val">–</span>
+            <span id="set-speed-unit" class="opui-hud-set-unit">km/h</span>
+          </div>
+          <div class="opui-hud-speed-block">
+            <span id="hud-speed">0</span>
+            <span id="hud-unit" class="opui-hud-unit">km/h</span>
+          </div>
+          <button type="button" id="btn-experimental" class="opui-exp-btn" hidden title="Experimental">α</button>
         </div>
-        <div id="alert-bar" class="opui-alert" hidden></div>
+        <div id="alert-bar" class="opui-alert" hidden>
+          <span id="alert-text1"></span>
+          <span id="alert-text2" class="opui-alert-sub"></span>
+        </div>
       </section>
     </main>
+
     <div id="border" class="opui-border opui-border--disengaged"></div>
+    <div id="toast" class="opui-toast" hidden></div>
+    <dialog id="confirm-dialog" class="opui-dialog">
+      <p id="confirm-msg"></p>
+      <div class="opui-dialog-actions">
+        <button type="button" id="confirm-cancel" class="opui-btn">取消</button>
+        <button type="button" id="confirm-ok" class="opui-btn opui-btn--primary">确认</button>
+      </div>
+    </dialog>
   </div>
   <script type="module" src="/static/js/app.js"></script>
 </body>

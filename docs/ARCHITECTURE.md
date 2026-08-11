@@ -32,8 +32,8 @@ webuid.py
 ## 前端
 
 - 设计基准：openpilot `selfdrive/ui`，`BIG=1` → 2160×1080
-- CSS 变量在 `web/static/css/opui.css`
-- 状态机：`home` | `settings` | `onroad`（与设备 UI 对齐）
+- `web/static/js/`：`app.js`（状态机）、`panels.js`（15 面板）、`onroad.js`（HUD/WebRTC）
+- 状态机：`home` | `settings` | `onroad`
 
 ## 相机（规划中）
 
