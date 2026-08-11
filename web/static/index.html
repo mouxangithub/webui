@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>openpilot</title>
+  <link rel="stylesheet" href="/static/css/opui.css" />
+</head>
+<body>
+  <div id="app" class="opui" data-screen="home">
+    <aside id="sidebar" class="opui-sidebar" hidden>
+      <nav class="opui-nav" id="nav"></nav>
+      <button type="button" id="btn-close-settings" class="opui-close" aria-label="Close">×</button>
+    </aside>
+    <main id="main" class="opui-main">
+      <section id="screen-home" class="opui-screen">
+        <header class="opui-header">
+          <span id="version-label">openpilot</span>
+          <button type="button" id="btn-settings" class="opui-btn">设置</button>
+        </header>
+        <div class="opui-home-body">
+          <p class="opui-muted">Web 镜像 · 与车机 raylib UI 对齐开发中</p>
+          <p id="state-line" class="opui-state-line">—</p>
+        </div>
+      </section>
+      <section id="screen-settings" class="opui-screen" hidden>
+        <div id="panel-content" class="opui-panel"></div>
+      </section>
+      <section id="screen-onroad" class="opui-screen" hidden>
+        <div id="camera-slot" class="opui-camera">
+          <p class="opui-camera-placeholder">相机 · WebRTC 接入中</p>
+        </div>
+        <div id="hud" class="opui-hud">
+          <span id="hud-speed">0</span>
+          <span id="hud-unit">km/h</span>
+        </div>
+        <div id="alert-bar" class="opui-alert" hidden></div>
+      </section>
+    </main>
+    <div id="border" class="opui-border opui-border--disengaged"></div>
+  </div>
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

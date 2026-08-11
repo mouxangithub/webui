@@ -1,0 +1,221 @@
+/* Design tokens from openpilot/selfdrive/ui (BIG 2160×1080, scaled to viewport) */
+
+:root {
+  --opui-w: 2160;
+  --opui-h: 1080;
+  --opui-scale: min(100vw / var(--opui-w), 100vh / var(--opui-h));
+  --sidebar-w: 500px;
+  --panel-bg: #292929;
+  --sidebar-bg: #000000;
+  --text-muted: #808080;
+  --text: #ffffff;
+  --engaged: #167f40;
+  --disengaged: #122839;
+  --override: #89928d;
+  --alert-normal: #151515f1;
+  --alert-user: #da6f25;
+  --alert-critical: #c92231;
+  --hud-speed: 176px;
+  --font: "Inter", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  color: var(--text);
+  font-family: var(--font);
+  overflow: hidden;
+}
+
+.opui {
+  position: relative;
+  width: calc(var(--opui-w) * 1px);
+  height: calc(var(--opui-h) * 1px);
+  transform: scale(var(--opui-scale));
+  transform-origin: top left;
+  margin: 0 auto;
+  background: var(--sidebar-bg);
+}
+
+.opui-main {
+  position: absolute;
+  inset: 0;
+  left: 0;
+}
+
+.opui[data-screen="settings"] .opui-main {
+  left: var(--sidebar-w);
+  width: calc(100% - var(--sidebar-w));
+}
+
+.opui-sidebar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--sidebar-w);
+  height: 100%;
+  background: var(--sidebar-bg);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  padding: 50px 0;
+}
+
+.opui-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 40px;
+}
+
+.opui-nav button {
+  height: 110px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 48px;
+  text-align: left;
+  padding: 0 32px;
+  cursor: pointer;
+}
+
+.opui-nav button.active {
+  color: var(--text);
+  background: #1a1a1a;
+}
+
+.opui-close {
+  width: 200px;
+  height: 200px;
+  margin: 40px auto;
+  border: none;
+  border-radius: 24px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 80px;
+  cursor: pointer;
+}
+
+.opui-screen {
+  height: 100%;
+  padding: 40px;
+}
+
+.opui-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 80px;
+  font-size: 36px;
+}
+
+.opui-btn {
+  background: var(--panel-bg);
+  border: none;
+  color: var(--text);
+  padding: 16px 40px;
+  border-radius: 16px;
+  font-size: 32px;
+  cursor: pointer;
+}
+
+.opui-panel {
+  background: var(--panel-bg);
+  border-radius: 30px;
+  height: calc(100% - 80px);
+  padding: 48px;
+  overflow: auto;
+}
+
+.opui-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 120px;
+  font-size: 42px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.opui-toggle-row input {
+  width: 48px;
+  height: 48px;
+}
+
+.opui-muted {
+  color: var(--text-muted);
+  font-size: 40px;
+}
+
+.opui-state-line {
+  font-size: 48px;
+  margin-top: 24px;
+}
+
+.opui-camera {
+  position: absolute;
+  inset: 30px;
+  background: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.opui-camera-placeholder {
+  color: var(--text-muted);
+  font-size: 48px;
+}
+
+.opui-hud {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.opui-hud #hud-speed {
+  font-size: var(--hud-speed);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.opui-hud #hud-unit {
+  font-size: 48px;
+  color: #80d8a6;
+}
+
+.opui-alert {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  min-height: 271px;
+  padding: 32px 48px;
+  font-size: 56px;
+  background: var(--alert-normal);
+  border-radius: 30px 30px 0 0;
+}
+
+.opui-border {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border: 30px solid var(--disengaged);
+  z-index: 20;
+}
+
+.opui-border--engaged { border-color: var(--engaged); }
+.opui-border--override { border-color: var(--override); }
+.opui-border--disengaged { border-color: var(--disengaged); }
+
+@media (max-width: 900px) {
+  :root { --opui-scale: min(100vw / var(--opui-w), 100vh / var(--opui-h)); }
+}
