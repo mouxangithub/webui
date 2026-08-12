@@ -1,4 +1,5 @@
 import { apiGet, apiPut } from "./api.js";
+import { tr } from "./i18n.js";
 import { updateSpHud } from "./hud_sp.js";
 import { updateDevUi } from "./hud_dev.js";
 import { updateCircularAlert } from "./hud_circular.js";
@@ -9,7 +10,9 @@ import {
   updateRoadCameraForState,
   openDriverCamera,
   closeDriverCamera,
-} from "./webrtc_stream.js";
+  prewarmWebrtc,
+  isRoadStreaming,
+} from "./webrtc_stream.js?v=45";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -25,16 +28,19 @@ let lastOnroadState = null;
 export async function startRoadStream() {
   const video = document.getElementById("road-video");
   const wrap = document.getElementById("camera-wrap");
+  const fb = document.getElementById("camera-fallback");
   try {
+    if (fb) fb.hidden = false;
     await startRoadWebrtc(video, wrap);
     if (lastOnroadState) updateRoadCameraForState(lastOnroadState);
   } catch (err) {
-    console.warn("WebRTC:", err);
-    const fb = document.getElementById("camera-fallback");
+    console.error("WebRTC:", err);
     if (fb) {
-      const p = fb.querySelector("p");
-      if (p) p.textContent = `相机不可用: ${err.message}`;
+      const p = document.getElementById("camera-status-text") || fb.querySelector("p");
+      if (p) p.textContent = `${tr("Camera unavailable")}: ${err.message}`;
+      fb.hidden = false;
     }
+    throw err;
   }
 }
 
@@ -58,7 +64,7 @@ function applyCruiseStyle(st) {
   const clusterMismatch = hasSet && cluster != null
     && Math.round(st.set_speed) !== Math.round(cluster);
 
-  if (!pcmCruise && clusterMismatch && (st.engaged || status === "engaged")) {
+  if (!pcmCruise && clusterMismatch && st.car_control_enabled) {
     icbmHoldTicks = ICBM_HOLD_TICKS;
   } else if (icbmHoldTicks > 0) {
     icbmHoldTicks -= 1;
@@ -127,14 +133,30 @@ export function updateOnroadHud(st) {
   if (hud) hud.classList.toggle("is-engaged", st.ui_status === "engaged");
   cameraWrap?.classList.toggle("is-onroad", !!st.started);
 
-  if (speedEl) speedEl.textContent = String(st.speed ?? 0);
+  const hideSpeed = !!st.hide_v_ego_ui;
+  if (speedEl) {
+    if (hideSpeed || st.speed == null) {
+      speedEl.textContent = "";
+      speedEl.hidden = true;
+    } else {
+      speedEl.hidden = false;
+      speedEl.textContent = String(st.speed);
+    }
+  }
   if (unitEl) {
-    unitEl.textContent = st.is_metric === false ? "mph" : "Km/h";
+    if (hideSpeed) {
+      unitEl.hidden = true;
+    } else {
+      unitEl.hidden = false;
+      unitEl.textContent = st.unit || (st.is_metric === false ? "mph" : "km/h");
+    }
   }
 
-  if (st.started && setSpeedWrap && setSpeedVal) {
+  const cruiseAvailable = st.is_cruise_available !== false;
+  if (st.started && setSpeedWrap && setSpeedVal && cruiseAvailable) {
     setSpeedWrap.hidden = false;
-    setSpeedVal.textContent = st.set_speed != null ? String(st.set_speed) : "–";
+    setSpeedVal.textContent = st.is_cruise_set && st.set_speed != null
+      ? String(st.set_speed) : "–";
   } else if (setSpeedWrap) {
     setSpeedWrap.hidden = true;
   }
@@ -164,7 +186,20 @@ export function updateOnroadHud(st) {
       if (size === "full") alertBar.classList.add("opui-alert--full");
       else if (size === "small") alertBar.classList.add("opui-alert--small");
       else alertBar.classList.add("opui-alert--mid");
-      alertBar.style.minHeight = "";
+      const heightPx = Number(st.alert?.height_px);
+      if (heightPx > 0) {
+        alertBar.style.minHeight = `${heightPx}px`;
+      } else {
+        alertBar.style.minHeight = "";
+      }
+      if (size === "full") {
+        const t1Len = (t1 || "").length;
+        alertBar.style.setProperty("--alert-title-size", t1Len > 15 ? "132px" : "177px");
+        alertBar.style.setProperty("--alert-title-top", t1Len > 15 ? "200px" : "140px");
+      } else {
+        alertBar.style.removeProperty("--alert-title-size");
+        alertBar.style.removeProperty("--alert-title-top");
+      }
       alertBar.style.background = "";
       const status = (st.alert?.status || "normal").toLowerCase();
       if (status.includes("critical")) alertBar.dataset.status = "critical";
@@ -192,10 +227,44 @@ export function updateOnroadHud(st) {
   updateDevUi(st);
   updateCircularAlert(st);
   updateTorqueBar(st);
+  updateDriverCameraOverlay(st);
 }
 
-export function bindStreamButton() {
-  document.getElementById("btn-start-stream")?.addEventListener("click", () => startRoadStream());
+function updateDriverCameraOverlay(st) {
+  const dlg = document.getElementById("driver-camera-dialog");
+  if (!dlg?.open) return;
+
+  const loading = document.getElementById("driver-cam-loading");
+  const video = document.getElementById("driver-video");
+  const face = document.getElementById("driver-face-box");
+  if (!loading || !video || !face) return;
+
+  const hasFrame = video.readyState >= 2 && !video.paused;
+  loading.hidden = hasFrame;
+  loading.textContent = tr("camera starting");
+
+  const df = st?.driver_face;
+  if (!hasFrame || !df?.visible || !df.box) {
+    face.hidden = true;
+    return;
+  }
+
+  const vw = video.videoWidth || df.source_size?.w || 1928;
+  const vh = video.videoHeight || df.source_size?.h || 1208;
+  const rect = video.getBoundingClientRect();
+  const scaleX = rect.width / vw;
+  const scaleY = rect.height / vh;
+  const box = df.box;
+  const size = (box.size || 220) * Math.min(scaleX, scaleY);
+  const left = (box.x || 0) * scaleX;
+  const top = (box.y || 0) * scaleY;
+
+  face.hidden = false;
+  face.style.width = `${size}px`;
+  face.style.height = `${size}px`;
+  face.style.left = `${left}px`;
+  face.style.top = `${top}px`;
+  face.style.opacity = String(df.alpha ?? 0.7);
 }
 
 export function bindExperimentalButton() {
@@ -217,16 +286,35 @@ export function bindDriverCameraDialog() {
   const dlg = document.getElementById("driver-camera-dialog");
   if (!dlg) return;
 
+  const video = document.getElementById("driver-video");
+  const loading = document.getElementById("driver-cam-loading");
+  const onVideoFrame = () => {
+    if (loading) loading.hidden = true;
+    if (lastOnroadState) updateDriverCameraOverlay(lastOnroadState);
+  };
+  video?.addEventListener("loadeddata", onVideoFrame);
+  video?.addEventListener("playing", onVideoFrame);
+
   window.addEventListener("opui:open-driver-camera", async () => {
     try {
-      await openDriverCamera(lastOnroadState);
+      if (loading) {
+        loading.hidden = false;
+        loading.textContent = tr("camera starting");
+      }
       if (!dlg.open) dlg.showModal();
+      await openDriverCamera(lastOnroadState);
     } catch (err) {
       console.warn("Driver camera:", err);
+      if (loading) loading.textContent = String(err.message || err);
     }
   });
 
   const onClose = () => closeDriverCamera().catch(() => {});
   document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg.close());
   dlg.addEventListener("close", onClose);
+  dlg.addEventListener("click", (ev) => {
+    if (ev.target === dlg) dlg.close();
+  });
 }
+
+export { prewarmWebrtc, isRoadStreaming };

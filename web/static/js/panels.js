@@ -767,8 +767,11 @@ function renderAlwaysOffroadRow(active) {
       : t("Are you sure you want to enter Always Offroad mode?");
     if (!(await showConfirm({ message: msg, confirmText: t("Confirm") }))) return;
     const res = await apiPut("/api/opui/params/OffroadMode", { value: active ? "0" : "1" });
-    if (res.ok) toast(label);
-    else toast(res.error || "Failed");
+    if (res.ok) {
+      deviceExtrasCache = { ...(deviceExtrasCache || {}), offroad_mode: !active };
+      toast(label);
+      requestPanelRefresh();
+    } else toast(res.error || "Failed");
   });
   return row;
 }
@@ -1370,13 +1373,30 @@ function renderActionRow(w) {
       return;
     }
     if (w.action === "torque_tune_version") {
-      const versions = ["Default", "v1", "v2", "v3"];
-      const pick = await showMultiOption({ title: t("Torque Control Tune Version"), options: versions, selected: 0 });
-      if (pick == null) return;
-      const val = pick === 0 ? "" : String(pick);
-      if (val) await apiPut("/api/opui/params/TorqueControlTune", { value: val });
-      else await apiPut("/api/opui/params/TorqueControlTune", { value: "" });
+      const tv = await apiGet("/api/opui/steering/torque-versions");
+      if (!tv.ok) {
+        toast(tv.error || "Failed");
+        return;
+      }
+      const folders = [{
+        name: "",
+        bundles: (tv.options || []).map((o) => ({ name: o.label, ref: o.label })),
+      }];
+      const ref = await showTree({
+        title: t("Torque Control Tune Version"),
+        folders,
+        selectedRef: tv.current_label || "Default",
+        searchable: true,
+      });
+      if (!ref) return;
+      const pick = (tv.options || []).find((o) => o.label === ref);
+      if (!pick || pick.version == null) {
+        await apiPut("/api/opui/params/TorqueControlTune", { value: "" });
+      } else {
+        await apiPut("/api/opui/params/TorqueControlTune", { value: String(pick.version) });
+      }
       toast(t("Torque tune updated"));
+      requestPanelRefresh();
       return;
     }
     if (w.action === "network_set_apn") {

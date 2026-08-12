@@ -118,14 +118,70 @@ def _derive_ui_status(ss, cs, mads_enabled: bool) -> str:
   return "engaged"
 
 
+KM_TO_MILE = 0.621371
+SET_SPEED_NA = 255
+_v_ego_cluster_seen = False
+
+
+def _ui_params() -> dict[str, bool]:
+  out = {
+    "hide_v_ego_ui": False,
+    "true_v_ego_ui": False,
+    "road_name_toggle": False,
+    "standstill_timer": False,
+  }
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    out["hide_v_ego_ui"] = p.get_bool("HideVEgoUI")
+    out["true_v_ego_ui"] = p.get_bool("TrueVEgoUI")
+    out["road_name_toggle"] = p.get_bool("RoadNameToggle")
+    out["standstill_timer"] = p.get_bool("StandstillTimer")
+  except Exception:
+    pass
+  return out
+
+
+def _estimate_alert_height(size: str, text1: str, text2: str, width: int = 1820) -> int:
+  """Approximate SP alert_renderer dynamic height for mid/small."""
+  pad = 40
+  if size == "small":
+    lines = max(1, (len(text1 or "") + 34) // 35)
+    return pad * 2 + lines * 56
+  if size == "mid":
+    lines1 = max(1, (len(text1 or "") + 28) // 29)
+    lines2 = max(0, (len(text2 or "") + 40) // 41) if text2 else 0
+    h = pad * 2 + lines1 * 88
+    if lines2:
+      h += 15 + lines2 * 44
+    return h
+  if size == "full":
+    return 1080
+  return 0
+
+
+def _cruise_speed_raw(cs, ctrl) -> float:
+  """Match openpilot/selfdrive/ui/onroad/hud_renderer.py _update_state."""
+  v_cruise_cluster = float(getattr(cs, "vCruiseCluster", 0.0) or 0.0)
+  if v_cruise_cluster == 0.0:
+    if hasattr(ctrl, "deprecated"):
+      return float(getattr(ctrl.deprecated, "vCruise", 0) or 0)
+    return 0.0
+  return v_cruise_cluster
+
+
 def build_state_from_sm(sm) -> dict[str, Any]:
+  global _v_ego_cluster_seen
   ds = sm["deviceState"]
   ss = sm["selfdriveState"]
   cs = sm["carState"]
   ctrl = sm["controlsState"]
 
   started = bool(ds.started)
+  if not started:
+    _v_ego_cluster_seen = False
   engaged = bool(ss.active)
+  ui_params = _ui_params()
   is_metric = False
   try:
     from openpilot.common.params import Params
@@ -133,26 +189,36 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   except Exception:
     pass
 
-  speed_ms = float(cs.vEgo) if cs.vEgo == cs.vEgo else 0.0
   v_ego_cluster = float(getattr(cs, "vEgoCluster", 0.0) or 0.0)
   if v_ego_cluster != 0.0:
-    speed_ms = v_ego_cluster
-
-  speed = speed_ms * 3.6 if is_metric else speed_ms * 2.23694
+    _v_ego_cluster_seen = True
+  v_ego = float(cs.vEgo) if cs.vEgo == cs.vEgo else 0.0
+  if _v_ego_cluster_seen and not ui_params["true_v_ego_ui"]:
+    v_ego = v_ego_cluster
+  speed_ms = max(0.0, v_ego)
+  speed = round(speed_ms * (3.6 if is_metric else 2.23694))
   unit = "km/h" if is_metric else "mph"
 
-  set_speed = 255
+  cruise_raw = _cruise_speed_raw(cs, ctrl)
+  is_cruise_set = 0 < cruise_raw < SET_SPEED_NA
+  is_cruise_available = cruise_raw != -1
+  display_set_speed = cruise_raw
+  if is_cruise_set and not is_metric:
+    display_set_speed = cruise_raw * KM_TO_MILE
+
+  speed_cluster = 0.0
+  if hasattr(cs, "cruiseState"):
+    speed_cluster = float(getattr(cs.cruiseState, "speedCluster", 0) or 0)
+    if speed_cluster > 0:
+      speed_cluster = speed_cluster * (3.6 if is_metric else 2.23694)
+
+  car_control_enabled = False
+  long_override = False
   try:
-    v_cruise_cluster = float(getattr(cs, "vCruiseCluster", 0.0) or 0.0)
-    cruise_raw = 0.0
-    if hasattr(ctrl, "deprecated") and float(getattr(ctrl.deprecated, "vCruise", 0) or 0) > 0:
-      cruise_raw = float(ctrl.deprecated.vCruise)
-    elif hasattr(cs, "cruiseState") and float(getattr(cs.cruiseState, "speed", 0) or 0) > 0:
-      cruise_raw = float(cs.cruiseState.speed)
-    if v_cruise_cluster > 0:
-      cruise_raw = v_cruise_cluster
-    if 0 < cruise_raw < 255:
-      set_speed = cruise_raw * (3.6 if is_metric else 2.23694)
+    if sm.valid.get("carControl"):
+      cc = sm["carControl"]
+      car_control_enabled = bool(getattr(cc, "enabled", False))
+      long_override = bool(cc.cruiseControl.override)
   except Exception:
     pass
 
@@ -200,12 +266,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   lateral_jerk_torque = False
   cp_loaded = False
   standstill = bool(getattr(cs, "standstill", False))
-  standstill_timer_enabled = False
-  try:
-    from openpilot.common.params import Params
-    standstill_timer_enabled = Params().get_bool("StandstillTimer")
-  except Exception:
-    pass
+  standstill_timer_enabled = ui_params["standstill_timer"]
   try:
     from openpilot.selfdrive.ui.ui_state import ui_state
     has_longitudinal = bool(ui_state.has_longitudinal_control)
@@ -223,35 +284,31 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   except Exception:
     pass
 
-  sp_hud: dict[str, Any] = {}
-  long_override = False
-  try:
-    if sm.valid.get("carControl"):
-      long_override = bool(sm["carControl"].cruiseControl.override)
-  except Exception:
-    pass
+  sp_hud: dict[str, Any] = {
+    "long_override": long_override,
+    "cluster_speed": round(speed_cluster) if speed_cluster > 0 else None,
+  }
   try:
     if sm.valid.get("selfdriveStateSP"):
       ssp = sm["selfdriveStateSP"]
-      sp_hud = {
+      sp_hud.update({
         "speed_limit": getattr(ssp, "speedLimit", None),
         "speed_limit_assist": str(getattr(ssp, "speedLimitAssist", "")).split(".")[-1],
         "road_name": getattr(ssp, "roadName", "") or "",
-        "standstill_timer": getattr(ssp, "standstillTimer", None),
         "blindspot_left": bool(getattr(ssp, "blindspotLeft", False)),
         "blindspot_right": bool(getattr(ssp, "blindspotRight", False)),
         "turn_signal_left": bool(getattr(ssp, "turnSignalLeft", False)),
         "turn_signal_right": bool(getattr(ssp, "turnSignalRight", False)),
         "rocket_fuel": getattr(ssp, "rocketFuel", None),
-        "long_override": long_override,
-        "cluster_speed": round(
-          float(getattr(getattr(cs, "cruiseState", None), "speedCluster", 0) or 0)
-          * (3.6 if is_metric else 2.23694),
-        ) if hasattr(cs, "cruiseState") else None,
-      }
+      })
     if sm.valid.get("longitudinalPlanSP"):
       lp_sp = sm["longitudinalPlanSP"]
       assist = getattr(lp_sp, "speedLimit", None)
+      resolver = getattr(assist, "resolver", None) if assist else None
+      if resolver is not None:
+        conv = 3.6 if is_metric else 2.23694
+        sp_hud["speed_limit_resolver"] = round(float(getattr(resolver, "speedLimit", 0) or 0) * conv)
+        sp_hud["speed_limit_assist_state"] = str(getattr(getattr(assist, "assist", None), "state", "")).split(".")[-1]
       sp_hud["speed_limit_assist_active"] = bool(getattr(getattr(assist, "assist", None), "active", False))
       scc = getattr(lp_sp, "smartCruiseControl", None)
       if scc is not None:
@@ -265,6 +322,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       if e2e is not None:
         sp_hud["e2e_green_light"] = bool(getattr(e2e, "greenLightAlert", False))
         sp_hud["e2e_lead_depart"] = bool(getattr(e2e, "leadDepartAlert", False))
+    if sm.valid.get("liveMapDataSP"):
+      lmd = sm["liveMapDataSP"]
+      conv = 3.6 if is_metric else 2.23694
+      if bool(getattr(lmd, "speedLimitAheadValid", False)):
+        sp_hud["speed_limit_ahead"] = round(float(getattr(lmd, "speedLimitAhead", 0) or 0) * conv)
+        sp_hud["speed_limit_ahead_dist"] = float(getattr(lmd, "speedLimitAheadDistance", 0) or 0)
     try:
       from openpilot.selfdrive.ui.ui_state import ui_state
       if getattr(ui_state, "CP_SP", None) is not None:
@@ -294,8 +357,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     pass
 
   alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
-  alert_heights = {"none": 0, "small": 271, "mid": 420, "full": 1080}
-  alert_height = alert_heights.get(alert_size, 271 if ss.alertText1 else 0)
+  alert_t1 = ss.alertText1 or ""
+  alert_t2 = ss.alertText2 or ""
+  alert_height = _estimate_alert_height(alert_size, alert_t1, alert_t2)
+  if alert_height <= 0:
+    alert_heights = {"none": 0, "small": 271, "mid": 420, "full": 1080}
+    alert_height = alert_heights.get(alert_size, 271 if alert_t1 else 0)
 
   dev_ui = None
   circular_alert_allowed = False
@@ -304,9 +371,10 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     from webui.server.bridge.dev_ui_api import snapshot_dev_ui
     dev_ui = snapshot_dev_ui(sm, is_metric)
     circular_alert_allowed = (
-      alert_size in ("none", "")
+      started
+      and alert_size in ("none", "")
       and sm.valid.get("driverStateV2")
-      and sm.recv_frame.get("driverStateV2", 0) >= ui_state.started_frame
+      and sm.recv_frame.get("driverStateV2", 0) > ui_state.started_frame
     )
   except Exception:
     pass
@@ -318,6 +386,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     except Exception:
       torque_utilization = 0.0
 
+  driver_face = _driver_face(sm)
+
   return {
     "ok": True,
     "started": started,
@@ -325,10 +395,15 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "ui_status": ui_status,
     "is_metric": is_metric,
     "is_offroad": not started,
-    "speed": round(speed),
+    "speed": round(speed) if not ui_params["hide_v_ego_ui"] else None,
     "speed_raw": speed_ms,
     "unit": unit,
-    "set_speed": round(set_speed) if set_speed != 255 else None,
+    "hide_v_ego_ui": ui_params["hide_v_ego_ui"],
+    "road_name_toggle": ui_params["road_name_toggle"],
+    "set_speed": round(display_set_speed) if is_cruise_set else None,
+    "is_cruise_set": is_cruise_set,
+    "is_cruise_available": is_cruise_available,
+    "car_control_enabled": car_control_enabled,
     "experimental_mode": experimental,
     "experimental_mode_confirmed": experimental_confirmed,
     "engageable": bool(getattr(ss, "engageable", False) or engaged),
@@ -344,8 +419,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "standstill": standstill,
     "standstill_timer_enabled": standstill_timer_enabled,
     "alert": {
-      "text1": ss.alertText1 or "",
-      "text2": ss.alertText2 or "",
+      "text1": alert_t1,
+      "text2": alert_t2,
       "size": alert_size,
       "status": str(ss.alertStatus).split(".")[-1] if ss.alertStatus else "",
       "height_px": alert_height,
@@ -375,7 +450,46 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "torque_bar": torque_bar,
     "torque_utilization": torque_utilization,
     "circular_alert_allowed": circular_alert_allowed,
+    "driver_face": driver_face,
   }
+
+
+def _driver_face(sm: Any) -> dict[str, Any] | None:
+  if not sm.valid.get("driverStateV2"):
+    return None
+  try:
+    dsv2 = sm["driverStateV2"]
+    is_rhd = float(getattr(dsv2, "wheelOnRightProb", 0) or 0) > 0.5
+    dd = dsv2.rightDriverData if is_rhd else dsv2.leftDriverData
+    face_prob = float(getattr(dd, "faceProb", 0) or 0)
+    pos = getattr(dd, "facePosition", [0, 0])
+    std = getattr(dd, "faceOrientationStd", [0, 0])
+    face_x = float(pos[0]) if len(pos) > 0 else 0.0
+    face_y = float(pos[1]) if len(pos) > 1 else 0.0
+    face_std = max(
+      float(std[0]) if len(std) > 0 else 0.0,
+      float(std[1]) if len(std) > 1 else 0.0,
+    )
+    alpha = 0.7
+    if face_std > 0.15:
+      alpha = max(0.7 - (face_std - 0.15) * 3.5, 0.0)
+    box_size = 220
+    fbox_x = int(1080.0 - 1714.0 * face_x)
+    fbox_y = int(-135.0 + (504.0 + abs(face_x) * 112.0) + (1205.0 - abs(face_x) * 724.0) * face_y)
+    return {
+      "visible": face_prob > 0.7,
+      "alpha": alpha,
+      "rhd": is_rhd,
+      "prob": face_prob,
+      "box": {
+        "x": fbox_x - box_size // 2,
+        "y": fbox_y - box_size // 2,
+        "size": box_size,
+      },
+      "source_size": {"w": 1928, "h": 1208},
+    }
+  except Exception:
+    return None
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
@@ -433,9 +547,9 @@ def snapshot_ui_state() -> dict[str, Any]:
     import openpilot.cereal.messaging as messaging
 
     services = [
-      "deviceState", "selfdriveState", "carState", "controlsState",
+      "deviceState", "selfdriveState", "carState", "controlsState", "carControl",
       "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-      "longitudinalPlanSP",
+      "longitudinalPlanSP", "liveMapDataSP",
     ]
     try:
       services.append("selfdriveStateSP")

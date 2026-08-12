@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from webui.server.bridge.design_tokens import tokens_payload
 from webui.server.bridge.developer_api import developer_error_log
 from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
+from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
@@ -239,6 +240,9 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "GET" and clean_path == "/api/opui/device/extras":
       return device_extras()
+
+    if method == "GET" and clean_path == "/api/opui/steering/torque-versions":
+      return torque_versions()
 
     if method == "GET" and clean_path == "/api/opui/device/regulatory":
       return regulatory_html()

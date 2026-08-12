@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=38" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=45" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -50,6 +50,9 @@
         <div class="opui-home-content">
           <div class="opui-home-col opui-home-col--left">
             <div id="home-prime" class="opui-home-prime-wrap"></div>
+            <button type="button" id="btn-home-camera-preview" class="opui-home-camera-preview">
+              行车画面预览
+            </button>
           </div>
           <div class="opui-home-col opui-home-col--right">
             <button type="button" id="home-exp-banner" class="opui-home-exp" hidden>
@@ -73,9 +76,9 @@
       <section id="screen-onroad" class="opui-screen opui-screen--onroad" hidden>
         <div id="camera-wrap" class="opui-camera-wrap">
           <video id="road-video" class="opui-camera-video" autoplay playsinline muted></video>
-          <div id="camera-fallback" class="opui-camera-fallback">
-            <p>相机加载中…</p>
-            <button type="button" id="btn-start-stream" class="opui-btn">启动 WebRTC 流</button>
+          <div id="camera-fallback" class="opui-camera-fallback" hidden>
+            <div class="opui-camera-fallback__spinner" aria-hidden="true"></div>
+            <p id="camera-status-text">相机加载中…</p>
           </div>
         </div>
         <div id="model-overlay" class="opui-model-overlay" hidden></div>
@@ -204,10 +207,13 @@
       </div>
     </div>
 
-    <dialog id="driver-camera-dialog" class="opui-dialog opui-driver-cam">
-      <h3>Driver Camera</h3>
-      <video id="driver-video" autoplay playsinline muted></video>
-      <button type="button" id="driver-cam-close" class="opui-btn">Close</button>
+    <dialog id="driver-camera-dialog" class="opui-dialog opui-driver-cam opui-driver-cam--fullscreen">
+      <button type="button" id="driver-cam-close" class="opui-driver-cam__close" aria-label="Close"></button>
+      <div class="opui-driver-cam__viewport">
+        <video id="driver-video" autoplay playsinline muted></video>
+        <div id="driver-cam-loading" class="opui-driver-cam__loading">camera starting</div>
+        <div id="driver-face-box" class="opui-driver-cam__face" hidden></div>
+      </div>
     </dialog>
   </div>
   </div>
@@ -235,6 +241,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> 录音麦克风</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=38"></script>
+  <script type="module" src="/static/js/app.js?v=45"></script>
 </body>
 </html>

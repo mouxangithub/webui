@@ -1,5 +1,7 @@
 /** sunnypilot onroad HUD extensions (speed limit, road name, blinkers, DM arc, rocket fuel, SCC). */
 
+const BSM_IMG = "/api/opui/assets/icons_mici/onroad/blind_spot_left.png";
+
 export function updateSpHud(st) {
   const hud = document.getElementById("hud");
   if (!hud) return;
@@ -13,13 +15,7 @@ export function updateSpHud(st) {
   const alertSize = (st.alert?.size || "none").toLowerCase();
   const hideDm = alertSize && alertSize !== "none";
 
-  const slaWrap = document.getElementById("hud-speed-limit-wrap");
-  setText("hud-speed-limit", sp.speed_limit != null ? String(Math.round(sp.speed_limit)) : "");
-  if (slaWrap) {
-    const assist = sp.speed_limit_assist === "preActive" || sp.speed_limit_assist_active;
-    slaWrap.classList.toggle("opui-hud-sla--assist", assist);
-  }
-
+  updateSpeedLimit(sp);
   updateSccTags(sp);
 
   const blinkL = document.getElementById("hud-blinker-l");
@@ -29,19 +25,63 @@ export function updateSpHud(st) {
 
   const bsl = document.getElementById("hud-bsl");
   const bsr = document.getElementById("hud-bsr");
-  if (bsl) bsl.hidden = !sp.blindspot_left;
-  if (bsr) bsr.hidden = !sp.blindspot_right;
+  if (bsl) {
+    bsl.hidden = !sp.blindspot_left;
+    bsl.style.backgroundImage = sp.blindspot_left ? `url("${BSM_IMG}")` : "";
+  }
+  if (bsr) {
+    bsr.hidden = !sp.blindspot_right;
+    bsr.style.backgroundImage = sp.blindspot_right ? `url("${BSM_IMG}")` : "";
+    bsr.style.transform = sp.blindspot_right ? "scaleX(-1)" : "";
+  }
 
   const rocket = document.getElementById("hud-rocket");
   if (rocket && sp.rocket_fuel != null) {
     rocket.hidden = false;
-    rocket.style.setProperty("--rocket-pct", `${Math.round(sp.rocket_fuel * 100)}%`);
+    const pct = Math.round(sp.rocket_fuel * 100);
+    rocket.style.setProperty("--rocket-pct", `${Math.abs(pct)}%`);
+    rocket.classList.toggle("is-negative", pct < 0);
   } else if (rocket) {
     rocket.hidden = true;
   }
 
-  setText("hud-road-name", sp.road_name);
-  drawDmArc(st.dm_arc, hideDm);
+  const roadName = st.road_name_toggle ? sp.road_name : "";
+  setText("hud-road-name", roadName);
+  drawDmArc(st.dm_arc, hideDm, Number(st.developer_ui) || 0);
+}
+
+function updateSpeedLimit(sp) {
+  const slaWrap = document.getElementById("hud-speed-limit-wrap");
+  const limit = sp.speed_limit_resolver ?? sp.speed_limit;
+  setText("hud-speed-limit", limit != null ? String(Math.round(limit)) : "");
+  if (!slaWrap) return;
+
+  const assistState = sp.speed_limit_assist_state || sp.speed_limit_assist || "";
+  const preActive = assistState === "preActive" || sp.speed_limit_assist === "preActive";
+  const assist = preActive || sp.speed_limit_assist_active;
+  slaWrap.classList.toggle("opui-hud-sla--assist", assist);
+  slaWrap.classList.toggle("opui-hud-sla--preactive", preActive);
+
+  let ahead = document.getElementById("hud-speed-limit-ahead");
+  if (!ahead && slaWrap.parentElement) {
+    ahead = document.createElement("div");
+    ahead.id = "hud-speed-limit-ahead";
+    ahead.className = "opui-hud-sla-ahead";
+    ahead.hidden = true;
+    slaWrap.parentElement.appendChild(ahead);
+  }
+  if (ahead) {
+    const showAhead = sp.speed_limit_ahead != null
+      && limit != null
+      && Math.round(sp.speed_limit_ahead) !== Math.round(limit);
+    if (showAhead) {
+      ahead.hidden = false;
+      ahead.innerHTML = `<span class="opui-hud-sla-ahead__label">AHEAD</span>`
+        + `<span class="opui-hud-sla-ahead__val">${Math.round(sp.speed_limit_ahead)}</span>`;
+    } else {
+      ahead.hidden = true;
+    }
+  }
 }
 
 function clearSpHud() {
@@ -50,6 +90,7 @@ function clearSpHud() {
     const el = document.getElementById(id);
     if (el) el.hidden = true;
   });
+  document.getElementById("hud-speed-limit-ahead")?.setAttribute("hidden", "");
 }
 
 function updateSccTags(sp) {
@@ -90,7 +131,7 @@ function setText(id, text) {
   el.textContent = text;
 }
 
-function drawDmArc(dm, hideDm) {
+function drawDmArc(dm, hideDm, devUi) {
   const wrap = document.getElementById("dm-arc-wrap");
   const svg = document.getElementById("dm-arc");
   if (!wrap || !svg) return;
@@ -102,6 +143,7 @@ function drawDmArc(dm, hideDm) {
   wrap.hidden = false;
   wrap.classList.add("is-clickable");
   wrap.classList.toggle("opui-dm-wrap--rhd", !!dm.rhd);
+  wrap.classList.toggle("opui-dm-wrap--dev-bottom", devUi === 2 || devUi === 3);
 
   const prob = Math.max(0, Math.min(1, dm.prob ?? 0));
   const fill = svg.querySelector(".dm-arc-fill");

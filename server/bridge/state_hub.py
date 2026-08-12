@@ -137,9 +137,9 @@ def _device_loop() -> None:
   import openpilot.cereal.messaging as messaging
 
   services = [
-    "deviceState", "selfdriveState", "carState", "controlsState",
+    "deviceState", "selfdriveState", "carState", "controlsState", "carControl",
     "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-    "longitudinalPlanSP",
+    "longitudinalPlanSP", "liveMapDataSP",
   ]
   try:
     services.append("selfdriveStateSP")

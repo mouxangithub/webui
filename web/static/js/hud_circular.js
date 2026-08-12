@@ -1,13 +1,15 @@
 /** Circular E2E + standstill alerts (circular_alerts.py). */
 
+import { tr } from "./i18n.js";
+
 const E2E_HOLD_TICKS = 60;
 const GREEN_IMG = "/api/opui/assets/sunnypilot/selfdrive/assets/images/green_light.png";
 const DEPART_IMG = "/api/opui/assets/sunnypilot/selfdrive/assets/images/lead_depart.png";
 
 let e2eTicks = 0;
 let e2eKind = "";
-let lastGreen = false;
-let lastDepart = false;
+let standstillElapsed = 0;
+let lastStandstill = false;
 
 export function updateCircularAlert(st) {
   const wrap = document.getElementById("hud-circular-alert");
@@ -17,8 +19,8 @@ export function updateCircularAlert(st) {
     wrap.hidden = true;
     e2eTicks = 0;
     e2eKind = "";
-    lastGreen = false;
-    lastDepart = false;
+    standstillElapsed = 0;
+    lastStandstill = false;
     return;
   }
 
@@ -26,19 +28,23 @@ export function updateCircularAlert(st) {
   const green = !!sp.e2e_green_light;
   const depart = !!sp.e2e_lead_depart;
 
-  if (green && !lastGreen) {
+  if (green || depart) {
     e2eTicks = E2E_HOLD_TICKS;
-    e2eKind = "green";
-  } else if (depart && !lastDepart) {
-    e2eTicks = E2E_HOLD_TICKS;
-    e2eKind = "depart";
+    e2eKind = depart ? "depart" : "green";
+  } else if (e2eTicks > 0) {
+    e2eTicks -= 1;
   }
-  lastGreen = green;
-  lastDepart = depart;
-  if (e2eTicks > 0) e2eTicks -= 1;
+
+  const standstill = !!st.standstill;
+  if (!standstill) {
+    standstillElapsed = 0;
+  } else if (st.standstill_timer_enabled && e2eTicks <= 0) {
+    standstillElapsed += 0.05;
+  }
+  lastStandstill = standstill;
 
   const showE2e = e2eTicks > 0;
-  const showStandstill = !showE2e && st.standstill_timer_enabled && st.standstill;
+  const showStandstill = !showE2e && st.standstill_timer_enabled && standstill;
 
   if (!showE2e && !showStandstill) {
     wrap.hidden = true;
@@ -51,6 +57,7 @@ export function updateCircularAlert(st) {
   wrap.hidden = false;
   wrap.classList.toggle("is-e2e", showE2e);
   wrap.classList.toggle("is-standstill", showStandstill);
+  wrap.classList.toggle("is-pulse", showE2e && (Math.floor(performance.now() / 400) % 2 === 0));
 
   const img = document.getElementById("hud-circular-img");
   const text = document.getElementById("hud-circular-text");
@@ -64,23 +71,23 @@ export function updateCircularAlert(st) {
     }
     if (text) {
       text.hidden = false;
-      text.textContent = e2eKind === "depart" ? "LEAD VEHICLE\nDEPARTING" : "GREEN\nLIGHT";
+      text.textContent = e2eKind === "depart"
+        ? tr("LEAD VEHICLE\nDEPARTING")
+        : tr("GREEN\nLIGHT");
     }
     if (stopped) stopped.hidden = true;
     if (timer) timer.hidden = true;
   } else {
     if (img) img.hidden = true;
     if (text) text.hidden = true;
-    if (stopped) stopped.hidden = false;
+    if (stopped) {
+      stopped.hidden = false;
+      stopped.textContent = tr("STOPPED");
+    }
     if (timer) {
-      const seconds = Number(sp.standstill_timer);
-      if (Number.isFinite(seconds) && seconds >= 0) {
-        const minute = Math.floor(seconds / 60);
-        const second = Math.floor(seconds % 60);
-        timer.textContent = `${minute}:${String(second).padStart(2, "0")}`;
-      } else {
-        timer.textContent = "0:00";
-      }
+      const minute = Math.floor(standstillElapsed / 60);
+      const second = Math.floor(standstillElapsed % 60);
+      timer.textContent = `${minute}:${String(second).padStart(2, "0")}`;
       timer.hidden = false;
     }
   }
@@ -91,4 +98,5 @@ export function clearCircularAlert() {
   if (wrap) wrap.hidden = true;
   e2eTicks = 0;
   e2eKind = "";
+  standstillElapsed = 0;
 }

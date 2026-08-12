@@ -5,8 +5,14 @@ import { opuiWs } from "./ws.js";
 const ASSET_RE = /^\/api\/opui\/assets\//;
 const HTTP_FIRST_RE = /^\/api\/opui\/(panels|dev|i18n|device|bootstrap)/;
 const HTTP_TIMEOUT_MS = 8000;
+const WEBRTC_TIMEOUT_MS = 45000;
+
+function isWebrtcPath(path) {
+  return /^\/api\/opui\/webrtc\//.test(path) || /^\/api\/opui\/action\/webrtc_/.test(path);
+}
 
 function useHttp(path) {
+  if (isWebrtcPath(path)) return true;
   if (ASSET_RE.test(path)) return true;
   if (/^\/api\/opui\/bootstrap/.test(path)) return true;
   if (window.__OPUI_DEV_PC && HTTP_FIRST_RE.test(path)) return true;
@@ -15,7 +21,8 @@ function useHttp(path) {
 
 async function fetchJson(path, init = {}) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  const timeoutMs = isWebrtcPath(path) ? WEBRTC_TIMEOUT_MS : HTTP_TIMEOUT_MS;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(path, { ...init, signal: ctrl.signal });
     return r.json();

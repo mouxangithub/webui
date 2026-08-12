@@ -3,7 +3,7 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
-import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog } from "./onroad.js";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc } from "./onroad.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
@@ -24,8 +24,10 @@ const panelTitle = $("#panel-title");
 let panels = [];
 let currentPanel = "device";
 let lastStarted = false;
+let lastUiState = null;
 let devPc = false;
 let onroadSidebarVisible = false;
+let cameraPreview = false;
 let panelIconMap = {};
 
 function assetUrl(rel) {
@@ -126,7 +128,17 @@ function syncModelOverlayWatch() {
   opuiWs.watchModelOverlay(w, h);
 }
 
+function updateCameraPreviewUi() {
+  const bottomBtn = document.getElementById("btn-sidebar-bottom");
+  if (!bottomBtn) return;
+  const showExit = cameraPreview && !lastStarted;
+  bottomBtn.disabled = false;
+  bottomBtn.classList.toggle("opui-sidebar-btn--home", showExit);
+  bottomBtn.classList.toggle("opui-sidebar-btn--flag", !showExit);
+}
+
 function setScreen(name) {
+  const prevScreen = app.dataset.screen;
   app.dataset.screen = name;
   $("#screen-home").hidden = name !== "home";
   $("#screen-settings").hidden = name !== "settings";
@@ -151,6 +163,9 @@ function setScreen(name) {
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
     notifyPanelWatch(null);
     syncModelOverlayWatch();
+    if (!devPc) {
+      startRoadStream().catch(() => {});
+    }
   } else {
     metricsSidebar.hidden = true;
     app.classList.remove("opui--onroad-sidebar-hidden");
@@ -159,6 +174,11 @@ function setScreen(name) {
   }
 
   showModelOverlay(name === "onroad");
+  updateCameraPreviewUi();
+
+  if (prevScreen === "onroad" && name !== "onroad" && !lastStarted) {
+    stopRoadStream().catch(() => {});
+  }
 }
 
 function toggleOnroadSidebar() {
@@ -325,6 +345,7 @@ async function bootstrap() {
 }
 
 function handleState(st) {
+  lastUiState = st;
   setGlobalState(st);
   updateSidebarMetrics(st);
   updateSidebarMode(!!st.started);
@@ -351,11 +372,16 @@ function handleState(st) {
     if (lastStarted) {
       stopRoadStream().catch(() => {});
     }
-    if (app.dataset.screen === "onroad") {
+    if (app.dataset.screen === "onroad" && !cameraPreview) {
       setScreen("home");
+    }
+    if (cameraPreview && app.dataset.screen === "onroad") {
+      updateOnroadHud(st);
     }
   }
   lastStarted = !!st.started;
+  if (st.started) cameraPreview = false;
+  updateCameraPreviewUi();
 }
 
 function setupWebSocket() {
@@ -408,6 +434,7 @@ window.addEventListener("opui:open-settings", (ev) => {
 
 window.addEventListener("opui:language-changed", () => {
   renderNav();
+  if (lastUiState?.ok) updateSidebarMetrics(lastUiState);
 });
 
 window.addEventListener("opui:refresh-panel", () => {
@@ -425,9 +452,20 @@ $("#btn-close-settings").addEventListener("click", () => {
 $("#btn-sidebar-settings").addEventListener("click", () => openSettings("device"));
 
 $("#btn-sidebar-bottom").addEventListener("click", async () => {
+  if (cameraPreview && !lastStarted) {
+    cameraPreview = false;
+    await stopRoadStream();
+    setScreen("home");
+    return;
+  }
   if (lastStarted) {
     await apiPost("/api/opui/action/bookmark");
   }
+});
+
+document.getElementById("btn-home-camera-preview")?.addEventListener("click", () => {
+  cameraPreview = true;
+  setScreen("onroad");
 });
 
 document.getElementById("sidebar-mic")?.addEventListener("click", () => {
@@ -441,7 +479,6 @@ document.getElementById("camera-wrap")?.addEventListener("click", (ev) => {
 
 $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
-bindStreamButton();
 bindExperimentalButton();
 bindDriverCameraDialog();
 bindDmArcClick();
@@ -453,6 +490,7 @@ setupWebSocket();
 bootstrap().then(() => {
   initDevPanel();
   fitOpuiScale();
+  prewarmWebrtc();
   window.addEventListener("resize", () => {
     fitOpuiScale();
     syncModelOverlayWatch();

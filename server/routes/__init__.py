@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from aiohttp import web
@@ -33,6 +34,7 @@ from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select, v
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
 from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
+from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.developer_api import developer_error_log
@@ -168,7 +170,9 @@ async def api_wifi_connect_hidden(request: web.Request) -> web.Response:
 
 
 async def api_webrtc_schema(_request: web.Request) -> web.Response:
-  return json_response(webrtc_schema())
+  loop = asyncio.get_running_loop()
+  result = await loop.run_in_executor(None, webrtc_schema)
+  return json_response(result)
 
 
 async def api_webrtc_offer(request: web.Request) -> web.Response:
@@ -178,7 +182,9 @@ async def api_webrtc_offer(request: web.Request) -> web.Response:
     camera = str(body.get("init_camera", "road"))
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
-  return json_response(webrtc_offer(sdp, camera))
+  loop = asyncio.get_running_loop()
+  result = await loop.run_in_executor(None, webrtc_offer, sdp, camera)
+  return json_response(result)
 
 
 async def api_webrtc_notify(request: web.Request) -> web.Response:
@@ -186,7 +192,9 @@ async def api_webrtc_notify(request: web.Request) -> web.Response:
     body = await request.json()
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
-  return json_response(webrtc_notify(body))
+  loop = asyncio.get_running_loop()
+  result = await loop.run_in_executor(None, webrtc_notify, body)
+  return json_response(result)
 
 
 async def api_trips(_request: web.Request) -> web.Response:
@@ -315,6 +323,10 @@ async def api_device_extras(_request: web.Request) -> web.Response:
   return json_response(device_extras())
 
 
+async def api_torque_versions(_request: web.Request) -> web.Response:
+  return json_response(torque_versions())
+
+
 async def api_device_regulatory(_request: web.Request) -> web.Response:
   return json_response(regulatory_html())
 
@@ -378,6 +390,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/sunnylink/pair", api_sunnylink_pair)
   app.router.add_get("/api/opui/firehose", api_firehose)
   app.router.add_get("/api/opui/device/extras", api_device_extras)
+  app.router.add_get("/api/opui/steering/torque-versions", api_torque_versions)
   app.router.add_get("/api/opui/device/regulatory", api_device_regulatory)
   app.router.add_get("/api/opui/developer/error-log", api_developer_error_log)
   app.router.add_post("/api/opui/device/language", api_set_language)

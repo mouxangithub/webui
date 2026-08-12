@@ -6,7 +6,7 @@
 
 **图例**：✅ 已对齐 · 🟡 近似/部分 · ❌ 未实现
 
-最后更新：2026-08-12（P2/P3 收尾 v38）
+最后更新：2026-08-13（v45：设定速度/E2E/停车计时器数据对齐）
 
 ---
 
@@ -37,9 +37,11 @@
 
 ### 视频流（WebRTC）
 - ✅ 行车 livestream（`process_config` + `webrtc_stream.js`）
+- ✅ 进入 onroad 自动拉流（无手动按钮）
+- ✅ 居中加载提示 + 旋转指示
 - ✅ 实验模式 wideRoad/road 车速滞回切换
-- ✅ 驾驶员监控（notify 切 `driver` + `IsDriverViewEnabled`）
-- ✅ CORS 中间件（跨域 API）
+- ✅ 驾驶员监控（notify 切 `driver` + 快路径复用 road 流）
+- ✅ 页面加载 `prewarmWebrtc()`
 
 ---
 
@@ -49,9 +51,9 @@
 |------|-----|------|
 | 告警 | Dev UI 偏移（mid/small） | ✅ `onroad.js` |
 | 告警 | full 尺寸动态高度 | 🟡 |
-| Home | Prime 勾选纹理 | 🟡 |
-| 侧栏 | Wi-Fi 分级纹理 | 🟡 |
-| Steering | Torque 版本树 JSON | 🟡 |
+| Home | Prime 勾选纹理 | ✅ 色值对齐 `prime.py` |
+| 侧栏 | Wi-Fi 分级纹理 | ✅ 圆点（与 `sidebar.py` 一致） |
+| Steering | Torque 版本树 JSON | ✅ `/api/opui/steering/torque-versions` |
 | 模型 | shader 级精度 | 🟡 canvas 近似 |
 
 ---
@@ -66,7 +68,7 @@ py -3 webui/dev/run_pc.py --port 5080
 python3.12 -m webui.webuid
 ```
 
-1. 强刷 `?v=38`
+1. 强刷 `?v=44`
 2. Dev：严重告警 / onroad_engaged / long_only / alert_full / standstill_timer
 3. 设置：Cruise ICBM 描述、Custom ACC value_map、Visuals Chevron 门控
 4. Toggles 行内图标、Trips 统计图标

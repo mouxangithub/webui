@@ -1,32 +1,38 @@
 /** 300px metrics sidebar — layout matches openpilot/selfdrive/ui/layouts/sidebar.py */
 
-const METRIC_LABELS = {
-  TEMP: "温度",
-  VEHICLE: "车辆",
-  CONNECT: "连接",
-  SUNNYLINK: "阳光联",
-};
-
-const VALUE_ZH = {
-  GOOD: "良好",
-  HIGH: "偏高",
-  ONLINE: "在线",
-  OFFLINE: "离线",
-  ERROR: "错误",
-  CONNECTED: "在线",
-  DISABLED: "已关闭",
-  "REGIST...": "注册中…",
-  FAULT: "故障",
-  NO: "否",
-  PANDA: "PANDA",
-};
+import { tr } from "./i18n.js";
 
 const METRIC_KEYS = ["temp", "vehicle", "connect", "sunnylink"];
 
-function zhValue(raw) {
+const VALUE_KEYS = {
+  GOOD: "GOOD",
+  HIGH: "HIGH",
+  ONLINE: "ONLINE",
+  OFFLINE: "OFFLINE",
+  ERROR: "ERROR",
+  CONNECTED: "CONNECTED",
+  DISABLED: "DISABLED",
+  "REGIST...": "REGIST...",
+  FAULT: "FAULT",
+  NO: "NO",
+  PANDA: "PANDA",
+};
+
+function metricLabel(key) {
+  const labels = {
+    temp: tr("TEMP"),
+    vehicle: tr("VEHICLE"),
+    connect: tr("CONNECT"),
+    sunnylink: tr("SUNNYLINK"),
+  };
+  return labels[key] || key;
+}
+
+function displayValue(raw) {
   if (!raw) return "--";
   const key = String(raw).toUpperCase().replace(/\s+/g, "");
-  return VALUE_ZH[key] || raw;
+  const i18nKey = VALUE_KEYS[key];
+  return i18nKey ? tr(i18nKey) : raw;
 }
 
 function toneFlags(tone) {
@@ -80,31 +86,31 @@ export function updateSidebarMetrics(st) {
   const thermalOk = d.thermal === "ok";
 
   setMetric("temp", {
-    label: METRIC_LABELS.TEMP,
-    value: d.cpu_temp != null ? `${Math.round(d.cpu_temp)}°C` : (thermalOk ? zhValue("GOOD") : zhValue("HIGH")),
+    label: metricLabel("temp"),
+    value: d.cpu_temp != null ? `${Math.round(d.cpu_temp)}°C` : displayValue(thermalOk ? "GOOD" : "HIGH"),
     danger: !thermalOk,
     visible: true,
   });
 
   if (d.panda_unknown) {
     setMetric("vehicle", {
-      label: zhValue("NO"),
-      value: zhValue("PANDA"),
+      label: displayValue("NO"),
+      value: displayValue("PANDA"),
       danger: true,
       visible: true,
     });
   } else {
     setMetric("vehicle", {
-      label: METRIC_LABELS.VEHICLE,
-      value: zhValue("ONLINE"),
+      label: metricLabel("vehicle"),
+      value: displayValue("ONLINE"),
       visible: true,
     });
   }
 
   const athena = String(d.athena_status || "").toUpperCase();
   setMetric("connect", {
-    label: METRIC_LABELS.CONNECT,
-    value: zhValue(d.athena_status) || (athena === "ONLINE" ? "在线" : "离线"),
+    label: metricLabel("connect"),
+    value: displayValue(d.athena_status) || displayValue(athena === "ONLINE" ? "ONLINE" : "OFFLINE"),
     ...toneFlags(
       athena === "ONLINE" ? "good"
         : athena === "ERROR" ? "danger"
@@ -115,8 +121,8 @@ export function updateSidebarMetrics(st) {
 
   const sl = d.sunnylink || {};
   setMetric("sunnylink", {
-    label: METRIC_LABELS.SUNNYLINK,
-    value: zhValue(sl.status || "OFFLINE"),
+    label: metricLabel("sunnylink"),
+    value: displayValue(sl.status || "OFFLINE"),
     ...toneFlags(sl.tone || "warn"),
     visible: true,
   });
