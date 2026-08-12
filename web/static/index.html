@@ -87,7 +87,10 @@
           <circle class="dm-arc-v" cx="60" cy="60" r="42" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"
             stroke-linecap="round" transform="rotate(90 60 60)" stroke-dasharray="0 220"/>
         </svg>
-        <div id="hud-rocket" class="opui-rocket" hidden></div>
+        <div id="hud-standstill" class="opui-hud-standstill" hidden>
+          <div class="opui-hud-standstill-label">STOPPED</div>
+          <div id="hud-standstill-timer" class="opui-hud-standstill-timer">0:00</div>
+        </div>
         <div class="opui-hud-speed-block">
           <span id="hud-speed">0</span>
           <span id="hud-unit" class="opui-hud-unit">km/h</span>
@@ -182,6 +185,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> Experimental</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js"></script>
+  <script type="module" src="/static/js/app.js?v=4"></script>
 </body>
 </html>

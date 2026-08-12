@@ -1,11 +1,20 @@
 /** sunnypilot onroad HUD extensions (speed limit, road name, blinkers, DM arc, rocket fuel). */
 
+let standstillElapsed = 0;
+let lastStandstillTs = 0;
+
 export function updateSpHud(st) {
   const hud = document.getElementById("hud");
   if (!hud || !st?.started) return;
 
   const sp = st.sp_hud || {};
+  const slaWrap = document.getElementById("hud-speed-limit-wrap");
   setText("hud-speed-limit", sp.speed_limit != null ? String(Math.round(sp.speed_limit)) : "");
+  if (slaWrap) {
+    slaWrap.classList.toggle("opui-hud-sla--assist", sp.speed_limit_assist === "preActive");
+  }
+
+  updateStandstillTimer(st);
 
   const blinkL = document.getElementById("hud-blinker-l");
   const blinkR = document.getElementById("hud-blinker-r");
@@ -27,6 +36,31 @@ export function updateSpHud(st) {
 
   setText("hud-road-name", sp.road_name);
   drawDmArc(st.dm_arc);
+}
+
+function updateStandstillTimer(st) {
+  const wrap = document.getElementById("hud-standstill");
+  const timerEl = document.getElementById("hud-standstill-timer");
+  if (!wrap || !timerEl) return;
+
+  const enabled = st.standstill_timer_enabled && st.standstill;
+  if (!enabled) {
+    wrap.hidden = true;
+    standstillElapsed = 0;
+    lastStandstillTs = 0;
+    return;
+  }
+
+  const now = performance.now();
+  if (lastStandstillTs > 0) {
+    standstillElapsed += (now - lastStandstillTs) / 1000;
+  }
+  lastStandstillTs = now;
+
+  const minute = Math.floor(standstillElapsed / 60);
+  const second = Math.floor(standstillElapsed - minute * 60);
+  timerEl.textContent = `${minute}:${String(second).padStart(2, "0")}`;
+  wrap.hidden = false;
 }
 
 function setText(id, text) {

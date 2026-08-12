@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from openpilot.common.params import Params, UnknownKeyName
@@ -107,6 +108,8 @@ def panel_values(panel_id: str) -> dict[str, Any]:
       values[key] = _serialize_value(p.get(key))
 
   for w in panel.get("widgets", []):
+    if os.getenv("LITE") is not None and w.get("param") == "RecordAudio":
+      continue
     for dep_key in ("visible_if", "advanced_if"):
       dep = w.get(dep_key)
       if isinstance(dep, dict) and dep.get("param"):

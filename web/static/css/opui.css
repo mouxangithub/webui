@@ -706,6 +706,26 @@ body {
   height: 100%;
 }
 
+.opui-row--warn {
+  margin: 16px 24px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: rgba(255, 175, 3, 0.15);
+  color: #ffaf03;
+  font-size: 30px;
+}
+
+.opui-release-notes {
+  margin: 8px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 24px;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow: auto;
+}
+
 .opui-hud-sla {
   position: absolute;
   left: 290px;
@@ -722,6 +742,37 @@ body {
   font-weight: 700;
   color: #000;
   background: #fff;
+}
+.opui-hud-sla--assist {
+  box-shadow: 0 0 0 8px #3ddc84;
+}
+
+.opui-hud-standstill {
+  position: absolute;
+  right: 12%;
+  top: 42%;
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.75);
+  border: 8px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;
+}
+.opui-hud-standstill-label {
+  font-size: 56px;
+  font-weight: 700;
+  color: #ffaf03;
+  margin-bottom: 12px;
+}
+.opui-hud-standstill-timer {
+  font-size: 88px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
 .opui-hud-road {

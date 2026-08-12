@@ -178,8 +178,13 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "controls": {"lat_active": True, "long_active": s["engaged"]},
     "personality": "standard",
     "personality_index": 1,
+    "has_longitudinal_control": True,
+    "alpha_longitudinal_available": False,
+    "standstill": s.get("standstill", False),
+    "standstill_timer_enabled": s.get("standstill_timer_enabled", False),
     "sp_hud": {
       "speed_limit": s.get("speed_limit"),
+      "speed_limit_assist": s.get("speed_limit_assist", ""),
       "road_name": s.get("road_name", ""),
       "blindspot_left": s.get("blindspot_left", False),
       "blindspot_right": s.get("blindspot_right", False),

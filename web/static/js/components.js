@@ -2,9 +2,29 @@
  * sunnypilot BIG UI widget kit — dialogs + list rows matching raylib interactions.
  */
 
-import { apiPut } from "./api.js";
+import { tr } from "./i18n.js";
 
 const stack = [];
+
+function experimentalE2eHtml() {
+  return (
+    `<h1>${tr("Experimental Mode")}</h1><br>`
+    + `<p>${tr(
+      "sunnypilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode. "
+      + "Experimental features are listed below:",
+    )}</p>`
+    + `<h4>${tr("End-to-End Longitudinal Control")}</h4><br>`
+    + `<p>${tr(
+      "Let the driving model control the gas and brakes. sunnypilot will drive as it thinks a human would, including stopping for red lights and stop signs. "
+      + "Since the driving model decides the speed to drive, the set speed will only act as an upper bound. This is an alpha quality feature; mistakes should be expected.",
+    )}</p>`
+    + `<h4>${tr("New Driving Visualization")}</h4><br>`
+    + `<p>${tr(
+      "The driving visualization will transition to the road-facing wide-angle camera at low speeds to better show some turns. "
+      + "The Experimental mode logo will also be shown in the top right corner.",
+    )}</p>`
+  );
+}
 
 function pushModal(el) {
   if (!el) return;
@@ -276,7 +296,7 @@ export function createSpToggle(w, panelData, globalState, handlers) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>
       ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(w.desc)}</div>` : ""}
-      ${w.needs_cycle ? `<div class="opui-sp-row-desc">Requires reboot</div>` : ""}
+      ${w.needs_cycle ? `<div class="opui-sp-row-desc">${tr("Requires reboot")}</div>` : ""}
     </div>`;
   const input = row.querySelector("input");
   const label = row.querySelector(".opui-sp-toggle");
@@ -284,15 +304,16 @@ export function createSpToggle(w, panelData, globalState, handlers) {
     if (w.confirm_experimental && input.checked) {
       const ok = await showConfirm({
         rich: true,
-        message: "<h3>Experimental Mode</h3><p>Experimental mode is alpha quality. Enable?</p>",
-        confirmText: "Enable",
+        message: experimentalE2eHtml(),
+        confirmText: tr("Enable"),
+        cancelText: tr("Cancel"),
       });
       if (!ok) {
         input.checked = false;
         label?.classList.remove("on");
         return;
       }
-      await apiPut("/api/opui/params/ExperimentalModeConfirmed", { value: "1" });
+      await handlers.putParam("ExperimentalModeConfirmed", "1");
     }
     label?.classList.toggle("on", input.checked);
     const res = await handlers.putParam(w.param, input.checked ? "1" : "0", !!w.needs_cycle);

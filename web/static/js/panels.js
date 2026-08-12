@@ -114,14 +114,37 @@ function updateToggleCapabilities(st) {
   const hasLong = st.has_longitudinal_control !== false;
   const expRow = document.querySelector('[data-param="ExperimentalMode"]');
   const expInput = expRow?.querySelector("input[type=checkbox]");
+  const expDesc = expRow?.querySelector(".opui-sp-row-desc");
   const longRow = document.querySelector('[data-param="LongitudinalPersonality"]');
   const accelEn = document.querySelector('[data-param="AccelPersonalityEnabled"]');
   const accelProf = document.querySelector('[data-param="AccelPersonality"]');
 
   if (expInput) {
     const disable = !hasLong;
-    expInput.disabled = disable || expInput.disabled;
+    expInput.disabled = disable || (globalState.engaged && expRow?.dataset.needsCycle === "1");
     expRow?.querySelector(".opui-sp-toggle")?.classList.toggle("disabled", disable);
+    if (disable && expInput.checked) {
+      expInput.checked = false;
+      expRow?.querySelector(".opui-sp-toggle")?.classList.remove("on");
+    }
+    if (expDesc) {
+      const e2e = t(
+        "sunnypilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode.",
+      );
+      if (!hasLong) {
+        let unavailable = t(
+          "Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control.",
+        );
+        if (st.alpha_longitudinal_available) {
+          unavailable += ` ${t("Enable the sunnypilot longitudinal control (alpha) toggle to allow Experimental mode.")}`;
+        } else {
+          unavailable += ` ${t("sunnypilot longitudinal control may come in a future update.")}`;
+        }
+        expDesc.innerHTML = `<b>${escapeHtml(unavailable)}</b><br><br>${escapeHtml(e2e)}`;
+      } else {
+        expDesc.textContent = e2e;
+      }
+    }
   }
   longRow?.querySelectorAll("button").forEach((b) => { b.disabled = !hasLong; });
   accelEn?.querySelector("input")?.toggleAttribute("disabled", !hasLong);
@@ -132,13 +155,41 @@ function updateToggleCapabilities(st) {
   });
 }
 
+function applySoftwareCustom(sw) {
+  if (!sw?.ok) return;
+  const warn = document.getElementById("software-onroad-warn");
+  if (warn) warn.hidden = !sw.is_onroad;
+
+  const dlVal = document.getElementById("software-download-value");
+  const dlBtn = document.getElementById("software-download-btn");
+  if (dlVal) dlVal.textContent = t(sw.download_value || sw.updater_state || "--");
+  if (dlBtn) {
+    dlBtn.textContent = t(sw.download_label || "CHECK");
+    dlBtn.disabled = sw.download_enabled === false;
+    dlBtn.hidden = !sw.is_offroad;
+  }
+
+  const installRow = document.getElementById("software-install-row");
+  const installVal = document.getElementById("software-install-value");
+  const installNotes = document.getElementById("software-install-notes");
+  if (installRow) installRow.hidden = !sw.install_visible;
+  if (installVal) installVal.textContent = sw.new_description || "";
+  if (installNotes) {
+    installNotes.textContent = sw.new_release_notes || "";
+    installNotes.hidden = !sw.new_release_notes;
+  }
+
+  const curNotes = document.getElementById("software-current-notes");
+  if (curNotes) {
+    curNotes.textContent = sw.current_release_notes || "";
+    curNotes.hidden = !sw.current_release_notes;
+  }
+}
+
 export function applyPanelCustom(panelId, data) {
   if (!data?.ok) return;
   if (panelId === "software") {
-    const el = document.getElementById("software-updater-status");
-    if (el) {
-      el.textContent = `${data.updater_state || "--"} · ${data.update_available ? "有更新" : "无更新"}`;
-    }
+    applySoftwareCustom(data);
   }
   if (panelId === "firehose") {
     const el = document.getElementById("firehose-status-text");
@@ -157,6 +208,11 @@ function updateEngagedWidgets() {
     const disabled = globalState.engaged;
     if (input) input.disabled = disabled;
     label?.classList.toggle("disabled", disabled);
+  });
+  root.querySelectorAll("[data-offroad-only='1']").forEach((row) => {
+    const input = row.querySelector("input[type=checkbox], button");
+    const disabled = !globalState.is_offroad;
+    if (input) input.disabled = disabled;
   });
 }
 
@@ -182,6 +238,8 @@ export function applyPanelSync(data) {
     if (!w.param || !widgetVisible(w, data)) continue;
     updateWidgetValue(root, w);
   }
+  updateEngagedWidgets();
+  updateToggleCapabilities(globalState);
 }
 
 function updateWidgetValue(root, w) {
@@ -437,6 +495,7 @@ function renderBoolRow(w) {
   row.dataset.param = w.param;
   row.dataset.widget = "bool";
   if (w.needs_cycle) row.dataset.needsCycle = "1";
+  if (w.offroad_only) row.dataset.offroadOnly = "1";
   return row;
 }
 
@@ -789,6 +848,7 @@ function renderSshKeysBlock() {
 function renderActionRow(w) {
   const row = document.createElement("div");
   row.className = "opui-sp-row";
+  if (w.action) row.dataset.action = w.action;
   const disabled = (w.offroad_only && !globalState.is_offroad) || (globalState.engaged && w.action === "reset_calibration");
   let desc = w.desc ? t(w.desc) : "";
   if (w.dynamic_desc === "calibration" && deviceExtrasCache?.calibration?.desc_html) {
@@ -1276,40 +1336,97 @@ async function renderFirehosePanel(container) {
 }
 
 async function renderSoftwarePanel(container, data) {
-  renderGenericPanel(container, data);
   const sw = await apiGet("/api/opui/software");
-  if (!sw.ok) return;
-
-  const extra = document.createElement("div");
-  extra.className = "opui-row";
-  extra.id = "software-updater-row";
-  extra.innerHTML = `
-    <div class="opui-row-label">Updater 状态</div>
-    <div class="opui-row-value" id="software-updater-status">${escapeHtml(sw.updater_state)} · ${sw.update_available ? "有更新" : "无更新"}</div>`;
-  container.appendChild(extra);
-
-  if (sw.new_description) {
-    const notes = document.createElement("div");
-    notes.className = "opui-html-block";
-    notes.innerHTML = `<h3>Release Notes</h3><pre>${escapeHtml(sw.new_description)}</pre>`;
-    container.appendChild(notes);
+  container.innerHTML = "";
+  if (!sw.ok) {
+    container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(sw.error || t("Failed"))}</p>`;
+    return;
   }
+
+  if (sw.is_onroad) {
+    const warn = document.createElement("div");
+    warn.id = "software-onroad-warn";
+    warn.className = "opui-row opui-row--warn";
+    warn.textContent = t("Updates are only downloaded while the car is off.");
+    container.appendChild(warn);
+  }
+
+  const version = document.createElement("div");
+  version.className = "opui-sp-row opui-sp-row--stacked";
+  version.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Current Version"))}</div>
+      <div class="opui-sp-row-desc" id="software-current-desc">${escapeHtml(sw.current || t("N/A"))}</div>
+      <pre class="opui-release-notes" id="software-current-notes" hidden></pre>
+    </div>`;
+  container.appendChild(version);
+
+  const download = document.createElement("div");
+  download.className = "opui-sp-row";
+  download.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Download"))}</div>
+      <div class="opui-sp-row-desc" id="software-download-value"></div>
+    </div>
+    <button type="button" class="opui-btn" id="software-download-btn">${escapeHtml(t("CHECK"))}</button>`;
+  download.querySelector("#software-download-btn")?.addEventListener("click", async () => {
+    const btn = download.querySelector("#software-download-btn");
+    const label = btn?.textContent?.trim().toUpperCase();
+    const action = label === "DOWNLOAD" ? "updater_download" : "updater_check";
+    if (btn) btn.disabled = true;
+    const res = await apiPost(`/api/opui/action/${action}`);
+    if (!res.ok) toast(res.error || t("Failed"));
+  });
+  container.appendChild(download);
+
+  const install = document.createElement("div");
+  install.id = "software-install-row";
+  install.className = "opui-sp-row opui-sp-row--stacked";
+  install.hidden = true;
+  install.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Install Update"))}</div>
+      <div class="opui-sp-row-desc" id="software-install-value"></div>
+      <pre class="opui-release-notes" id="software-install-notes" hidden></pre>
+    </div>
+    <button type="button" class="opui-btn" id="software-install-btn">${escapeHtml(t("INSTALL"))}</button>`;
+  install.querySelector("#software-install-btn")?.addEventListener("click", async () => {
+    const res = await apiPost("/api/opui/action/updater_install");
+    if (res.ok) toast(t("Install Update"));
+    else toast(res.error || t("Failed"));
+  });
+  container.appendChild(install);
+
+  const filtered = {
+    ...data,
+    widgets: (data.widgets || []).filter((w) => !["updater_check", "updater_download", "updater_install"].includes(w.action)
+      && w.param !== "UpdaterCurrentDescription"),
+  };
+  const genericHost = document.createElement("div");
+  container.appendChild(genericHost);
+  renderGenericPanel(genericHost, filtered);
 
   if (sw.branches?.length) {
     const branchRow = document.createElement("div");
     branchRow.className = "opui-sp-row";
-    branchRow.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">Target Branch</div></div>
-      <button type="button" class="opui-btn">SELECT</button>`;
+    branchRow.innerHTML = `
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(t("Target Branch"))}</div>
+        <div class="opui-sp-row-desc">${escapeHtml(sw.target_branch || t("N/A"))}</div>
+      </div>
+      <button type="button" class="opui-btn">${escapeHtml(t("SELECT"))}</button>`;
     branchRow.querySelector("button")?.addEventListener("click", async () => {
       const idx = Math.max(0, sw.branches.indexOf(sw.target_branch));
-      const pick = await showMultiOption({ title: "Branch", options: sw.branches, selected: idx });
+      const pick = await showMultiOption({ title: t("Target Branch"), options: sw.branches, selected: idx });
       if (pick == null) return;
       const b = sw.branches[pick];
       const res = await apiPost("/api/opui/action/set_branch", { branch: b });
-      if (res.ok) toast(`Branch: ${b}`);
+      if (res.ok) toast(`${t("Target Branch")}: ${b}`);
     });
     container.appendChild(branchRow);
   }
+
+  applySoftwareCustom(sw);
 }
 
 function formatValue(v) {

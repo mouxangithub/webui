@@ -8,7 +8,7 @@ import { updateHomeScreen } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode } from "./sidebar.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
-import { loadI18n, translatePanelTitle, applyI18nPayload } from "./i18n.js";
+import { loadI18n, translatePanelTitle } from "./i18n.js";
 import { opuiWs } from "./ws.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -261,8 +261,11 @@ function setupWebSocket() {
   opuiWs.on("model_overlay", (msg) => {
     if (app.dataset.screen === "onroad" && msg?.data) drawModelOverlay(msg.data);
   });
-  opuiWs.on("i18n", (msg) => {
-    if (msg?.data?.ok) applyI18nPayload(msg.data);
+  opuiWs.on("i18n", async (msg) => {
+    if (msg?.data?.ok) {
+      const { applyI18nPayload } = await import("./i18n.js");
+      if (applyI18nPayload(msg.data, true)) renderNav();
+    }
   });
   opuiWs.on("open", () => {
     if (app.dataset.screen === "settings") notifyPanelWatch(currentPanel);

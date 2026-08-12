@@ -17,6 +17,15 @@ def create_app() -> web.Application:
   register_dev_routes(app)
   start_ws_broadcast(app)
 
+  @web.middleware
+  async def no_cache_js(request, handler):
+    resp = await handler(request)
+    if request.path.startswith("/static/js/") or request.path.startswith("/static/css/"):
+      resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return resp
+
+  app.middlewares.insert(0, no_cache_js)
+
   import os
   if os.environ.get("WEBUI_DEV_PC") == "1":
     @web.middleware

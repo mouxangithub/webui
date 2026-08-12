@@ -119,6 +119,13 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   has_longitudinal = False
   alpha_long_available = False
+  standstill = bool(getattr(cs, "standstill", False))
+  standstill_timer_enabled = False
+  try:
+    from openpilot.common.params import Params
+    standstill_timer_enabled = Params().get_bool("StandstillTimer")
+  except Exception:
+    pass
   try:
     from openpilot.selfdrive.ui.ui_state import ui_state
     has_longitudinal = bool(ui_state.has_longitudinal_control)
@@ -184,6 +191,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "personality_index": _personality_index(personality),
     "has_longitudinal_control": has_longitudinal,
     "alpha_longitudinal_available": alpha_long_available,
+    "standstill": standstill,
+    "standstill_timer_enabled": standstill_timer_enabled,
     "alert": {
       "text1": ss.alertText1 or "",
       "text2": ss.alertText2 or "",
