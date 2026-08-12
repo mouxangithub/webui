@@ -165,8 +165,14 @@ def software_status() -> dict[str, Any]:
       download_label = "DOWNLOAD"
     else:
       last_update = p.get("LastUpdateTime")
+      if last_update is not None and hasattr(last_update, "isoformat"):
+        last_update = last_update.isoformat()
       download_value = "up to date, last checked never" if not last_update else f"up to date, last checked {last_update}"
       download_label = "CHECK"
+
+    last_update_raw = p.get("LastUpdateTime")
+    if last_update_raw is not None and hasattr(last_update_raw, "isoformat"):
+      last_update_raw = last_update_raw.isoformat()
 
     return {
       "ok": True,
@@ -181,7 +187,7 @@ def software_status() -> dict[str, Any]:
       "git_branch": p.get("GitBranch") or "",
       "branches": [b for b in (p.get("UpdaterAvailableBranches") or "").split(",") if b],
       "failed_count": failed_count,
-      "last_update_time": p.get("LastUpdateTime") or "",
+      "last_update_time": last_update_raw or "",
       "disable_updates": p.get_bool("DisableUpdates"),
       "is_onroad": is_onroad,
       "is_offroad": is_offroad,
