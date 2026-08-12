@@ -2039,6 +2039,36 @@ async function renderSunnylinkPanel(container, data) {
     if (el) container.appendChild(el);
   }
 
+  const sponsorRow = document.createElement("div");
+  sponsorRow.className = "opui-sp-row";
+  sponsorRow.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-label">${escapeHtml(t("Sponsor Status"))}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(t("Become a sponsor of sunnypilot to get early access to sunnylink features when they become available."))}</div>
+    </div>
+    <button type="button" class="opui-btn">${escapeHtml(sl.is_sponsor ? (sl.tier || t("SPONSOR")) : t("SPONSOR"))}</button>`;
+  sponsorRow.querySelector("button")?.addEventListener("click", async () => {
+    const res = await apiGet("/api/opui/sunnylink/pair?mode=sponsor");
+    if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
+    else toast(res.error || t("Failed"));
+  });
+  container.appendChild(sponsorRow);
+
+  const pairRow = document.createElement("div");
+  pairRow.className = "opui-sp-row";
+  pairRow.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-label">${escapeHtml(t("Pair GitHub Account"))}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(t("Pair your GitHub account to grant your device sponsor benefits, including API access on sunnylink."))}</div>
+    </div>
+    <button type="button" class="opui-btn">${escapeHtml(sl.is_paired ? t("Paired") : t("Not Paired"))}</button>`;
+  pairRow.querySelector("button")?.addEventListener("click", async () => {
+    const res = await apiGet("/api/opui/sunnylink/pair?mode=pair");
+    if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
+    else toast(res.error || t("Failed"));
+  });
+  container.appendChild(pairRow);
+
   if (!sl.ok) return;
 
   if (sl.backup?.status && sl.backup.status !== "idle") {

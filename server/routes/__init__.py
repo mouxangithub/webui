@@ -294,8 +294,9 @@ async def api_sunnylink_status(_request: web.Request) -> web.Response:
   return json_response(sunnylink_status())
 
 
-async def api_sunnylink_pair(_request: web.Request) -> web.Response:
-  return json_response(sunnylink_pair_url())
+async def api_sunnylink_pair(request: web.Request) -> web.Response:
+  mode = request.rel_url.query.get("mode", "pair")
+  return json_response(sunnylink_pair_url(mode))
 
 
 async def api_firehose(_request: web.Request) -> web.Response:

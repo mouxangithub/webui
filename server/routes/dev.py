@@ -99,6 +99,20 @@ async def api_dev_presets(request: web.Request) -> web.Response:
       "standstill": True, "standstill_timer_enabled": True, "standstill_timer": 125,
       "alert_size": "none",
     },
+    "home_update": {
+      "started": False, "engaged": False, "ui_status": "disengaged",
+      "update_available": True, "fetch_available": False,
+      "new_description": "sunnypilot 2026.08.12-dev",
+      "new_release_notes": "<h2>WebUI P2</h2><p>Home UPDATE pill + overlay.</p>",
+      "offroad_alerts": [],
+    },
+    "home_alerts": {
+      "started": False, "engaged": False, "ui_status": "disengaged",
+      "update_available": False,
+      "offroad_alerts": [
+        {"key": "Offroad_ConnectivityNeeded", "text": "Connect to internet to check for updates.", "severity": 1},
+      ],
+    },
   }
   if preset not in presets:
     return json_response({"ok": False, "error": f"unknown preset: {preset}"}, status=400)

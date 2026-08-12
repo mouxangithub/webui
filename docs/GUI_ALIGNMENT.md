@@ -111,8 +111,8 @@
 | Prime 卡 | 左列满高 + 勾选纹理 | flex 卡 | 🟡 |
 | Setup 卡 | 右列 | 有 | ✅ |
 | Experimental/Chill 横幅 | 描边 + 分隔线 | 简化样式 | 🟡 |
-| UPDATE 药丸 | 可点 → 更新页 | API 有，UI 无 | ❌ |
-| ALERTS 药丸 | offroad alerts 全屏 | 无 | ❌ |
+| UPDATE 药丸 | 可点 → 更新页 | overlay + CHECK/Reboot | ✅ |
+| ALERTS 药丸 | offroad alerts 全屏 | overlay + dismiss/snooze | ✅ |
 | 品牌 sunnypilot | Audiowide 48px | 仅 version 文本 | ❌ |
 
 ---
@@ -126,7 +126,7 @@
 | **Visuals** | 长描述/HTML；Chevron 门控文案 |
 | **Software** | Disable Updates 重启确认 |
 | **Developer** | Quickboot 分支可见性 |
-| **Sunnylink** | Sponsor / Pair GitHub / 配对对话框 |
+| **Sunnylink** | ✅ Sponsor + Pair 按钮（配对对话框仍简化） |
 | **Steering→Torque** | 版本树应用 JSON 非硬编码 v1-v3 |
 | **Trips** | 统计图标 |
 | **Display** | 部分 desc 缺失 |
@@ -160,8 +160,8 @@
 8. ✅ DM 弧点击 → driver cam
 
 ### P2 — 离路/设置
-9. Home UPDATE/ALERTS 流
-10. Sunnylink Sponsor/Pair
+9. ✅ Home UPDATE/ALERTS 流
+10. ✅ Sunnylink Sponsor/Pair
 11. Cruise/Visuals 文案与 value_map
 12. Toggle 图标、Trips 图标、字体
 

@@ -354,7 +354,112 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 24px;
   margin-bottom: 25px;
+}
+
+.opui-home-pills {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.opui-home-pill {
+  height: 60px;
+  min-width: 200px;
+  padding: 0 28px;
+  border: none;
+  border-radius: 18px;
+  font-size: 40px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+
+.opui-home-pill--update {
+  background: #3649ef;
+}
+.opui-home-pill--update.is-active {
+  background: #4b5fff;
+}
+
+.opui-home-pill--alerts {
+  background: #e22c2c;
+  margin-left: 20px;
+}
+.opui-home-pill--alerts.is-active {
+  background: #ff4646;
+}
+
+.opui-home-overlay {
+  position: absolute;
+  left: 40px;
+  right: 40px;
+  top: 105px;
+  bottom: 40px;
+  z-index: 12;
+}
+
+.opui-home-overlay-card {
+  height: 100%;
+  background: #393939;
+  border-radius: 60px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.opui-home-overlay-body {
+  flex: 1;
+  overflow: auto;
+  padding: 40px 48px;
+}
+
+.opui-home-overlay-title {
+  font-size: 48px;
+  margin: 0 0 24px;
+  color: #fff;
+}
+
+.opui-home-overlay-html {
+  font-size: 36px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.opui-home-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  padding: 24px 40px 40px;
+}
+
+.opui-home-overlay-btn {
+  min-width: 280px;
+  height: 125px;
+  font-size: 48px;
+  border-radius: 60px;
+}
+
+.opui-btn--dark {
+  background: #4f4f4f;
+  color: #fff;
+}
+
+.opui-offroad-alert {
+  background: #292929;
+  border-radius: 60px;
+  padding: 36px 48px;
+  margin-bottom: 12px;
+  font-size: 48px;
+  line-height: 1.3;
+  color: #fff;
+}
+
+.opui-offroad-alert--high {
+  background: #e22c2c;
 }
 
 .opui-home-version {

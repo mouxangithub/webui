@@ -4,7 +4,7 @@ import {
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
 import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton } from "./onroad.js";
-import { updateHomeScreen, showHomeLoading, refreshHomeScreen } from "./home.js";
+import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
@@ -440,6 +440,7 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 bindStreamButton();
 bindExperimentalButton();
 bindDmArcClick();
+bindHomeHeader();
 initModelCanvas();
 applySidebarAssets();
 setupWebSocket();

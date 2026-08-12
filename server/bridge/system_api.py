@@ -123,6 +123,16 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
           return {"ok": True, "action": action, "dev_pc": True}
         return {"ok": False, "error": str(exc)}
 
+    if action == "dismiss_offroad_alert":
+      key = str(payload.get("key", "")).strip()
+      if not key:
+        return {"ok": False, "error": "key required"}
+      try:
+        p.remove(key)
+      except Exception:
+        pass
+      return {"ok": True, "action": action, "key": key}
+
     if action == "set_branch":
       branch = str(payload.get("branch", "")).strip()
       if not branch:

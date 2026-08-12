@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=35" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=36" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -32,8 +32,18 @@
       <!-- HOME (offroad) -->
       <section id="screen-home" class="opui-screen opui-screen--home">
         <header class="opui-home-header">
+          <div class="opui-home-pills" id="home-pills" hidden>
+            <button type="button" id="home-pill-update" class="opui-home-pill opui-home-pill--update" hidden>UPDATE</button>
+            <button type="button" id="home-pill-alerts" class="opui-home-pill opui-home-pill--alerts" hidden></button>
+          </div>
           <div id="home-version" class="opui-home-version"></div>
         </header>
+        <div id="home-overlay" class="opui-home-overlay" hidden>
+          <div class="opui-home-overlay-card">
+            <div id="home-overlay-body" class="opui-home-overlay-body"></div>
+            <div id="home-overlay-actions" class="opui-home-overlay-actions"></div>
+          </div>
+        </div>
         <div class="opui-home-content">
           <div class="opui-home-col opui-home-col--left">
             <div id="home-prime" class="opui-home-prime-wrap"></div>
@@ -211,6 +221,8 @@
       <button type="button" data-preset="alert_critical">严重告警</button>
       <button type="button" data-preset="e2e_green">E2E 绿灯</button>
       <button type="button" data-preset="standstill_timer">静止计时</button>
+      <button type="button" data-preset="home_update">Home·更新</button>
+      <button type="button" data-preset="home_alerts">Home·告警</button>
     </div>
     <label class="opui-dev-row"><input type="checkbox" id="dev-started" /> 已上路 (started)</label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-engaged" /> 已激活 (engaged)</label>
@@ -218,6 +230,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> 录音麦克风</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=35"></script>
+  <script type="module" src="/static/js/app.js?v=36"></script>
 </body>
 </html>
