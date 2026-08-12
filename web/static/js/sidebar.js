@@ -17,6 +17,8 @@ const VALUE_ZH = {
   DISABLED: "已关闭",
   "REGIST...": "注册中…",
   FAULT: "故障",
+  NO: "否",
+  PANDA: "PANDA",
 };
 
 const METRIC_KEYS = ["temp", "vehicle", "connect", "sunnylink"];
@@ -25,6 +27,15 @@ function zhValue(raw) {
   if (!raw) return "--";
   const key = String(raw).toUpperCase().replace(/\s+/g, "");
   return VALUE_ZH[key] || raw;
+}
+
+function toneFlags(tone) {
+  return {
+    warn: tone === "warn",
+    danger: tone === "danger",
+    disabled: tone === "disabled",
+    progress: tone === "progress",
+  };
 }
 
 function ensureMetricsDom() {
@@ -43,14 +54,16 @@ function ensureMetricsDom() {
   return metrics;
 }
 
-function setMetric(key, { label, value, warn, danger, visible }) {
+function setMetric(key, { label, value, warn, danger, disabled, progress, visible }) {
   const metrics = ensureMetricsDom();
   if (!metrics) return;
   const row = metrics.querySelector(`[data-metric="${key}"]`);
   if (!row) return;
   row.hidden = visible === false;
   row.classList.toggle("opui-metric--danger", !!danger);
-  row.classList.toggle("opui-metric--warn", !!warn && !danger);
+  row.classList.toggle("opui-metric--warn", !!warn && !danger && !disabled && !progress);
+  row.classList.toggle("opui-metric--disabled", !!disabled);
+  row.classList.toggle("opui-metric--progress", !!progress);
   const labelEl = row.querySelector(".opui-metric-label");
   const valueEl = row.querySelector(".opui-metric-value");
   if (labelEl) labelEl.textContent = label;
@@ -64,45 +77,49 @@ export function updateSidebarMetrics(st) {
   if (!st?.ok) return;
 
   const d = st.device || {};
-  const thermal = d.thermal === "green" || d.thermal === "ok";
-  const tempVal = thermal ? "良好" : d.cpu_temp != null ? `${d.cpu_temp}°C` : "偏高";
+  const thermalOk = d.thermal === "ok";
 
   setMetric("temp", {
     label: METRIC_LABELS.TEMP,
-    value: tempVal,
-    warn: d.thermal === "yellow",
-    danger: d.thermal === "red",
-    visible: true,
-  });
-  setMetric("vehicle", {
-    label: METRIC_LABELS.VEHICLE,
-    value: d.panda_online ? "在线" : "离线",
-    danger: !d.panda_online,
-    visible: true,
-  });
-  const athena = String(d.athena_status || "").toUpperCase();
-  const isOnline = athena === "ONLINE";
-  setMetric("connect", {
-    label: METRIC_LABELS.CONNECT,
-    value: zhValue(d.athena_status) || (isOnline ? "在线" : "离线"),
-    warn: athena === "OFFLINE",
-    danger: athena === "ERROR",
+    value: thermalOk ? zhValue("GOOD") : zhValue("HIGH"),
+    danger: !thermalOk,
     visible: true,
   });
 
-  const showSl = !!(d.sunnylink_status || d.sunnylink_ping);
-  if (showSl) {
-    const sl = d.sunnylink_status || (d.sunnylink_ping ? "ONLINE" : "OFFLINE");
-    setMetric("sunnylink", {
-      label: METRIC_LABELS.SUNNYLINK,
-      value: zhValue(sl),
-      warn: sl === "OFFLINE" || sl === "FAULT",
-      danger: sl === "ERROR",
+  if (d.panda_unknown) {
+    setMetric("vehicle", {
+      label: zhValue("NO"),
+      value: zhValue("PANDA"),
+      danger: true,
       visible: true,
     });
   } else {
-    setMetric("sunnylink", { visible: false });
+    setMetric("vehicle", {
+      label: METRIC_LABELS.VEHICLE,
+      value: zhValue("ONLINE"),
+      visible: true,
+    });
   }
+
+  const athena = String(d.athena_status || "").toUpperCase();
+  setMetric("connect", {
+    label: METRIC_LABELS.CONNECT,
+    value: zhValue(d.athena_status) || (athena === "ONLINE" ? "在线" : "离线"),
+    ...toneFlags(
+      athena === "ONLINE" ? "good"
+        : athena === "ERROR" ? "danger"
+          : "warn",
+    ),
+    visible: true,
+  });
+
+  const sl = d.sunnylink || {};
+  setMetric("sunnylink", {
+    label: METRIC_LABELS.SUNNYLINK,
+    value: zhValue(sl.status || "OFFLINE"),
+    ...toneFlags(sl.tone || "warn"),
+    visible: true,
+  });
 
   updateNetworkIndicator(d);
 }

@@ -298,6 +298,8 @@ body {
 
 .opui-metric--warn .opui-metric-bar { background: #daca25; }
 .opui-metric--danger .opui-metric-bar { background: #c92231; }
+.opui-metric--disabled .opui-metric-bar { background: #808080; }
+.opui-metric--progress .opui-metric-bar { background: #0086e9; }
 
 .opui-metric-text {
   position: absolute;
@@ -319,8 +321,7 @@ body {
   text-overflow: ellipsis;
 }
 
-.opui-metric--warn .opui-metric-line:last-child { color: #daca25; }
-.opui-metric--danger .opui-metric-line:last-child { color: #c92231; }
+/* Native sidebar keeps metric text white; only the left bar changes color. */
 
 /* Screens */
 .opui-screen {

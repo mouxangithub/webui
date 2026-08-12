@@ -35,6 +35,49 @@ def _cpu_temp_c(ds) -> int | None:
     return None
 
 
+PING_TIMEOUT_NS = 80_000_000_000
+
+
+def _sunnylink_metric() -> dict[str, str]:
+  try:
+    from openpilot.common.params import Params
+    from openpilot.sunnypilot.sunnylink.api import UNREGISTERED_SUNNYLINK_DONGLE_ID
+    p = Params()
+  except Exception:
+    return {"status": "DISABLED", "tone": "disabled"}
+
+  if not p.get_bool("SunnylinkEnabled"):
+    return {"status": "DISABLED", "tone": "disabled"}
+
+  last_ping = int(p.get("LastSunnylinkPingTime") or 0)
+  dongle_id = p.get("SunnylinkDongleId")
+  is_temp_fault = p.get_bool("SunnylinkTempFault")
+  is_registering = not is_temp_fault and dongle_id in (None, "", UNREGISTERED_SUNNYLINK_DONGLE_ID)
+
+  if last_ping:
+    if time.monotonic_ns() - last_ping < PING_TIMEOUT_NS:
+      return {"status": "ONLINE", "tone": "good"}
+    return {"status": "ERROR", "tone": "danger"}
+  if is_temp_fault:
+    return {"status": "FAULT", "tone": "warn"}
+  if is_registering:
+    return {"status": "REGIST...", "tone": "progress"}
+  return {"status": "OFFLINE", "tone": "danger"}
+
+
+def _panda_state(sm) -> tuple[bool, bool]:
+  """Return (panda_unknown, panda_online) matching native sidebar."""
+  if not sm.valid["pandaStates"] or not sm["pandaStates"]:
+    return True, False
+  try:
+    from openpilot.cereal import log
+    panda_type = sm["pandaStates"][0].pandaType
+    unknown = panda_type == log.PandaState.PandaType.unknown
+    return unknown, not unknown
+  except Exception:
+    return True, False
+
+
 def _athena_connection_status(ds) -> str:
   if not hasattr(ds, "lastAthenaPingTime"):
     return "OFFLINE"
@@ -107,24 +150,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   ui_status = _derive_ui_status(ss, cs, mads)
 
-  panda_online = True
-  if sm.valid["pandaStates"] and sm["pandaStates"]:
-    panda_online = any(getattr(p, "pandaType", 0) != 0 for p in sm["pandaStates"])
+  panda_unknown, panda_online = _panda_state(sm)
 
   net_raw = ds.networkType.raw if hasattr(ds, "networkType") else 0
   net_type = NETWORK_TYPES.get(int(net_raw), "--")
-  thermal = str(ds.thermalStatus).split(".")[-1].lower() if hasattr(ds, "thermalStatus") else "green"
-
-  sunnylink_ping = ""
-  sunnylink_status = ""
-  try:
-    from openpilot.common.params import Params
-    p = Params()
-    sunnylink_ping = p.get("LastSunnylinkPingTime") or ""
-    if p.get_bool("SunnylinkEnabled"):
-      sunnylink_status = "ONLINE" if sunnylink_ping else "OFFLINE"
-  except Exception:
-    pass
+  thermal = str(ds.thermalStatus).split(".")[-1].lower() if hasattr(ds, "thermalStatus") else "ok"
+  sunnylink = _sunnylink_metric()
 
   experimental = bool(ss.experimentalMode) if hasattr(ss, "experimentalMode") else False
   personality = str(ss.personality).split(".")[-1].lower() if hasattr(ss, "personality") else ""
@@ -234,9 +265,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       "memory_usage_percent": int(ds.memoryUsagePercent) if hasattr(ds, "memoryUsagePercent") else None,
       "free_space_percent": int(ds.freeSpacePercent) if hasattr(ds, "freeSpacePercent") else None,
       "athena_status": _athena_connection_status(ds),
+      "panda_unknown": panda_unknown,
       "panda_online": panda_online,
-      "sunnylink_ping": sunnylink_ping,
-      "sunnylink_status": sunnylink_status,
+      "sunnylink": sunnylink,
     },
     "controls": {
       "lat_active": bool(ctrl.latActive) if hasattr(ctrl, "latActive") else None,
