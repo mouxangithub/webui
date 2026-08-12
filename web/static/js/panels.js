@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, toast } from "./api.js";
 import { tr } from "./i18n.js";
+import { opuiWs } from "./ws.js";
 import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption,
   createSpToggle, createProgressRow, createDualButton,
@@ -77,20 +78,120 @@ function formatOptionLabel(w, rawVal) {
 }
 
 let panelDataRef = null;
+let lastPanelVisibilityHash = "";
+
+const PERSONALITY_INDEX = { aggressive: 0, standard: 1, relaxed: 2 };
 
 let globalState = { started: false, engaged: false, is_offroad: true };
 let onNavigateSubpanel = null;
 let deviceExtrasCache = null;
 
+async function putParam(key, value, needsCycle = false) {
+  try {
+    if (opuiWs.connected) {
+      const res = await opuiWs.putParam(key, value, needsCycle);
+      return res || { ok: false, error: "ws failed" };
+    }
+  } catch (_) { /* fall through */ }
+  return apiPut(`/api/opui/params/${encodeURIComponent(key)}`, {
+    value, needs_cycle: !!needsCycle,
+  });
+}
+
 const paramHandlers = {
   toast,
-  putParam: (key, value, needsCycle) => apiPut(`/api/opui/params/${encodeURIComponent(key)}`, {
-    value, needs_cycle: !!needsCycle,
-  }),
+  putParam,
 };
 
 export function setGlobalState(st) {
   globalState = st || globalState;
+  updateEngagedWidgets();
+}
+
+function updateEngagedWidgets() {
+  const root = document.getElementById("panel-content");
+  if (!root) return;
+  root.querySelectorAll("[data-needs-cycle='1']").forEach((row) => {
+    const input = row.querySelector("input[type=checkbox]");
+    const label = row.querySelector(".opui-sp-toggle");
+    const disabled = globalState.engaged;
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+  });
+}
+
+function panelVisibilityHash(data) {
+  return (data.widgets || [])
+    .filter((w) => widgetVisible(w, data))
+    .map((w) => w.param || w.type || w.custom || "")
+    .join("|");
+}
+
+export function applyPanelSync(data) {
+  if (!data?.ok) return;
+  const hash = panelVisibilityHash(data);
+  if (hash !== lastPanelVisibilityHash) {
+    const container = document.getElementById("panel-content");
+    if (container) renderGenericPanel(container, data);
+    return;
+  }
+  panelDataRef = data;
+  const root = document.getElementById("panel-content");
+  if (!root) return;
+  for (const w of data.widgets || []) {
+    if (!w.param || !widgetVisible(w, data)) continue;
+    updateWidgetValue(root, w);
+  }
+}
+
+function updateWidgetValue(root, w) {
+  const el = root.querySelector(`[data-param="${CSS.escape(w.param)}"]`);
+  if (!el) return;
+  const kind = el.dataset.widget || resolveWidgetType(w);
+  if (kind === "bool") {
+    const checked = w.value === "1" || w.value === "true";
+    const input = el.querySelector("input[type=checkbox]");
+    const label = el.querySelector(".opui-sp-toggle");
+    if (input && input.checked !== checked) {
+      input.checked = checked;
+      label?.classList.toggle("on", checked);
+    }
+    return;
+  }
+  if (kind === "multiple_button" || kind === "choice") {
+    let idx = parseInt(w.value, 10);
+    if (Number.isNaN(idx)) idx = 0;
+    el.querySelectorAll(".opui-multi-btn-group button, .opui-choice-group button").forEach((btn, i) => {
+      btn.classList.toggle("selected", i === idx);
+    });
+    return;
+  }
+  if (kind === "readonly") {
+    const valEl = el.querySelector(".opui-row-value");
+    if (valEl) valEl.textContent = formatValue(w.value) || t("N/A");
+    return;
+  }
+  if (kind === "int" || kind === "option") {
+    const span = el.querySelector(".opui-int-control span, .opui-option-value");
+    if (span) span.textContent = kind === "option" ? formatOptionLabel(w, w.value) : String(w.value);
+  }
+}
+
+export function syncDrivingPersonality(personality, personalityIndex) {
+  let idx = personalityIndex;
+  if (idx == null && personality) {
+    idx = PERSONALITY_INDEX[String(personality).toLowerCase()];
+  }
+  if (idx == null) return;
+  const el = document.querySelector('[data-param="LongitudinalPersonality"]');
+  if (!el) return;
+  el.querySelectorAll(".opui-multi-btn-group button").forEach((btn, i) => {
+    btn.classList.toggle("selected", i === idx);
+  });
+}
+
+export function notifyPanelWatch(panelId) {
+  opuiWs.watchPanel(panelId || null);
 }
 
 export function setSubpanelNavigator(fn) {
@@ -107,6 +208,7 @@ export async function loadPanelList() {
 }
 
 export async function renderPanel(panelId, container, titleEl, options = {}) {
+  notifyPanelWatch(panelId);
   const data = await apiGet(`/api/opui/panels/${encodeURIComponent(panelId)}`);
   if (!data.ok) {
     container.innerHTML = `<p class="opui-muted" style="padding:48px">加载失败: ${data.error}</p>`;
@@ -161,6 +263,7 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
   }
 
   renderGenericPanel(container, data);
+  lastPanelVisibilityHash = panelVisibilityHash(data);
 }
 
 async function renderDevicePanel(container, data, titleEl, options = {}) {
@@ -192,6 +295,7 @@ function renderAlwaysOffroadRow(active) {
 
 function renderGenericPanel(container, data) {
   panelDataRef = data;
+  lastPanelVisibilityHash = panelVisibilityHash(data);
   container.innerHTML = "";
   for (const w of data.widgets || []) {
     const el = renderWidget(w, data);
@@ -277,6 +381,8 @@ function renderWidget(w, panelData) {
 function renderReadonlyRow(w) {
   const row = document.createElement("div");
   row.className = "opui-sp-row";
+  row.dataset.param = w.param;
+  row.dataset.widget = "readonly";
   const val = formatValue(w.value) || t("N/A");
   row.innerHTML = `
     <div class="opui-sp-row-text">
@@ -287,12 +393,18 @@ function renderReadonlyRow(w) {
 }
 
 function renderBoolRow(w) {
-  return createSpToggle({ ...w, label: t(w.label), desc: w.desc ? t(w.desc) : "" }, {}, globalState, paramHandlers);
+  const row = createSpToggle({ ...w, label: t(w.label), desc: w.desc ? t(w.desc) : "" }, {}, globalState, paramHandlers);
+  row.dataset.param = w.param;
+  row.dataset.widget = "bool";
+  if (w.needs_cycle) row.dataset.needsCycle = "1";
+  return row;
 }
 
 function renderMultipleButtonRow(w, panelData) {
   const row = document.createElement("div");
   row.className = "opui-sp-row opui-sp-row--stacked";
+  row.dataset.param = w.param;
+  row.dataset.widget = "multiple_button";
   const buttons = (w.buttons || []).map((b) => t(b));
   let idx = parseInt(w.value, 10);
   if (Number.isNaN(idx)) idx = 0;
@@ -314,9 +426,7 @@ function renderMultipleButtonRow(w, panelData) {
     const disabled = (w.offroad_only && !globalState.is_offroad) || w.locked;
     if (disabled) btn.disabled = true;
     btn.addEventListener("click", async () => {
-      const res = await apiPut(`/api/opui/params/${encodeURIComponent(w.param)}`, {
-        value: String(i), needs_cycle: !!w.needs_cycle,
-      });
+      const res = await putParam(w.param, String(i), !!w.needs_cycle);
       if (!res.ok) {
         toast(res.error || t("Save failed"));
         return;
@@ -324,7 +434,6 @@ function renderMultipleButtonRow(w, panelData) {
       w.value = String(i);
       if (panelData.values) panelData.values[w.param] = String(i);
       group.querySelectorAll("button").forEach((b, j) => b.classList.toggle("selected", j === i));
-      requestPanelRefresh();
     });
     group.appendChild(btn);
   });
@@ -339,6 +448,8 @@ function requestPanelRefresh() {
 function renderChoiceRow(w) {
   const row = document.createElement("div");
   row.className = "opui-sp-row opui-sp-row--stacked";
+  row.dataset.param = w.param;
+  row.dataset.widget = "choice";
   const opts = (w.options || []).map((o) => t(o));
   let idx = parseInt(w.value, 10);
   if (Number.isNaN(idx)) idx = 0;
@@ -360,7 +471,7 @@ function renderChoiceRow(w) {
     btn.addEventListener("click", async () => {
       group.querySelectorAll("button").forEach((b) => b.classList.remove("selected"));
       btn.classList.add("selected");
-      const res = await apiPut(`/api/opui/params/${encodeURIComponent(w.param)}`, { value: String(i) });
+      const res = await putParam(w.param, String(i));
       if (!res.ok) toast(res.error || t("Save failed"));
     });
     group.appendChild(btn);
@@ -396,7 +507,7 @@ function renderIntRow(w) {
   const save = async (v) => {
     v = Math.max(min, Math.min(max, v));
     span.textContent = String(v);
-    const res = await apiPut(`/api/opui/params/${encodeURIComponent(w.param)}`, { value: String(v) });
+    const res = await putParam(w.param, String(v));
     if (!res.ok) toast(res.error || "保存失败");
   };
 
@@ -460,12 +571,11 @@ function renderOptionRow(w, panelData) {
   const save = async (v) => {
     idx = Math.max(min, Math.min(max, v));
     span.textContent = formatOptionLabel(w, idx);
-    const res = await apiPut(`/api/opui/params/${encodeURIComponent(w.param)}`, { value: String(idx) });
+    const res = await putParam(w.param, String(idx));
     if (!res.ok) toast(res.error || t("Save failed"));
     else {
       w.value = String(idx);
       if (panelData?.values) panelData.values[w.param] = String(idx);
-      requestPanelRefresh();
     }
   };
   minus.addEventListener("click", () => save(idx - step));

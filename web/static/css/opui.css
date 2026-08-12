@@ -279,6 +279,8 @@ body {
 .opui-metric:nth-child(3) { top: 569px; }
 .opui-metric:nth-child(4) { top: 704px; }
 
+.opui-metric[hidden] { display: none; }
+
 .opui-metric-bar {
   position: absolute;
   left: 4px;

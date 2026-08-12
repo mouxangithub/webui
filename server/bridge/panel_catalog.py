@@ -70,10 +70,15 @@ PANELS: list[dict[str, Any]] = [
       {"type": "bool", "param": "DisengageOnAccelerator", "label": "Disengage on Accelerator Pedal"},
       {"type": "multiple_button", "param": "LongitudinalPersonality", "label": "Driving Personality",
        "buttons": ["Aggressive", "Standard", "Relaxed"]},
+      {"type": "bool", "param": "AccelPersonalityEnabled", "label": "Enable Accel Controller"},
+      {"type": "multiple_button", "param": "AccelPersonality", "label": "Acceleration Profile",
+       "buttons": ["Eco", "Normal", "Sport"],
+       "visible_if": {"param": "AccelPersonalityEnabled", "eq": "1"}},
       {"type": "bool", "param": "IsLdwEnabled", "label": "Enable Lane Departure Warnings"},
       {"type": "bool", "param": "AlwaysOnDM", "label": "Always-On Driver Monitoring"},
-      {"type": "choice", "param": "DistractionDetectionLevel", "label": "Distraction Detection Level",
-       "options": ["Strict", "Moderate", "Lenient"], "visible_if": {"param": "AlwaysOnDM", "eq": "1"}},
+      {"type": "multiple_button", "param": "DistractionDetectionLevel", "label": "Distraction Detection Level",
+       "buttons": ["Strict", "Moderate", "Lenient"],
+       "visible_if": {"param": "AlwaysOnDM", "eq": "1"}},
       {"type": "bool", "param": "RecordFront", "label": "Record Driver Camera", "needs_cycle": True},
       {"type": "bool", "param": "RecordAudio", "label": "Record Microphone Audio", "needs_cycle": True},
       {"type": "bool", "param": "IsMetric", "label": "Use Metric System"},
@@ -356,3 +361,25 @@ def panel_schema() -> dict[str, Any]:
         entry = {**p, "icon": PANEL_ICONS.get(p["id"], "")}
         panels_out.append(entry)
   return {"ok": True, "panels": panels_out, "subpanels": list(SUBPANELS.keys()), **tokens_payload()}
+
+
+def panel_param_keys(panel_id: str) -> list[str]:
+  panel = get_panel(panel_id)
+  if not panel:
+    return []
+  keys: list[str] = []
+  for w in panel.get("widgets", []):
+    for dep_key in ("visible_if", "advanced_if"):
+      dep = w.get(dep_key)
+      if isinstance(dep, dict) and dep.get("param"):
+        keys.append(dep["param"])
+    if w.get("type") == "dual_button":
+      for side in ("left", "right"):
+        sk = (w.get(side) or {}).get("param")
+        if sk:
+          keys.append(sk)
+      continue
+    key = w.get("param")
+    if key:
+      keys.append(key)
+  return sorted(set(keys))

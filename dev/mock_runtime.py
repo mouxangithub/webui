@@ -177,6 +177,7 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     },
     "controls": {"lat_active": True, "long_active": s["engaged"]},
     "personality": "standard",
+    "personality_index": 1,
     "sp_hud": {
       "speed_limit": s.get("speed_limit"),
       "road_name": s.get("road_name", ""),

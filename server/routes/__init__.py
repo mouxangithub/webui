@@ -27,6 +27,7 @@ from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.developer_api import developer_error_log
 from webui.server.bridge.osm_api import osm_delete_maps
+from webui.server.bridge.ws_handler import ws_opui_handler
 
 
 async def api_bootstrap(_request: web.Request) -> web.Response:
@@ -324,6 +325,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_post("/api/opui/device/language", api_set_language)
   app.router.add_get("/api/opui/webrtc/schema", api_webrtc_schema)
   app.router.add_post("/api/opui/webrtc/offer", api_webrtc_offer)
+  app.router.add_get("/ws/opui", ws_opui_handler)
 
   # Legacy alias
   async def api_toggles_legacy(_request: web.Request) -> web.Response:

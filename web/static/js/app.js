@@ -1,11 +1,15 @@
 import { apiGet } from "./api.js";
-import { loadPanelList, renderPanel, setGlobalState, setSubpanelNavigator } from "./panels.js";
+import {
+  loadPanelList, renderPanel, setGlobalState, setSubpanelNavigator,
+  applyPanelSync, syncDrivingPersonality, notifyPanelWatch,
+} from "./panels.js";
 import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud } from "./onroad.js";
 import { updateHomeScreen } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode } from "./sidebar.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle } from "./i18n.js";
+import { opuiWs } from "./ws.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -100,12 +104,15 @@ function setScreen(name) {
     onroadSidebarVisible = false;
     metricsSidebar.hidden = false;
     app.classList.remove("opui--onroad-sidebar-hidden");
+    notifyPanelWatch(null);
   } else if (name === "onroad") {
     metricsSidebar.hidden = !onroadSidebarVisible;
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
+    notifyPanelWatch(null);
   } else {
     metricsSidebar.hidden = true;
     app.classList.remove("opui--onroad-sidebar-hidden");
+    notifyPanelWatch(currentPanel);
   }
 
   showModelOverlay(name === "onroad");
@@ -181,12 +188,37 @@ async function bootstrap() {
   renderNav();
 }
 
-async function pollHome() {
-  if (app.dataset.screen !== "home") return;
-  try {
-    const home = await apiGet("/api/opui/home");
-    updateHomeScreen(home);
-  } catch (_) { /* ignore */ }
+function handleState(st) {
+  setGlobalState(st);
+  updateSidebarMetrics(st);
+  updateSidebarMode(!!st.started);
+
+  if (!st.ok) return;
+
+  if (st.started && (st.personality || st.personality_index != null)) {
+    syncDrivingPersonality(st.personality, st.personality_index);
+  }
+
+  if (st.started) {
+    if (!lastStarted && !devPc) {
+      startRoadStream().catch(() => {});
+    }
+    if (!lastStarted) {
+      onroadSidebarVisible = false;
+    }
+    if (app.dataset.screen === "home") {
+      setScreen("onroad");
+    }
+    updateOnroadHud(st);
+  } else {
+    if (lastStarted) {
+      stopRoadStream().catch(() => {});
+    }
+    if (app.dataset.screen === "onroad") {
+      setScreen("home");
+    }
+  }
+  lastStarted = !!st.started;
 }
 
 async function pollModelOverlay() {
@@ -200,39 +232,11 @@ async function pollModelOverlay() {
   } catch (_) { /* ignore */ }
 }
 
-async function pollState() {
+async function pollStateFallback() {
   try {
     const st = await apiGet("/api/opui/state");
-    setGlobalState(st);
-    updateSidebarMetrics(st);
-    updateSidebarMode(!!st.started);
-
-    if (!st.ok) return;
-
-    if (st.started) {
-      if (!lastStarted && !devPc) {
-        startRoadStream().catch(() => {});
-      }
-      if (!lastStarted) {
-        onroadSidebarVisible = false;
-      }
-      if (app.dataset.screen === "home") {
-        setScreen("onroad");
-      }
-      updateOnroadHud(st);
-    } else {
-      if (lastStarted) {
-        stopRoadStream().catch(() => {});
-      }
-      if (app.dataset.screen === "onroad") {
-        setScreen("home");
-        pollHome();
-      }
-    }
-    lastStarted = !!st.started;
-  } catch (_) {
-    /* connection lost */
-  }
+    handleState(st);
+  } catch (_) { /* ignore */ }
 }
 
 setSubpanelNavigator((panelId) => {
@@ -251,14 +255,13 @@ window.addEventListener("opui:refresh-panel", () => {
 
 $("#btn-close-settings").addEventListener("click", () => {
   setScreen(lastStarted ? "onroad" : "home");
-  if (!lastStarted) pollHome();
 });
 
 $("#btn-sidebar-settings").addEventListener("click", () => openSettings("device"));
 
 $("#btn-sidebar-bottom").addEventListener("click", () => {
   if (lastStarted) {
-    /* cereal bookmarkButton — future WS */
+    /* cereal bookmarkButton */
   }
 });
 
@@ -272,25 +275,37 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 bindStreamButton();
 initModelCanvas();
 
+function setupWebSocket() {
+  opuiWs.on("state", (msg) => {
+    if (msg?.data) handleState(msg.data);
+  });
+  opuiWs.on("home", (msg) => {
+    if (msg?.data && app.dataset.screen === "home") updateHomeScreen(msg.data);
+  });
+  opuiWs.on("panel", (msg) => {
+    if (app.dataset.screen !== "settings") return;
+    if (msg.panel !== currentPanel) return;
+    applyPanelSync(msg.data);
+  });
+  opuiWs.on("open", () => {
+    if (app.dataset.screen === "settings") notifyPanelWatch(currentPanel);
+  });
+  opuiWs.connect();
+}
+
 bootstrap().then(async () => {
   initDevPanel();
   fitOpuiScale();
   window.addEventListener("resize", fitOpuiScale);
   await loadI18n(true);
   setScreen("home");
-  pollHome();
-  pollState();
-  setInterval(pollState, 400);
-  setInterval(pollHome, 5000);
+  setupWebSocket();
+  pollStateFallback();
+  setInterval(() => {
+    if (!opuiWs.connected) pollStateFallback();
+  }, 2000);
   setInterval(async () => {
-    if (await loadI18n()) {
-      renderNav();
-      if (app.dataset.screen === "home") pollHome();
-      if (app.dataset.screen === "settings") loadCurrentPanel();
-    }
+    if (await loadI18n()) renderNav();
   }, 3000);
   setInterval(pollModelOverlay, 100);
-  setInterval(() => {
-    if (app.dataset.screen === "settings") loadCurrentPanel();
-  }, 2000);
 });

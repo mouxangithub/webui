@@ -300,8 +300,6 @@ export function createSpToggle(w, panelData, globalState, handlers) {
       handlers.toast(res.error || "Save failed");
       input.checked = !input.checked;
       label?.classList.toggle("on", input.checked);
-    } else {
-      window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
     }
   });
   return row;
