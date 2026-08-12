@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=19" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=20" />
 </head>
 <body>
   <div id="opui-viewport">
@@ -115,11 +115,11 @@
     </dialog>
 
     <div id="modal-confirm" class="opui-modal" hidden>
-      <div class="opui-modal-card">
+      <div class="opui-modal-card opui-modal-card--confirm">
         <div id="modal-confirm-msg" class="opui-modal-body"></div>
-        <div class="opui-modal-actions">
-          <button type="button" id="modal-confirm-cancel" class="opui-btn">Cancel</button>
-          <button type="button" id="modal-confirm-ok" class="opui-btn opui-btn--primary">Confirm</button>
+        <div class="opui-modal-actions opui-modal-actions--split">
+          <button type="button" id="modal-confirm-cancel" class="opui-btn opui-btn--dialog">Cancel</button>
+          <button type="button" id="modal-confirm-ok" class="opui-btn opui-btn--dialog opui-btn--primary">Confirm</button>
         </div>
       </div>
     </div>
@@ -188,6 +188,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> Experimental</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=19"></script>
+  <script type="module" src="/static/js/app.js?v=20"></script>
 </body>
 </html>

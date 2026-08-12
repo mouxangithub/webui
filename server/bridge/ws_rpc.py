@@ -29,7 +29,9 @@ from webui.server.bridge.network_api import (
 from webui.server.bridge.osm_api import (
   osm_delete_maps,
   osm_download_progress,
+  osm_fetch_regions,
   osm_map_size_mb,
+  osm_panel_custom,
   osm_regions,
   osm_select_region,
 )
@@ -76,12 +78,7 @@ def custom_panel_data(panel_id: str) -> dict[str, Any] | None:
   if panel_id == "models":
     return models_status()
   if panel_id == "osm":
-    return {
-      "ok": True,
-      "regions": osm_regions(),
-      "size": osm_map_size_mb(),
-      "progress": osm_download_progress(),
-    }
+    return osm_panel_custom()
   if panel_id == "network":
     return {"ok": True, "wifi": wifi_status()}
   if panel_id == "vehicle":
@@ -196,7 +193,9 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
       return ssh_remove_keys()
 
     if method == "GET" and clean_path == "/api/opui/osm/regions":
-      return osm_regions()
+      q = parse_qs(parsed.query)
+      region_type = (q.get("type") or ["Country"])[0]
+      return osm_fetch_regions(region_type)
 
     if method == "POST" and clean_path == "/api/opui/osm/select":
       return osm_select_region(

@@ -264,6 +264,9 @@ export function applyPanelCustom(panelId, data) {
       el.textContent = data.active ? "Active" : "Inactive";
     }
   }
+  if (panelId === "osm") {
+    applyOsmCustom(data);
+  }
 }
 
 function updateEngagedWidgets() {
@@ -299,9 +302,10 @@ export function applyPanelSync(data) {
     if (data.custom) {
       const container = document.getElementById("panel-content");
       if (container) {
-        if (data.custom === "software" || data.custom === "models") {
+        if (data.custom === "software" || data.custom === "models" || data.custom === "osm") {
           container.querySelectorAll("[data-panel-widget]").forEach((el) => el.remove());
           appendPanelWidgets(container, data);
+          if (data.custom === "osm") ensureOsmCustomBlock(container);
         } else {
           window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
         }
@@ -571,8 +575,24 @@ function appendPanelWidgets(container, data) {
   }
 }
 
+function prependSubpanelNav(container, data) {
+  if (!data?.parent) return;
+  const nav = document.createElement("div");
+  nav.className = "opui-subpanel-nav";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "opui-nav-back";
+  btn.textContent = t("Back");
+  btn.addEventListener("click", () => {
+    if (onNavigateSubpanel) onNavigateSubpanel(data.parent);
+  });
+  nav.appendChild(btn);
+  container.appendChild(nav);
+}
+
 function renderGenericPanel(container, data) {
   container.innerHTML = "";
+  prependSubpanelNav(container, data);
   appendPanelWidgets(container, data);
 }
 
@@ -700,8 +720,7 @@ function renderMultipleButtonRow(w, panelData) {
   const stacked = w.layout === "stacked" || !inline;
   const row = document.createElement("div");
   row.className = "opui-sp-row"
-    + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked")
-    + (stacked ? " opui-sp-row--segmented" : "");
+    + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked");
   row.dataset.param = w.param;
   row.dataset.widget = "multiple_button";
   const buttons = (w.buttons || []).map((b) => t(b));
@@ -1082,7 +1101,7 @@ function renderActionRow(w) {
       <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
     </div>
     <div class="opui-row-actions">
-      <button type="button" class="opui-btn" ${disabled ? "disabled" : ""}>${escapeHtml(t(w.button || "GO"))}</button>
+      <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(t(w.button || "GO"))}</button>
     </div>`;
   if (desc) bindRowExpand(row, { desc });
   const btn = row.querySelector("button");
@@ -1535,39 +1554,87 @@ async function renderModelsPanel(container, data) {
   }
 }
 
-async function renderOsmPanel(container, data) {
-  renderGenericPanel(container, data);
-  const [regions, size, prog] = await Promise.all([
-    apiGet("/api/opui/osm/regions"),
-    apiGet("/api/opui/osm/size"),
-    apiGet("/api/opui/osm/progress"),
-  ]);
-
-  const block = document.createElement("div");
+function ensureOsmCustomBlock(container) {
+  let block = container.querySelector("#osm-custom-root");
+  if (block) return block;
+  block = document.createElement("div");
+  block.id = "osm-custom-root";
   block.className = "opui-osm-tree";
-  if (size.ok) {
-    const sz = document.createElement("div");
-    sz.className = "opui-sp-row";
-    sz.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">Downloaded Maps</div>
-      <div class="opui-sp-row-desc">${size.size_mb} MB</div></div>
-      <button type="button" class="opui-btn danger">DELETE</button>`;
-    sz.querySelector("button")?.addEventListener("click", async () => {
-      if (!(await showConfirm({ message: t("Delete ALL downloaded maps?"), confirmText: t("Delete") }))) return;
-      const res = await apiPost("/api/opui/osm/delete");
-      if (res.ok) toast(t("Delete requested"));
-      else toast(res.error || "Failed");
-    });
-    block.appendChild(sz);
-  }
-  if (prog.ok && prog.active) {
-    block.appendChild(createProgressRow("Downloading Map", prog.progress || 0));
+  block.innerHTML = `
+    <div class="opui-sp-row" id="osm-size-row">
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(t("Downloaded Maps"))}</div>
+        <div class="opui-sp-row-desc" id="osm-size-text">${escapeHtml(t("Calculating…"))}</div>
+      </div>
+      <button type="button" class="opui-btn opui-btn--action danger" id="osm-delete-btn">DELETE</button>
+    </div>
+    <div id="osm-progress-slot"></div>
+    <button type="button" class="opui-simple-btn" id="osm-country-btn">${escapeHtml(t("SELECT"))} ${escapeHtml(t("Country"))}</button>
+    <button type="button" class="opui-simple-btn" id="osm-state-btn" hidden>${escapeHtml(t("SELECT"))} ${escapeHtml(t("State"))}</button>`;
+  container.appendChild(block);
+
+  block.querySelector("#osm-delete-btn")?.addEventListener("click", async () => {
+    if (!(await showConfirm({
+      message: t("This will delete ALL downloaded maps\n\nAre you sure you want to delete all maps?"),
+      confirmText: t("Yes, delete all maps"),
+    }))) return;
+    const res = await apiPost("/api/opui/osm/delete");
+    if (res.ok) toast(t("Delete requested"));
+    else toast(res.error || "Failed");
+  });
+
+  block.querySelector("#osm-country-btn")?.addEventListener("click", () => pickOsmRegion("Country"));
+  block.querySelector("#osm-state-btn")?.addEventListener("click", () => pickOsmRegion("State"));
+  return block;
+}
+
+function applyOsmCustom(data) {
+  const block = document.getElementById("osm-custom-root");
+  if (!block || !data?.ok) return;
+  updateOsmCustomDom(block, data);
+}
+
+function updateOsmCustomDom(block, data) {
+  const size = data.size || {};
+  const prog = data.progress || {};
+  const sizeEl = block.querySelector("#osm-size-text");
+  if (sizeEl) {
+    if (size.pending) sizeEl.textContent = t("Calculating…");
+    else if (size.ok) sizeEl.textContent = `${Number(size.size_mb || 0).toFixed(2)} ${t("MB")}`;
   }
 
-  const countryBtn = document.createElement("button");
-  countryBtn.type = "button";
-  countryBtn.className = "opui-simple-btn";
-  countryBtn.textContent = "SELECT Country";
-  countryBtn.addEventListener("click", async () => {
+  const slot = block.querySelector("#osm-progress-slot");
+  if (slot) {
+    slot.innerHTML = "";
+    if (prog.ok && prog.active) {
+      slot.appendChild(createProgressRow(t("Downloading Map"), prog.progress || 0));
+    }
+  }
+
+  const stateBtn = block.querySelector("#osm-state-btn");
+  if (stateBtn) {
+    const loc = panelDataRef?.values?.OsmLocationName || "";
+    stateBtn.hidden = String(loc) !== "US";
+  }
+}
+
+async function pickOsmRegion(regionType) {
+  const btn = document.getElementById(regionType === "Country" ? "osm-country-btn" : "osm-state-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t("FETCHING...");
+  }
+  const regions = await apiGet(`/api/opui/osm/regions?type=${encodeURIComponent(regionType)}`);
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = `${t("SELECT")} ${t(regionType)}`;
+  }
+  if (!regions.ok) {
+    toast(regions.error || "Failed");
+    return;
+  }
+
+  if (regionType === "Country") {
     const folders = (regions.countries || []).map((c) => ({
       name: c.title,
       bundles: [{ ref: c.name, name: c.title }],
@@ -1576,26 +1643,47 @@ async function renderOsmPanel(container, data) {
     if (!ref) return;
     const c = regions.countries.find((x) => x.name === ref);
     if (!c) return;
-    if (c.states?.length) {
-      const stateFolders = [{
-        name: c.title,
-        bundles: c.states.map((s) => ({ ref: `${c.name}/${s.name}`, name: s.title })),
-      }];
-      const stateRef = await showTree({ title: t("State"), folders: stateFolders, searchable: true });
-      if (!stateRef) return;
-      const [country, state] = stateRef.split("/");
-      const st = c.states.find((s) => s.name === state);
-      await apiPost("/api/opui/osm/select", {
-        country, country_title: c.title, state, state_title: st?.title || state,
-      });
-      toast(`${c.title} — ${st?.title || state}`);
-      return;
-    }
     await apiPost("/api/opui/osm/select", { country: c.name, country_title: c.title });
-    toast(`${t("Country")}: ${c.title}`);
+    toast(c.title);
+    if (c.name === "US") {
+      document.getElementById("osm-state-btn")?.removeAttribute("hidden");
+      await pickOsmRegion("State");
+    }
+    window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+    return;
+  }
+
+  const countryTitle = panelDataRef?.values?.OsmLocationTitle || "US";
+  const folders = [{
+    name: countryTitle,
+    bundles: (regions.states || []).map((s) => ({ ref: s.name, name: s.title })),
+  }];
+  const ref = await showTree({ title: t("State"), folders, searchable: true });
+  if (!ref) return;
+  const country = panelDataRef?.values?.OsmLocationName || "US";
+  const st = regions.states.find((s) => s.name === ref);
+  await apiPost("/api/opui/osm/select", {
+    country,
+    country_title: countryTitle,
+    state: ref,
+    state_title: st?.title || ref,
   });
-  block.appendChild(countryBtn);
-  container.appendChild(block);
+  toast(st?.title || ref);
+  window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+}
+
+async function renderOsmPanel(container, data) {
+  renderGenericPanel(container, data);
+  const block = ensureOsmCustomBlock(container);
+  try {
+    const [size, prog] = await Promise.all([
+      apiGet("/api/opui/osm/size"),
+      apiGet("/api/opui/osm/progress"),
+    ]);
+    updateOsmCustomDom(block, { ok: true, size, progress: prog });
+  } catch (_) {
+    /* WS custom data will fill in */
+  }
 }
 
 async function renderVehiclePanel(container, data) {
