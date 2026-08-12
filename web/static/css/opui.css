@@ -493,19 +493,31 @@ body {
   height: 125px;
   border: none;
   border-radius: 16px;
-  background: linear-gradient(90deg, #e67e22, #d35400);
-  color: #fff;
+  background: linear-gradient(90deg, #ff9b3f, #db3822);
+  color: #000;
   font-size: 44px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 16px;
+  padding: 0 25px;
   cursor: pointer;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.opui-home-exp-icon { font-size: 52px; }
+.opui-home-exp-label {
+  flex: 1;
+  text-align: left;
+}
+
+.opui-home-exp-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
 
 .opui-setup-card {
   background: #333;
@@ -527,6 +539,16 @@ body {
   font-size: 64px;
   margin: 0 0 32px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.opui-setup-firehose-icon {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .opui-setup-desc {
@@ -1409,6 +1431,12 @@ body {
 .opui-sp-row--control-below {
   min-height: 260px;
   padding-bottom: 32px;
+  align-items: flex-start;
+}
+
+.opui-sp-row--control-below .opui-sp-row-text {
+  width: 100%;
+  text-align: left;
 }
 
 .opui-sp-row--toggle-below .opui-sp-toggle {
@@ -1577,12 +1605,14 @@ body {
 
 .opui-subpanel-wrap {
   display: flex;
-  justify-content: center;
+  justify-content: stretch;
+  width: 100%;
   padding: 8px 48px 16px;
+  box-sizing: border-box;
 }
 
 .opui-simple-btn {
-  width: min(800px, calc(100% - 96px));
+  width: 100%;
   margin: 0;
   height: 150px;
   border: none;
@@ -1733,6 +1763,10 @@ body {
 }
 .opui-modal-card--multi {
   width: min(1400px, 92vw);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
 }
 .opui-modal-title { font-size: 70px; font-weight: 700; margin-bottom: 32px; }
 .opui-modal-body { font-size: 44px; line-height: 1.5; max-height: 50vh; overflow: auto; }
@@ -1796,7 +1830,18 @@ body {
 .opui-tree-item.selected { background: rgba(70,91,234,0.35); }
 .opui-tree-star { margin-left: 12px; font-size: 32px; }
 
-.opui-multi-list { display: flex; flex-direction: column; gap: 25px; max-height: 55vh; overflow: auto; margin-bottom: 8px; }
+.opui-multi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
 .opui-multi-opt {
   padding: 28px 50px;
   min-height: 135px;

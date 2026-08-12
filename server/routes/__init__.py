@@ -10,7 +10,17 @@ from webui.server.deps import WEB_DIR, json_response, openpilot_root, read_versi
 from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param
 from webui.server.bridge.state_api import snapshot_ui_state
 from webui.server.bridge.system_api import run_action, software_status
-from webui.server.bridge.network_api import wifi_connect, wifi_forget, wifi_scan, wifi_status
+from webui.server.bridge.network_api import (
+  network_advanced_status,
+  wifi_connect,
+  wifi_connect_hidden,
+  wifi_forget,
+  wifi_scan,
+  wifi_set_metered,
+  wifi_set_tethering,
+  wifi_set_tethering_password,
+  wifi_status,
+)
 from webui.server.bridge.webrtc_api import webrtc_offer, webrtc_schema
 from webui.server.bridge.trips_api import trips_stats
 from webui.server.bridge.models_api import models_select, models_status
@@ -104,8 +114,9 @@ async def api_wifi_status(_request: web.Request) -> web.Response:
   return json_response(wifi_status())
 
 
-async def api_wifi_scan(_request: web.Request) -> web.Response:
-  return json_response(wifi_scan())
+async def api_wifi_scan(request: web.Request) -> web.Response:
+  trigger = request.rel_url.query.get("trigger", "").lower() in ("1", "true", "yes")
+  return json_response(wifi_scan(trigger=trigger))
 
 
 async def api_wifi_connect(request: web.Request) -> web.Response:
@@ -125,6 +136,47 @@ async def api_wifi_forget(request: web.Request) -> web.Response:
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
   return json_response(wifi_forget(ssid))
+
+
+async def api_network_advanced(_request: web.Request) -> web.Response:
+  return json_response(network_advanced_status())
+
+
+async def api_wifi_tethering(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    active = bool(body.get("active", False))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(wifi_set_tethering(active))
+
+
+async def api_wifi_tethering_password(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    password = str(body.get("password", ""))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(wifi_set_tethering_password(password))
+
+
+async def api_wifi_metered(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    metered = int(body.get("metered", 0))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(wifi_set_metered(metered))
+
+
+async def api_wifi_connect_hidden(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    ssid = str(body.get("ssid", ""))
+    password = str(body.get("password", ""))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(wifi_connect_hidden(ssid, password))
 
 
 async def api_webrtc_schema(_request: web.Request) -> web.Response:
@@ -302,6 +354,11 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/wifi/scan", api_wifi_scan)
   app.router.add_post("/api/opui/wifi/connect", api_wifi_connect)
   app.router.add_post("/api/opui/wifi/forget", api_wifi_forget)
+  app.router.add_get("/api/opui/network/advanced", api_network_advanced)
+  app.router.add_post("/api/opui/wifi/tethering", api_wifi_tethering)
+  app.router.add_post("/api/opui/wifi/tethering/password", api_wifi_tethering_password)
+  app.router.add_post("/api/opui/wifi/metered", api_wifi_metered)
+  app.router.add_post("/api/opui/wifi/connect/hidden", api_wifi_connect_hidden)
   app.router.add_get("/api/opui/trips", api_trips)
   app.router.add_get("/api/opui/models", api_models)
   app.router.add_post("/api/opui/models/select", api_models_select)

@@ -40,7 +40,7 @@ def wifi_status() -> dict[str, Any]:
     return {"ok": False, "error": str(exc), "networks": []}
 
 
-def wifi_scan() -> dict[str, Any]:
+def wifi_scan(trigger: bool = False) -> dict[str, Any]:
   import os
   if os.environ.get("WEBUI_DEV_PC") == "1":
     from webui.dev.mock_runtime import mock_wifi_networks
@@ -48,6 +48,9 @@ def wifi_scan() -> dict[str, Any]:
   try:
     wm = _manager()
     wm.set_active(True)
+    if trigger:
+      wm._request_scan()
+      threading.Thread(target=wm._update_networks, kwargs={"block": False}, daemon=True).start()
     wm.process_callbacks()
     networks = []
     connected = wm.connected_ssid
@@ -79,6 +82,80 @@ def wifi_forget(ssid: str) -> dict[str, Any]:
   try:
     wm = _manager()
     wm.forget_connection(ssid, block=True)
+    return {"ok": True, "ssid": ssid}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def network_advanced_status() -> dict[str, Any]:
+  import os
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    return {
+      "ok": True,
+      "ipv4": "10.255.128.121",
+      "tethering": False,
+      "wifi_metered": 0,
+      "wifi_metered_enabled": True,
+      "dev_pc": True,
+    }
+  try:
+    from openpilot.system.ui.lib.wifi_manager import MeteredType
+    wm = _manager()
+    wm.set_active(True)
+    wm.process_callbacks()
+    tethering = wm.is_tethering_active()
+    ipv4 = wm.ipv4_address if hasattr(wm, "ipv4_address") else ""
+    metered = int(wm.current_network_metered)
+    if metered not in (MeteredType.UNKNOWN, MeteredType.YES, MeteredType.NO):
+      metered = int(MeteredType.UNKNOWN)
+    return {
+      "ok": True,
+      "ipv4": ipv4,
+      "tethering": tethering,
+      "wifi_metered": metered,
+      "wifi_metered_enabled": bool(ipv4) and not tethering,
+    }
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def wifi_set_tethering(active: bool) -> dict[str, Any]:
+  try:
+    wm = _manager()
+    wm.set_active(True)
+    wm.set_tethering_active(active)
+    return {"ok": True, "active": active}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def wifi_set_tethering_password(password: str) -> dict[str, Any]:
+  try:
+    wm = _manager()
+    wm.set_active(True)
+    wm.set_tethering_password(password)
+    return {"ok": True}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def wifi_set_metered(metered: int) -> dict[str, Any]:
+  try:
+    from openpilot.system.ui.lib.wifi_manager import MeteredType
+    wm = _manager()
+    wm.set_active(True)
+    mapping = {0: MeteredType.UNKNOWN, 1: MeteredType.YES, 2: MeteredType.NO}
+    wm.set_current_network_metered(mapping.get(metered, MeteredType.UNKNOWN))
+    return {"ok": True, "metered": metered}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def wifi_connect_hidden(ssid: str, password: str = "") -> dict[str, Any]:
+  try:
+    wm = _manager()
+    wm.set_active(True)
+    wm.connect_to_network(ssid, password, hidden=True)
     return {"ok": True, "ssid": ssid}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}

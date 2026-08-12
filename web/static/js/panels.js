@@ -297,7 +297,15 @@ export function applyPanelSync(data) {
   if (hash !== lastPanelVisibilityHash) {
     lastPanelVisibilityHash = hash;
     if (data.custom) {
-      window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+      const container = document.getElementById("panel-content");
+      if (container) {
+        if (data.custom === "software" || data.custom === "models") {
+          container.querySelectorAll("[data-panel-widget]").forEach((el) => el.remove());
+          appendPanelWidgets(container, data);
+        } else {
+          window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+        }
+      }
     } else {
       const container = document.getElementById("panel-content");
       if (container) renderGenericPanel(container, data);
@@ -326,6 +334,15 @@ export function applyPanelSync(data) {
 }
 
 let currentPanelRef = "";
+let panelRenderGen = 0;
+
+function beginPanelRender() {
+  return ++panelRenderGen;
+}
+
+function panelRenderStale(gen) {
+  return gen !== panelRenderGen;
+}
 
 export function setCurrentPanelId(id) {
   currentPanelRef = id || "";
@@ -463,6 +480,10 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
     await renderNetworkPanel(container, data);
     return;
   }
+  if (data.custom === "network_advanced") {
+    await renderNetworkAdvancedPanel(container, data);
+    return;
+  }
   if (data.custom === "software") {
     await renderSoftwarePanel(container, data);
     return;
@@ -538,14 +559,21 @@ function renderAlwaysOffroadRow(active) {
   return row;
 }
 
-function renderGenericPanel(container, data) {
+function appendPanelWidgets(container, data) {
   panelDataRef = data;
   lastPanelVisibilityHash = panelVisibilityHash(data);
-  container.innerHTML = "";
   for (const w of data.widgets || []) {
     const el = renderWidget(w, data);
-    if (el) container.appendChild(el);
+    if (el) {
+      el.dataset.panelWidget = "1";
+      container.appendChild(el);
+    }
   }
+}
+
+function renderGenericPanel(container, data) {
+  container.innerHTML = "";
+  appendPanelWidgets(container, data);
 }
 
 function renderWidget(w, panelData) {
@@ -1111,6 +1139,7 @@ function renderActionRow(w) {
 }
 
 async function renderNetworkPanel(container, data) {
+  const gen = beginPanelRender();
   container.innerHTML = "";
 
   const header = document.createElement("div");
@@ -1145,11 +1174,10 @@ async function renderNetworkPanel(container, data) {
     return asset(names[level]);
   };
 
-  const paint = async (scanning = false) => {
-    if (scanning) {
-      list.innerHTML = `<p class="opui-wifi-status">${escapeHtml(t("Scanning Wi-Fi networks..."))}</p>`;
-    }
-    const scan = await apiGet("/api/opui/wifi/scan");
+  const fetchScan = (trigger = false) => apiGet(`/api/opui/wifi/scan${trigger ? "?trigger=1" : ""}`);
+
+  const paintList = (scan) => {
+    if (panelRenderStale(gen)) return;
     list.innerHTML = "";
     if (!scan.ok) {
       list.innerHTML = `<p class="opui-wifi-status">${escapeHtml(t("Wi-Fi unavailable"))}: ${escapeHtml(scan.error || "")}</p>`;
@@ -1181,7 +1209,7 @@ async function renderNetworkPanel(container, data) {
           const res = await apiPost("/api/opui/wifi/forget", { ssid: n.ssid });
           if (res.ok) toast(t("Forgot") + ` ${n.ssid}`);
           else toast(res.error || t("Failed"));
-          paint();
+          await runScan(false);
         });
         meta.appendChild(forget);
       }
@@ -1224,14 +1252,179 @@ async function renderNetworkPanel(container, data) {
     }
   };
 
+  const runScan = async (trigger = false) => {
+    if (trigger) {
+      list.innerHTML = `<p class="opui-wifi-status">${escapeHtml(t("Scanning Wi-Fi networks..."))}</p>`;
+    }
+    let scan = await fetchScan(trigger);
+    if (panelRenderStale(gen)) return;
+    if (trigger) {
+      for (let i = 0; i < 12; i++) {
+        if ((scan.networks || []).length) break;
+        await new Promise((r) => setTimeout(r, 500));
+        scan = await fetchScan(false);
+        if (panelRenderStale(gen)) return;
+      }
+    }
+    paintList(scan);
+  };
+
   scanBtn.addEventListener("click", async () => {
     scanBtn.disabled = true;
     scanBtn.textContent = t("Scanning...");
-    await paint(true);
+    await runScan(true);
+    if (panelRenderStale(gen)) return;
     scanBtn.disabled = false;
     scanBtn.textContent = t("Scan");
   });
-  paint();
+
+  await runScan(true);
+}
+
+async function renderNetworkAdvancedPanel(container, data) {
+  const gen = beginPanelRender();
+  container.innerHTML = "";
+  const adv = await apiGet("/api/opui/network/advanced");
+  if (panelRenderStale(gen)) return;
+
+  const tetherChecked = !!(adv.ok && adv.tethering);
+  const tetherRow = document.createElement("div");
+  tetherRow.className = "opui-sp-row";
+  tetherRow.innerHTML = `
+    <label class="opui-sp-toggle${tetherChecked ? " on" : ""}">
+      <input type="checkbox" ${tetherChecked ? "checked" : ""} />
+      <span class="opui-sp-toggle-track"><span class="opui-sp-toggle-thumb"></span></span>
+    </label>
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Enable Tethering"))}</div>
+    </div>`;
+  tetherRow.querySelector("input")?.addEventListener("change", async (ev) => {
+    const input = ev.target;
+    const label = tetherRow.querySelector(".opui-sp-toggle");
+    const active = !!input.checked;
+    label?.classList.toggle("on", active);
+    const res = await apiPost("/api/opui/wifi/tethering", { active });
+    if (!res.ok) {
+      toast(res.error || t("Failed"));
+      input.checked = !active;
+      label?.classList.toggle("on", input.checked);
+    }
+  });
+  container.appendChild(tetherRow);
+
+  const passRow = document.createElement("div");
+  passRow.className = "opui-sp-row";
+  passRow.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Tethering Password"))}</div>
+    </div>
+    <button type="button" class="opui-btn">${escapeHtml(t("EDIT"))}</button>`;
+  passRow.querySelector("button")?.addEventListener("click", async () => {
+    const password = await showKeyboard({
+      title: t("Tethering Password"),
+      password: true,
+      minLen: 8,
+      maxLen: 64,
+    });
+    if (password == null) return;
+    const res = await apiPost("/api/opui/wifi/tethering/password", { password });
+    if (res.ok) toast(t("Saved"));
+    else toast(res.error || t("Failed"));
+  });
+  container.appendChild(passRow);
+
+  const ipRow = document.createElement("div");
+  ipRow.className = "opui-sp-row";
+  ipRow.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("IP Address"))}</div>
+    </div>
+    <div class="opui-row-value">${escapeHtml(adv.ok ? (adv.ipv4 || "—") : "—")}</div>`;
+  container.appendChild(ipRow);
+
+  for (const w of data.widgets || []) {
+    const el = renderWidget(w, data);
+    if (el) container.appendChild(el);
+  }
+
+  const apnRow = document.createElement("div");
+  apnRow.className = "opui-sp-row";
+  apnRow.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("APN Setting"))}</div>
+    </div>
+    <button type="button" class="opui-btn">${escapeHtml(t("EDIT"))}</button>`;
+  apnRow.querySelector("button")?.addEventListener("click", async () => {
+    const apn = await showKeyboard({
+      title: `${t("Enter APN")} — ${t("leave blank for automatic configuration")}`,
+      minLen: 0,
+      maxLen: 64,
+    });
+    if (apn == null) return;
+    const res = await apiPost("/api/opui/action/network_set_apn", { apn });
+    if (res.ok) toast(t("Saved"));
+    else toast(res.error || t("Failed"));
+  });
+  const roamingRow = container.querySelector('[data-param="GsmRoaming"]');
+  if (roamingRow) roamingRow.insertAdjacentElement("afterend", apnRow);
+  else container.appendChild(apnRow);
+
+  const meteredRow = document.createElement("div");
+  meteredRow.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--segmented";
+  meteredRow.dataset.param = "WifiMeteredUi";
+  meteredRow.dataset.widget = "multiple_button";
+  const meteredLabels = [t("default"), t("metered"), t("unmetered")];
+  let meteredIdx = adv.ok ? (adv.wifi_metered || 0) : 0;
+  const meteredText = document.createElement("div");
+  meteredText.className = "opui-sp-row-text";
+  meteredText.innerHTML = `
+    <div class="opui-sp-row-title">${escapeHtml(t("Wi-Fi Network Metered"))}</div>
+    <div class="opui-sp-row-desc">${escapeHtml(t("Prevent large data uploads when on a metered Wi-Fi connection"))}</div>`;
+  const meteredGroup = document.createElement("div");
+  meteredGroup.className = "opui-multi-btn-group";
+  const meteredEnabled = adv.ok && adv.wifi_metered_enabled;
+  meteredLabels.forEach((label, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.classList.toggle("selected", i === meteredIdx);
+    btn.disabled = !meteredEnabled;
+    btn.addEventListener("click", async () => {
+      const res = await apiPost("/api/opui/wifi/metered", { metered: i });
+      if (!res.ok) {
+        toast(res.error || t("Failed"));
+        return;
+      }
+      meteredIdx = i;
+      meteredGroup.querySelectorAll("button").forEach((b, j) => b.classList.toggle("selected", j === i));
+    });
+    meteredGroup.appendChild(btn);
+  });
+  meteredRow.append(meteredText, meteredGroup);
+  container.appendChild(meteredRow);
+
+  const hiddenRow = document.createElement("div");
+  hiddenRow.className = "opui-sp-row";
+  hiddenRow.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Hidden Network"))}</div>
+    </div>
+    <button type="button" class="opui-btn">${escapeHtml(t("CONNECT"))}</button>`;
+  hiddenRow.querySelector("button")?.addEventListener("click", async () => {
+    const ssid = await showKeyboard({ title: t("Hidden Network"), minLen: 1, maxLen: 64 });
+    if (!ssid) return;
+    let password = await showKeyboard({
+      title: `${t("Enter password")} (${ssid})`,
+      password: true,
+      minLen: 0,
+      maxLen: 64,
+    });
+    if (password == null) return;
+    const res = await apiPost("/api/opui/wifi/connect/hidden", { ssid, password });
+    if (res.ok) toast(`${t("Connecting")} ${ssid}`);
+    else toast(res.error || t("Connect failed"));
+  });
+  container.appendChild(hiddenRow);
 }
 
 async function renderTripsPanel(container, data) {
@@ -1268,8 +1461,10 @@ function formatStat(v) {
 }
 
 async function renderModelsPanel(container, data) {
+  const gen = beginPanelRender();
   container.innerHTML = "";
   const m = await apiGet("/api/opui/models");
+  if (panelRenderStale(gen)) return;
   if (!m.ok) {
     container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(m.error || t("Failed"))}</p>`;
     return;
@@ -1326,7 +1521,7 @@ async function renderModelsPanel(container, data) {
     container.appendChild(cancel);
   }
 
-  renderGenericPanel(container, data);
+  appendPanelWidgets(container, data);
 
   const clearRow = container.querySelector('[data-action="models_clear_cache"]');
   if (clearRow && m.cache_size_mb != null) {
@@ -1519,8 +1714,10 @@ function renderDriverCameraRow() {
 }
 
 async function renderSunnylinkPanel(container, data) {
+  const gen = beginPanelRender();
   container.innerHTML = "";
   const sl = await apiGet("/api/opui/sunnylink/status");
+  if (panelRenderStale(gen)) return;
   const values = data.values || {};
 
   const hdr = document.createElement("div");
@@ -1650,7 +1847,9 @@ async function renderFirehosePanel(container) {
 }
 
 async function renderSoftwarePanel(container, data) {
+  const gen = beginPanelRender();
   const sw = await apiGet("/api/opui/software");
+  if (panelRenderStale(gen)) return;
   container.innerHTML = "";
   if (!sw.ok) {
     container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(sw.error || t("Failed"))}</p>`;
@@ -1740,7 +1939,7 @@ async function renderSoftwarePanel(container, data) {
     container.appendChild(branchRow);
   }
 
-  renderGenericPanel(container, data);
+  appendPanelWidgets(container, data);
 
   applySoftwareCustom(sw);
 }

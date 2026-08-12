@@ -31,8 +31,9 @@ function experimentalE2eHtml() {
   );
 }
 
-function pushModal(el) {
+function pushModal(el, onBackdrop) {
   if (!el) return;
+  el._backdropDismiss = onBackdrop || null;
   stack.push(el);
   el.removeAttribute("hidden");
   el.setAttribute("aria-hidden", "false");
@@ -43,10 +44,24 @@ function popModal(el) {
   if (!el) return;
   const i = stack.indexOf(el);
   if (i >= 0) stack.pop();
+  el._backdropDismiss = null;
   el.setAttribute("hidden", "");
   el.setAttribute("aria-hidden", "true");
   if (!stack.length) document.body.classList.remove("opui-modal-open");
 }
+
+function initModalBackdropDismiss() {
+  document.querySelectorAll(".opui-modal").forEach((modal) => {
+    modal.addEventListener("click", (e) => {
+      if (e.target !== modal) return;
+      const dismiss = modal._backdropDismiss;
+      if (typeof dismiss === "function") dismiss();
+    });
+    modal.querySelector(".opui-modal-card")?.addEventListener("click", (e) => e.stopPropagation());
+  });
+}
+
+initModalBackdropDismiss();
 
 export function showConfirm(opts) {
   const {
@@ -76,7 +91,6 @@ export function showConfirm(opts) {
     ok.textContent = confirmText;
     cancel.textContent = cancelText;
     cancel.hidden = single;
-    pushModal(root);
     const done = (v) => {
       popModal(root);
       ok.removeEventListener("click", onOk);
@@ -86,6 +100,7 @@ export function showConfirm(opts) {
     };
     const onOk = () => done(true);
     const onCancel = () => done(false);
+    pushModal(root, onCancel);
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
     root.addEventListener("cancel", onCancel);
@@ -161,7 +176,7 @@ export function showKeyboard(opts = {}) {
       resolve(v);
     };
     document.getElementById("keyboard-cancel")?.addEventListener("click", () => finish(null), { once: true });
-    pushModal(root);
+    pushModal(root, () => finish(null));
   });
 }
 
@@ -218,7 +233,7 @@ export function showMultiOption(opts) {
     };
     cancelBtn?.addEventListener("click", onCancel, { once: true });
     selectBtn.addEventListener("click", onSelect, { once: true });
-    pushModal(root);
+    pushModal(root, onCancel);
   });
 }
 
@@ -293,16 +308,17 @@ export function showTree(opts) {
 
     search.oninput = () => { query = search.value; render(); };
     selectBtn.disabled = true;
+    const close = () => {
+      popModal(root);
+      resolve(null);
+    };
     selectBtn.onclick = () => {
       popModal(root);
       resolve(pick);
     };
-    document.getElementById("tree-cancel")?.addEventListener("click", () => {
-      popModal(root);
-      resolve(null);
-    }, { once: true });
+    document.getElementById("tree-cancel")?.addEventListener("click", close, { once: true });
     render();
-    pushModal(root);
+    pushModal(root, close);
   });
 }
 
@@ -312,11 +328,12 @@ export function showHtml(opts) {
     const root = document.getElementById("modal-html");
     document.getElementById("html-title").textContent = title;
     document.getElementById("html-body").innerHTML = html;
-    document.getElementById("html-ok")?.addEventListener("click", () => {
+    const close = () => {
       popModal(root);
       resolve(true);
-    }, { once: true });
-    pushModal(root);
+    };
+    document.getElementById("html-ok")?.addEventListener("click", close, { once: true });
+    pushModal(root, close);
   });
 }
 

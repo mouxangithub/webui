@@ -25,6 +25,7 @@ let currentPanel = "device";
 let lastStarted = false;
 let devPc = false;
 let onroadSidebarVisible = false;
+let panelIconMap = {};
 
 function assetUrl(rel) {
   if (!rel) return "";
@@ -47,6 +48,7 @@ function applyDesignTokens(tokens) {
   if (c.button_primary) root.style.setProperty("--sp-primary", c.button_primary);
 
   const fonts = tokens.fonts || {};
+  panelIconMap = tokens.panel_icons || {};
   const style = document.getElementById("opui-fonts") || document.createElement("style");
   style.id = "opui-fonts";
   const faces = Object.entries(fonts)
@@ -151,6 +153,31 @@ function openSettings(panelId = "device") {
   loadCurrentPanel();
 }
 
+function iconCandidates(rel) {
+  if (!rel) return [];
+  const paths = [rel];
+  if (rel.startsWith("sunnypilot/")) {
+    paths.push(rel.replace("sunnypilot/", "openpilot/sunnypilot/"));
+    paths.push(rel.replace("sunnypilot/", ""));
+  }
+  return [...new Set(paths)];
+}
+
+function setIconWithFallback(img, rel) {
+  const candidates = iconCandidates(rel);
+  let idx = 0;
+  const tryNext = () => {
+    if (idx >= candidates.length) {
+      img.remove();
+      return;
+    }
+    img.src = assetUrl(candidates[idx]);
+    idx += 1;
+  };
+  img.onerror = tryNext;
+  tryNext();
+}
+
 function renderNav() {
   nav.innerHTML = "";
   for (const p of panels) {
@@ -159,12 +186,12 @@ function renderNav() {
     btn.classList.toggle("active", p.id === currentPanel);
     btn.dataset.panel = p.id;
 
-    if (p.icon) {
+    const iconPath = p.icon || panelIconMap[p.id] || "";
+    if (iconPath) {
       const img = document.createElement("img");
       img.className = "opui-nav-icon";
       img.alt = "";
-      img.src = assetUrl(p.icon);
-      img.onerror = () => { img.remove(); };
+      setIconWithFallback(img, iconPath);
       btn.appendChild(img);
     }
     const span = document.createElement("span");

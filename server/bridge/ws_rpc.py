@@ -15,7 +15,17 @@ from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.model_overlay import snapshot_model_overlay
 from webui.server.bridge.models_api import models_select, models_status
-from webui.server.bridge.network_api import wifi_connect, wifi_forget, wifi_scan, wifi_status
+from webui.server.bridge.network_api import (
+  network_advanced_status,
+  wifi_connect,
+  wifi_connect_hidden,
+  wifi_forget,
+  wifi_scan,
+  wifi_set_metered,
+  wifi_set_tethering,
+  wifi_set_tethering_password,
+  wifi_status,
+)
 from webui.server.bridge.osm_api import (
   osm_delete_maps,
   osm_download_progress,
@@ -134,7 +144,23 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
       return wifi_status()
 
     if method == "GET" and clean_path == "/api/opui/wifi/scan":
-      return wifi_scan()
+      trigger = query.get("trigger", "").lower() in ("1", "true", "yes")
+      return wifi_scan(trigger=trigger)
+
+    if method == "GET" and clean_path == "/api/opui/network/advanced":
+      return network_advanced_status()
+
+    if method == "POST" and clean_path == "/api/opui/wifi/tethering":
+      return wifi_set_tethering(bool(body.get("active", False)))
+
+    if method == "POST" and clean_path == "/api/opui/wifi/tethering/password":
+      return wifi_set_tethering_password(str(body.get("password", "")))
+
+    if method == "POST" and clean_path == "/api/opui/wifi/metered":
+      return wifi_set_metered(int(body.get("metered", 0)))
+
+    if method == "POST" and clean_path == "/api/opui/wifi/connect/hidden":
+      return wifi_connect_hidden(str(body.get("ssid", "")), str(body.get("password", "")))
 
     if method == "POST" and clean_path == "/api/opui/wifi/connect":
       return wifi_connect(str(body.get("ssid", "")), str(body.get("password", "")))

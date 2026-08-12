@@ -10,10 +10,14 @@ from webui.server.deps import openpilot_root
 def _search_roots() -> list[Path]:
   root = openpilot_root()
   candidates = [
-    root / "openpilot",
     root,
+    root / "openpilot",
+    root / "sunnypilot",
+    root / "openpilot" / "sunnypilot",
     root / "openpilot" / "selfdrive",
     root / "openpilot" / "system" / "ui",
+    root / "selfdrive",
+    root / "system" / "ui",
   ]
   out: list[Path] = []
   seen: set[str] = set()
