@@ -3,7 +3,7 @@ import { tr } from "./i18n.js";
 import { opuiWs } from "./ws.js";
 import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption,
-  createSpToggle, createProgressRow, createDualButton,
+  createSpToggle, createProgressRow, createDualButton, bindRowExpand,
 } from "./components.js";
 
 function t(s) {
@@ -116,6 +116,8 @@ export function setGlobalState(st) {
   globalState = st || globalState;
   updateEngagedWidgets();
   updateToggleCapabilities(st);
+  updateSteeringCapabilities(st);
+  updateSubpanelStates();
 }
 
 function updateToggleCapabilities(st) {
@@ -138,7 +140,9 @@ function updateToggleCapabilities(st) {
     }
     if (expDesc) {
       const e2e = t(
-        "sunnypilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode.",
+        "sunnypilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode. "
+        + "Experimental features are listed below: End-to-End Longitudinal Control — Let the driving model control the gas and brakes. "
+        + "New Driving Visualization — The driving visualization will transition to the road-facing wide-angle camera at low speeds.",
       );
       if (!hasLong) {
         let unavailable = t(
@@ -161,6 +165,45 @@ function updateToggleCapabilities(st) {
   const accelOn = panelDataRef?.values?.AccelPersonalityEnabled === "1";
   accelProf?.querySelectorAll("button").forEach((b) => {
     b.disabled = !hasLong || !accelOn;
+  });
+}
+
+function updateSteeringCapabilities(st) {
+  if (!st) return;
+  const offroad = globalState.is_offroad;
+  const torqueAllowed = st.torque_control_allowed !== false;
+  const jerk = !!st.lateral_jerk_torque;
+
+  const setToggleDisabled = (param, disabled) => {
+    const row = document.querySelector(`[data-param="${CSS.escape(param)}"]`);
+    if (!row) return;
+    const input = row.querySelector("input[type=checkbox]");
+    const label = row.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+  };
+
+  setToggleDisabled("Mads", !offroad);
+  setToggleDisabled("EnforceTorqueControl", !offroad || !torqueAllowed);
+  setToggleDisabled("NeuralNetworkLateralControl", !offroad || !torqueAllowed || jerk);
+
+  const torqueOn = paramIsOn(panelDataRef?.values?.EnforceTorqueControl);
+  const nnlcOn = paramIsOn(panelDataRef?.values?.NeuralNetworkLateralControl);
+  setToggleDisabled("EnforceTorqueControl", !offroad || !torqueAllowed || nnlcOn);
+  setToggleDisabled("NeuralNetworkLateralControl", !offroad || !torqueAllowed || jerk || torqueOn);
+
+  updateSubpanelStates();
+}
+
+function updateSubpanelStates() {
+  document.querySelectorAll(".opui-simple-btn").forEach((btn) => {
+    let disabled = btn.dataset.offroadOnly === "1" && !globalState.is_offroad;
+    const req = btn.dataset.requiresParam;
+    const eq = btn.dataset.requiresEq;
+    if (req && panelDataRef?.values) {
+      disabled = disabled || String(panelDataRef.values[req]) !== String(eq);
+    }
+    btn.disabled = disabled;
   });
 }
 
@@ -246,6 +289,7 @@ export function applyPanelSync(data) {
     }
     updateEngagedWidgets();
     updateToggleCapabilities(globalState);
+    updateSteeringCapabilities(globalState);
     updateDisplayDependencies(data);
     return;
   }
@@ -262,6 +306,7 @@ export function applyPanelSync(data) {
   }
   updateEngagedWidgets();
   updateToggleCapabilities(globalState);
+  updateSteeringCapabilities(globalState);
   updateDisplayDependencies(data);
 }
 
@@ -440,7 +485,21 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
 async function renderDevicePanel(container, data, titleEl, options = {}) {
   const ex = await apiGet("/api/opui/device/extras");
   deviceExtrasCache = ex.ok ? ex : null;
-  renderGenericPanel(container, data);
+  let widgets = [...(data.widgets || [])];
+  const aoWidget = widgets.find((w) => w.custom === "always_offroad");
+  if (aoWidget) {
+    widgets = widgets.filter((w) => w.custom !== "always_offroad");
+    const alwaysOffroad = !!deviceExtrasCache?.offroad_mode;
+    const powerIdx = widgets.findIndex((w) => w.type === "dual_button" && w.left?.action === "reboot");
+    if (!globalState.is_offroad && alwaysOffroad) {
+      widgets.unshift(aoWidget);
+    } else if (globalState.is_offroad && !alwaysOffroad && powerIdx >= 0) {
+      widgets.splice(powerIdx, 0, aoWidget);
+    } else {
+      widgets.splice(powerIdx >= 0 ? powerIdx : widgets.length, 0, aoWidget);
+    }
+  }
+  renderGenericPanel(container, { ...data, widgets });
 }
 
 function renderAlwaysOffroadRow(active) {
@@ -576,6 +635,7 @@ function renderBoolRow(w) {
     ...w,
     label: stacked ? "" : t(w.label),
     desc: w.desc ? t(w.desc) : "",
+    confirm_experimental: w.confirm_experimental,
     stacked,
   }, {}, globalState, paramHandlers);
   row.dataset.param = w.param;
@@ -593,8 +653,9 @@ function renderBoolRow(w) {
 }
 
 function renderMultipleButtonRow(w, panelData) {
+  const inline = w.layout === "inline";
   const row = document.createElement("div");
-  row.className = "opui-sp-row opui-sp-row--stacked";
+  row.className = "opui-sp-row" + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked");
   row.dataset.param = w.param;
   row.dataset.widget = "multiple_button";
   const buttons = (w.buttons || []).map((b) => t(b));
@@ -603,13 +664,11 @@ function renderMultipleButtonRow(w, panelData) {
 
   const text = document.createElement("div");
   text.className = "opui-sp-row-text";
-  text.innerHTML = `
-    <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
-    ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
-  row.appendChild(text);
+  text.innerHTML = `<div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>`;
 
   const group = document.createElement("div");
   group.className = "opui-multi-btn-group";
+  if (inline) group.classList.add("opui-multi-btn-group--inline");
   buttons.forEach((label, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -629,7 +688,13 @@ function renderMultipleButtonRow(w, panelData) {
     });
     group.appendChild(btn);
   });
-  row.appendChild(group);
+  if (inline) {
+    row.append(text, group);
+  } else {
+    row.appendChild(text);
+    row.appendChild(group);
+  }
+  bindRowExpand(row, { ...w, desc: w.desc ? t(w.desc) : "" });
   return row;
 }
 
@@ -712,14 +777,24 @@ function renderIntRow(w) {
 }
 
 function renderSubpanelRow(w) {
+  const wrap = document.createElement("div");
+  wrap.className = "opui-subpanel-wrap";
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "opui-simple-btn";
-  btn.textContent = t(w.label);
+  btn.textContent = t(w.label || w.button);
+  if (w.target) btn.dataset.subpanel = w.target;
+  if (w.offroad_only) btn.dataset.offroadOnly = "1";
+  if (w.requires?.param) {
+    btn.dataset.requiresParam = w.requires.param;
+    btn.dataset.requiresEq = String(w.requires.eq ?? "1");
+  }
   btn.addEventListener("click", () => {
+    if (btn.disabled) return;
     if (onNavigateSubpanel && w.target) onNavigateSubpanel(w.target);
   });
-  return btn;
+  wrap.appendChild(btn);
+  return wrap;
 }
 
 function formatMaxTimeLabel(index, valueMap) {
@@ -733,9 +808,9 @@ function formatMaxTimeLabel(index, valueMap) {
 }
 
 function renderOptionRow(w, panelData) {
-  const stacked = w.layout !== "inline";
+  const inline = w.layout === "inline";
   const row = document.createElement("div");
-  row.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--control-below";
+  row.className = "opui-sp-row" + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked opui-sp-row--control-below");
   row.dataset.param = w.param;
   row.dataset.widget = "option";
   const valueMap = w.value_map || {};
@@ -747,9 +822,7 @@ function renderOptionRow(w, panelData) {
 
   const text = document.createElement("div");
   text.className = "opui-sp-row-text";
-  text.innerHTML = `
-    <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
-    ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
+  text.innerHTML = `<div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>`;
   row.appendChild(text);
 
   const bar = document.createElement("div");
@@ -783,6 +856,7 @@ function renderOptionRow(w, panelData) {
   plus.addEventListener("click", () => save(idx + step));
   bar.append(minus, span, plus);
   row.appendChild(bar);
+  bindRowExpand(row, { ...w, desc: w.desc ? t(w.desc) : "" });
   return row;
 }
 
@@ -960,11 +1034,11 @@ function renderActionRow(w) {
   row.innerHTML = `
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
-      ${desc ? `<div class="opui-sp-row-desc">${escapeHtml(desc)}</div>` : ""}
     </div>
     <div class="opui-row-actions">
       <button type="button" class="opui-btn" ${disabled ? "disabled" : ""}>${escapeHtml(t(w.button || "GO"))}</button>
     </div>`;
+  if (desc) bindRowExpand(row, { desc });
   const btn = row.querySelector("button");
   if (disabled) {
     btn.disabled = true;

@@ -288,6 +288,48 @@ export function showHtml(opts) {
   });
 }
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+export function bindRowExpand(row, w) {
+  const text = row.querySelector(".opui-sp-row-text");
+  if (!text) return;
+  const hasDesc = !!(w.desc || w.confirm_experimental);
+  if (!hasDesc) return;
+
+  if (w.desc && !text.querySelector(".opui-sp-row-desc--expandable:not(.opui-sp-row-desc--experimental)")) {
+    const descEl = document.createElement("div");
+    descEl.className = "opui-sp-row-desc opui-sp-row-desc--expandable";
+    descEl.hidden = true;
+    descEl.innerHTML = escapeHtml(w.desc).replace(/\n/g, "<br>");
+    text.appendChild(descEl);
+  }
+  if (w.confirm_experimental && !text.querySelector(".opui-sp-row-desc--experimental")) {
+    const expDesc = document.createElement("div");
+    expDesc.className = "opui-sp-row-desc opui-sp-row-desc--expandable opui-sp-row-desc--experimental";
+    expDesc.hidden = true;
+    text.appendChild(expDesc);
+  }
+
+  text.classList.add("opui-sp-row-text--expandable");
+  text.addEventListener("click", (e) => {
+    if (e.target.closest("label, button, input, .opui-sp-toggle, .opui-multi-btn-group, .opui-option-bar, .opui-choice-group")) {
+      return;
+    }
+    let open = false;
+    text.querySelectorAll(".opui-sp-row-desc--expandable").forEach((el) => {
+      el.hidden = !el.hidden;
+      if (!el.hidden) open = true;
+    });
+    row.classList.toggle("opui-sp-row--desc-open", open);
+  });
+}
+
 export function createSpToggle(w, panelData, globalState, handlers) {
   const row = document.createElement("div");
   row.className = "opui-sp-row" + (w.stacked ? " opui-sp-row--stacked opui-sp-row--toggle-below" : "");
@@ -301,10 +343,10 @@ export function createSpToggle(w, panelData, globalState, handlers) {
   const textHtml = `
     <div class="opui-sp-row-text">
       ${w.label ? `<div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>` : ""}
-      ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(w.desc)}</div>` : ""}
-      ${w.needs_cycle ? `<div class="opui-sp-row-desc opui-sp-row-desc--hint">${tr("Requires reboot")}</div>` : ""}
+      ${w.needs_cycle ? `<div class="opui-sp-row-desc opui-sp-row-desc--hint">${tr("Changing this setting will restart sunnypilot if the car is powered on.")}</div>` : ""}
     </div>`;
   row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${toggleHtml}${textHtml}`;
+  bindRowExpand(row, { ...w, desc: w.desc || "" });
   const input = row.querySelector("input");
   const label = row.querySelector(".opui-sp-toggle");
   input?.addEventListener("change", async () => {
@@ -352,12 +394,4 @@ export function createDualButton(left, right, onLeft, onRight) {
   l?.addEventListener("click", onLeft);
   r?.addEventListener("click", onRight);
   return row;
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

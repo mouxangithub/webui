@@ -119,6 +119,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   has_longitudinal = False
   alpha_long_available = False
+  torque_control_allowed = True
+  lateral_jerk_torque = False
+  cp_loaded = False
   standstill = bool(getattr(cs, "standstill", False))
   standstill_timer_enabled = False
   try:
@@ -130,7 +133,14 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     from openpilot.selfdrive.ui.ui_state import ui_state
     has_longitudinal = bool(ui_state.has_longitudinal_control)
     if ui_state.CP is not None:
+      cp_loaded = True
       alpha_long_available = bool(getattr(ui_state.CP, "alphaLongitudinalAvailable", False))
+      try:
+        from opendbc.car.structs import car
+        torque_control_allowed = ui_state.CP.steerControlType != car.CarParams.SteerControlType.angle
+      except Exception:
+        torque_control_allowed = True
+    lateral_jerk_torque = bool(ui_state.params.get_bool("LateralJerkTorqueController"))
   except Exception:
     pass
 
@@ -191,6 +201,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "personality_index": _personality_index(personality),
     "has_longitudinal_control": has_longitudinal,
     "alpha_longitudinal_available": alpha_long_available,
+    "cp_loaded": cp_loaded,
+    "torque_control_allowed": torque_control_allowed,
+    "lateral_jerk_torque": lateral_jerk_torque,
     "standstill": standstill,
     "standstill_timer_enabled": standstill_timer_enabled,
     "alert": {

@@ -1393,16 +1393,64 @@ body {
 }
 .opui-sp-toggle.on .opui-sp-toggle-thumb { transform: translateX(90px); }
 
+.opui-sp-row--control-inline {
+  flex-direction: row;
+  align-items: center;
+  min-height: 170px;
+  gap: 28px;
+}
+
+.opui-sp-row--control-inline .opui-sp-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.opui-sp-row--control-inline .opui-option-bar,
+.opui-sp-row--control-inline .opui-multi-btn-group {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.opui-multi-btn-group--inline button {
+  min-width: 364px;
+  width: 364px;
+}
+
+.opui-sp-row-text--expandable {
+  cursor: pointer;
+}
+
+.opui-sp-row-desc--expandable[hidden] {
+  display: none !important;
+}
+
+.opui-sp-row--desc-open {
+  align-items: flex-start;
+  padding-bottom: 28px;
+}
+
+.opui-subpanel-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 48px 16px;
+}
+
 .opui-simple-btn {
-  width: calc(100% - 96px);
-  margin: 16px 48px;
+  width: min(800px, calc(100% - 96px));
+  margin: 0;
   height: 150px;
   border: none;
   border-radius: 20px;
-  background: #3a3a3a;
+  background: #393939;
   color: #fff;
   font-size: 44px;
   cursor: pointer;
+}
+
+.opui-simple-btn:disabled {
+  background: #121212;
+  color: #5c5c5c;
+  cursor: not-allowed;
 }
 
 .opui-progress {
