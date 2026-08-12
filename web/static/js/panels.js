@@ -17,7 +17,7 @@ function paramIsOn(val) {
 
 function resolveWidgetType(w) {
   const known = new Set([
-    "section", "html", "action", "subpanel", "custom", "dual_button", "option",
+    "section", "separator", "html", "action", "subpanel", "custom", "dual_button", "option",
     "readonly", "bool", "choice", "int", "multiple_button",
   ]);
   if (known.has(w.type)) return w.type;
@@ -72,6 +72,10 @@ function formatOptionLabel(w, rawVal, panelData = panelDataRef) {
   if (fmt === "lane_turn_speed") return `${Math.round(val / 100)}`;
   if (fmt === "torque_lat_accel") return `${(val / 100).toFixed(2)} m/s²`;
   if (fmt === "torque_friction") return `${(val / 100).toFixed(2)}`;
+  if (fmt === "blinker_min_speed") {
+    return `${val} ${globalState.is_metric ? t("km/h") : t("mph")}`;
+  }
+  if (fmt === "blinker_delay") return `${val} ${t("s")}`;
   if (fmt === "speed_limit_offset") {
     const offsetType = panelDataRef?.values?.SpeedLimitOffsetType ?? "0";
     if (String(offsetType) === "2") return `${val}%`;
@@ -378,13 +382,16 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
     return;
   }
   if (titleEl) {
+    const header = titleEl.closest(".opui-panel-header");
     if (data.parent && options.showBack !== false) {
+      header?.classList.add("opui-panel-header--subpanel");
       titleEl.innerHTML = `<button type="button" class="opui-back" data-parent="${escapeAttr(data.parent)}">‹</button> ${escapeHtml(t(data.title))}`;
       titleEl.querySelector(".opui-back")?.addEventListener("click", () => {
         if (onNavigateSubpanel) onNavigateSubpanel(data.parent);
       });
     } else {
-      titleEl.textContent = t(data.title);
+      header?.classList.remove("opui-panel-header--subpanel");
+      titleEl.textContent = "";
     }
   }
 
@@ -479,6 +486,13 @@ function renderWidget(w, panelData) {
     row.className = "opui-row opui-row--section";
     row.textContent = t(w.label);
     return row;
+  }
+
+  if (kind === "separator") {
+    const sep = document.createElement("div");
+    sep.className = "opui-sp-separator";
+    sep.setAttribute("aria-hidden", "true");
+    return sep;
   }
 
   if (kind === "html") {
@@ -591,7 +605,7 @@ function renderMultipleButtonRow(w, panelData) {
   text.className = "opui-sp-row-text";
   text.innerHTML = `
     <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
-    ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
+    ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
   row.appendChild(text);
 
   const group = document.createElement("div");
@@ -636,7 +650,7 @@ function renderChoiceRow(w) {
   text.className = "opui-sp-row-text";
   text.innerHTML = `
     <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
-    ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
+    ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
   row.appendChild(text);
 
   const group = document.createElement("div");
@@ -719,9 +733,9 @@ function formatMaxTimeLabel(index, valueMap) {
 }
 
 function renderOptionRow(w, panelData) {
-  const stacked = widgetUsesStacked(w);
+  const stacked = w.layout !== "inline";
   const row = document.createElement("div");
-  row.className = "opui-sp-row" + (stacked ? " opui-sp-row--stacked opui-sp-row--control-below" : " opui-sp-row--stacked");
+  row.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--control-below";
   row.dataset.param = w.param;
   row.dataset.widget = "option";
   const valueMap = w.value_map || {};
@@ -735,11 +749,11 @@ function renderOptionRow(w, panelData) {
   text.className = "opui-sp-row-text";
   text.innerHTML = `
     <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
-    ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
+    ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
   row.appendChild(text);
 
   const bar = document.createElement("div");
-  bar.className = stacked ? "opui-option-bar" : "opui-int-control";
+  bar.className = "opui-option-bar";
   const minus = document.createElement("button");
   minus.type = "button";
   minus.textContent = "−";

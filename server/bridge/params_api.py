@@ -86,6 +86,19 @@ def get_param(key: str) -> dict[str, Any]:
     return {"ok": False, "error": str(exc)}
 
 
+def _coerce_write_value(ptype_enum: ParamKeyType, value: str) -> Any:
+  if ptype_enum == ParamKeyType.BOOL:
+    return value in ("1", "true", "True", True)
+  if ptype_enum == ParamKeyType.INT:
+    return int(value)
+  if ptype_enum == ParamKeyType.FLOAT:
+    return float(value)
+  if ptype_enum == ParamKeyType.JSON:
+    import json
+    return json.loads(value) if isinstance(value, str) else value
+  return value
+
+
 def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, Any]:
   try:
     p = _params()
@@ -101,9 +114,9 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
       pass
 
     if ptype_enum == ParamKeyType.BOOL:
-      p.put_bool(key, value in ("1", "true", "True", True), block=True)
+      p.put_bool(key, _coerce_write_value(ptype_enum, value), block=True)
     else:
-      p.put(key, value, block=True)
+      p.put(key, _coerce_write_value(ptype_enum, value), block=True)
 
     if needs_cycle:
       p.put_bool("OnroadCycleRequested", True, block=True)
@@ -144,7 +157,7 @@ def panel_values(panel_id: str) -> dict[str, Any]:
       if isinstance(dep, dict) and dep.get("param"):
         _ensure_param(dep["param"])
     wtype = w.get("type")
-    if wtype in ("section", "html", "action", "subpanel"):
+    if wtype in ("section", "separator", "html", "action", "subpanel"):
       widgets_out.append({**w, "available": True})
       continue
     if wtype == "custom":

@@ -301,8 +301,8 @@ export function createSpToggle(w, panelData, globalState, handlers) {
   const textHtml = `
     <div class="opui-sp-row-text">
       ${w.label ? `<div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>` : ""}
-      ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(w.desc)}</div>` : ""}
-      ${w.needs_cycle ? `<div class="opui-sp-row-desc">${tr("Requires reboot")}</div>` : ""}
+      ${w.show_desc && w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(w.desc)}</div>` : ""}
+      ${w.needs_cycle ? `<div class="opui-sp-row-desc opui-sp-row-desc--hint">${tr("Requires reboot")}</div>` : ""}
     </div>`;
   row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${toggleHtml}${textHtml}`;
   const input = row.querySelector("input");

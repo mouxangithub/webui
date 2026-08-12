@@ -11,8 +11,8 @@
   <div id="app" class="opui" data-screen="home">
     <!-- Offroad / settings sidebar (left 500px when settings) -->
     <aside id="settings-sidebar" class="opui-sidebar" hidden>
+      <button type="button" id="btn-close-settings" class="opui-close" aria-label="Close"></button>
       <nav class="opui-nav" id="nav"></nav>
-      <button type="button" id="btn-close-settings" class="opui-close" aria-label="Close">×</button>
     </aside>
 
     <!-- Metrics sidebar (300px) — offroad home + onroad -->
@@ -185,6 +185,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> Experimental</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=6"></script>
+  <script type="module" src="/static/js/app.js?v=8"></script>
 </body>
 </html>
