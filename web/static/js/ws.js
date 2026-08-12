@@ -14,15 +14,31 @@ class OpuiSocket {
     this._shouldRun = false;
     this.bootstrap = null;
     this._helloWaiters = [];
+    this._lastHome = null;
+    this._lastState = null;
   }
 
   get connected() {
     return this._connected;
   }
 
+  get lastHome() {
+    return this._lastHome;
+  }
+
+  get lastState() {
+    return this._lastState;
+  }
+
   on(type, fn) {
     if (!this._handlers.has(type)) this._handlers.set(type, new Set());
     this._handlers.get(type).add(fn);
+    if (type === "home" && this._lastHome) {
+      try { fn(this._lastHome); } catch (_) { /* ignore */ }
+    }
+    if (type === "state" && this._lastState) {
+      try { fn(this._lastState); } catch (_) { /* ignore */ }
+    }
     return () => this._handlers.get(type)?.delete(fn);
   }
 
@@ -73,6 +89,12 @@ class OpuiSocket {
 
       if (type === "hello") {
         this.bootstrap = msg.bootstrap || null;
+        if (this.bootstrap?.home) {
+          this._lastHome = { type: "home", data: this.bootstrap.home };
+        }
+        if (this.bootstrap?.state) {
+          this._lastState = { type: "state", data: this.bootstrap.state };
+        }
         this._emit("hello", msg);
         for (const resolve of this._helloWaiters.splice(0)) resolve(msg);
       }
@@ -80,6 +102,9 @@ class OpuiSocket {
       if ((type === "put_param_result" || type === "rpc_result") && id != null) {
         this._resolvePending(id, msg);
       }
+
+      if (type === "home") this._lastHome = msg;
+      if (type === "state") this._lastState = msg;
 
       this._emit(type, msg);
     };

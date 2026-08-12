@@ -24,7 +24,7 @@ _broadcast_task: asyncio.Task | None = None
 
 STATE_INTERVAL = 0.2
 PANEL_INTERVAL = 0.4
-HOME_INTERVAL = 5.0
+HOME_INTERVAL = 1.5
 CUSTOM_INTERVAL = 1.0
 MODEL_INTERVAL = 0.1
 

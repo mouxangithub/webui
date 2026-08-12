@@ -4,7 +4,7 @@ import {
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
 import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud } from "./onroad.js";
-import { updateHomeScreen } from "./home.js";
+import { updateHomeScreen, showHomeLoading, refreshHomeScreen } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode } from "./sidebar.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
@@ -115,6 +115,13 @@ function setScreen(name) {
     app.classList.remove("opui--onroad-sidebar-hidden");
     notifyPanelWatch(null);
     opuiWs.unwatchModelOverlay();
+    if (opuiWs.lastHome?.data) {
+      updateHomeScreen(opuiWs.lastHome.data);
+    } else if (opuiWs.bootstrap?.home) {
+      updateHomeScreen(opuiWs.bootstrap.home);
+    } else {
+      refreshHomeScreen();
+    }
   } else if (name === "onroad") {
     metricsSidebar.hidden = !onroadSidebarVisible;
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
@@ -179,12 +186,16 @@ async function loadCurrentPanel() {
 
 async function bootstrap() {
   opuiWs.connect();
+  showHomeLoading();
+  setScreen("home");
+
   await opuiWs.waitHello(8000);
 
   const meta = opuiWs.bootstrap;
   if (meta) {
     devPc = !!meta.dev_pc;
     applyDesignTokens(meta);
+    if (meta.home) updateHomeScreen(meta.home);
     if (devPc) {
       document.getElementById("camera-wrap")?.classList.add("is-dev-pc");
     }
@@ -193,17 +204,24 @@ async function bootstrap() {
       const fallback = await apiGet("/api/opui/bootstrap");
       devPc = !!fallback.dev_pc;
       applyDesignTokens(fallback);
-    } catch (_) { /* offline */ }
+      if (fallback.home) updateHomeScreen(fallback.home);
+      else refreshHomeScreen();
+    } catch (_) {
+      refreshHomeScreen();
+    }
   }
 
-  panels = await loadPanelList();
+  const [panelResult] = await Promise.all([
+    loadPanelList(),
+    loadI18n(true),
+  ]);
+  panels = panelResult;
   if (!panels.length) {
     panels = [
       { id: "device", title: "Device" },
       { id: "toggles", title: "Toggles" },
     ];
   }
-  await loadI18n(true);
   currentPanel = panels[0]?.id || "device";
   renderNav();
 }
@@ -246,7 +264,7 @@ function setupWebSocket() {
     if (msg?.data) handleState(msg.data);
   });
   opuiWs.on("home", (msg) => {
-    if (msg?.data && app.dataset.screen === "home") updateHomeScreen(msg.data);
+    if (msg?.data) updateHomeScreen(msg.data);
   });
   opuiWs.on("panel", (msg) => {
     if (app.dataset.screen !== "settings") return;
@@ -308,14 +326,13 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindStreamButton();
 initModelCanvas();
+setupWebSocket();
 
-bootstrap().then(async () => {
-  setupWebSocket();
+bootstrap().then(() => {
   initDevPanel();
   fitOpuiScale();
   window.addEventListener("resize", () => {
     fitOpuiScale();
     syncModelOverlayWatch();
   });
-  setScreen("home");
 });

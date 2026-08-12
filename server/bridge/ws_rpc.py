@@ -48,6 +48,8 @@ def bootstrap_payload() -> dict[str, Any]:
     "dev_pc": os.environ.get("WEBUI_DEV_PC") == "1",
     "design": {"width": 2160, "height": 1080, "variant": "BIG"},
     "webrtc": {"port": 5001},
+    "home": get_home(),
+    "state": get_state(),
     **tokens_payload(),
   }
 

@@ -7,6 +7,19 @@ const PRIME_FEATURES = [
   "远程快照",
 ];
 
+const HOME_SKELETON = `
+  <div class="opui-home-skeleton">
+    <div class="opui-home-skeleton-bar"></div>
+    <div class="opui-home-skeleton-bar opui-home-skeleton-bar--short"></div>
+  </div>`;
+
+export function showHomeLoading() {
+  const prime = document.getElementById("home-prime");
+  const setup = document.getElementById("home-setup");
+  if (prime && !prime.dataset.loaded) prime.innerHTML = HOME_SKELETON;
+  if (setup && !setup.dataset.loaded) setup.innerHTML = HOME_SKELETON;
+}
+
 export function updateHomeScreen(home) {
   if (!home?.ok) return;
 
@@ -22,9 +35,19 @@ export function updateHomeScreen(home) {
   renderSetupCard(home);
 }
 
+export async function refreshHomeScreen() {
+  showHomeLoading();
+  try {
+    const { apiGet } = await import("./api.js");
+    const home = await apiGet("/api/opui/home");
+    updateHomeScreen(home);
+  } catch (_) { /* keep skeleton */ }
+}
+
 function renderPrimeCard(home) {
   const el = document.getElementById("home-prime");
   if (!el) return;
+  el.dataset.loaded = "1";
 
   if (home.prime) {
     el.innerHTML = `
@@ -49,6 +72,7 @@ function renderPrimeCard(home) {
 function renderSetupCard(home) {
   const el = document.getElementById("home-setup");
   if (!el) return;
+  el.dataset.loaded = "1";
 
   if (!home.paired) {
     el.innerHTML = `

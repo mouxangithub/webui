@@ -396,6 +396,30 @@ body {
   flex-direction: column;
 }
 
+.opui-home-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 0;
+  animation: opui-pulse 1.2s ease-in-out infinite;
+}
+
+.opui-home-skeleton-bar {
+  height: 120px;
+  border-radius: 24px;
+  background: linear-gradient(90deg, #2a2a2a 0%, #3a3a3a 50%, #2a2a2a 100%);
+  background-size: 200% 100%;
+}
+
+.opui-home-skeleton-bar--short {
+  height: 280px;
+}
+
+@keyframes opui-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 .opui-prime {
   background: #333;
   border-radius: 24px;

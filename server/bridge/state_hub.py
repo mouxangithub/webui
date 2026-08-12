@@ -24,6 +24,10 @@ def start_state_hub() -> None:
   global _running, _thread
   if _running:
     return
+  try:
+    _set_home(snapshot_home())
+  except Exception:
+    pass
   _running = True
   _thread = threading.Thread(target=_run_loop, name="webui-state-hub", daemon=True)
   _thread.start()
@@ -149,7 +153,7 @@ def _device_loop() -> None:
         "ui_status": "disengaged",
       })
     home_ticks += 1
-    if home_ticks >= 50:
+    if home_ticks >= 25:
       try:
         _set_home(snapshot_home())
       except Exception:
