@@ -21,7 +21,7 @@ from webui.server.bridge.network_api import (
   wifi_set_tethering_password,
   wifi_status,
 )
-from webui.server.bridge.webrtc_api import webrtc_offer, webrtc_schema
+from webui.server.bridge.webrtc_api import webrtc_notify, webrtc_offer, webrtc_schema
 from webui.server.bridge.trips_api import trips_stats
 from webui.server.bridge.models_api import models_select, models_status
 from webui.server.bridge.design_tokens import tokens_payload
@@ -175,10 +175,18 @@ async def api_webrtc_offer(request: web.Request) -> web.Response:
   try:
     body = await request.json()
     sdp = str(body.get("sdp", ""))
-    camera = str(body.get("init_camera", "roadCameraState"))
+    camera = str(body.get("init_camera", "road"))
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
   return json_response(webrtc_offer(sdp, camera))
+
+
+async def api_webrtc_notify(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(webrtc_notify(body))
 
 
 async def api_trips(_request: web.Request) -> web.Response:
@@ -375,6 +383,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_post("/api/opui/device/language", api_set_language)
   app.router.add_get("/api/opui/webrtc/schema", api_webrtc_schema)
   app.router.add_post("/api/opui/webrtc/offer", api_webrtc_offer)
+  app.router.add_post("/api/opui/webrtc/notify", api_webrtc_notify)
   app.router.add_get("/ws/opui", ws_opui_handler)
 
   # Legacy alias

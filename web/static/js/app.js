@@ -3,7 +3,7 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
-import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton } from "./onroad.js";
+import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog } from "./onroad.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
@@ -439,6 +439,7 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindStreamButton();
 bindExperimentalButton();
+bindDriverCameraDialog();
 bindDmArcClick();
 bindHomeHeader();
 initModelCanvas();

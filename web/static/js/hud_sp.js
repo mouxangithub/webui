@@ -129,8 +129,6 @@ export function bindDmArcClick() {
   wrap.addEventListener("click", (ev) => {
     if (wrap.hidden) return;
     ev.stopPropagation();
-    const dlg = document.getElementById("driver-camera-dialog");
-    dlg?.showModal();
-    document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg?.close(), { once: true });
+    window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
   });
 }

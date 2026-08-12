@@ -85,7 +85,7 @@
 | 车道线/路径/前车 | `ModelRenderer` + shader | `model_overlay.py` → `model_canvas.js` | 🟡 基础 canvas |
 | WebSocket 推送 | `watch_model_overlay` | `ws.js` + `app.js` | ✅ |
 | Experimental 彩虹路径 | 加速度渐变 | 待 canvas 实现 | 🔧 |
-| 宽角流切换 | experimental + 车速滞回 | 无 | ❌ |
+| 宽角流切换 | experimental + 车速滞回 | WebRTC notify 切换 wideRoad/road | ✅ |
 
 ---
 

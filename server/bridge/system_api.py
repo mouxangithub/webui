@@ -110,6 +110,14 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       p.put_bool("IsLiveStreaming", False, block=True)
       return {"ok": True, "action": action}
 
+    if action == "driver_view_enable":
+      p.put_bool("IsDriverViewEnabled", True, block=True)
+      return {"ok": True, "action": action}
+
+    if action == "driver_view_disable":
+      p.put_bool("IsDriverViewEnabled", False, block=True)
+      return {"ok": True, "action": action}
+
     if action == "bookmark":
       try:
         import openpilot.cereal.messaging as messaging

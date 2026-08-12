@@ -18,6 +18,23 @@ def create_app() -> web.Application:
   start_ws_broadcast(app)
 
   @web.middleware
+  async def cors(request, handler):
+    if request.method == "OPTIONS":
+      resp = web.Response(status=204)
+    else:
+      resp = await handler(request)
+    origin = request.headers.get("Origin")
+    if origin:
+      resp.headers["Access-Control-Allow-Origin"] = origin
+      resp.headers["Vary"] = "Origin"
+      resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+      resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+      resp.headers["Access-Control-Max-Age"] = "86400"
+    return resp
+
+  app.middlewares.insert(0, cors)
+
+  @web.middleware
   async def no_cache_js(request, handler):
     resp = await handler(request)
     if request.path.startswith("/static/js/") or request.path.startswith("/static/css/"):

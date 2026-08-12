@@ -1,11 +1,15 @@
-import { apiGet, apiPost, apiPut } from "./api.js";
+import { apiGet, apiPut } from "./api.js";
 import { updateSpHud } from "./hud_sp.js";
 import { updateDevUi } from "./hud_dev.js";
 import { updateCircularAlert } from "./hud_circular.js";
 import { updateTorqueBar } from "./hud_torque.js";
-
-let pc = null;
-let streaming = false;
+import {
+  startRoadStream as startRoadWebrtc,
+  stopRoadStream as stopRoadWebrtc,
+  updateRoadCameraForState,
+  openDriverCamera,
+  closeDriverCamera,
+} from "./webrtc_stream.js";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -16,50 +20,14 @@ const ICBM_HOLD_TICKS = 60;
 
 let expHeldMode = null;
 let expHoldUntil = 0;
+let lastOnroadState = null;
 
 export async function startRoadStream() {
   const video = document.getElementById("road-video");
   const wrap = document.getElementById("camera-wrap");
-  if (!video || streaming) return;
-
-  const boot = await apiGet("/api/opui/bootstrap").catch(() => ({}));
-  if (boot.dev_pc) {
-    wrap?.classList.add("is-dev-pc");
-    return;
-  }
-
-  await apiPost("/api/opui/action/webrtc_enable");
-  for (let i = 0; i < 20; i++) {
-    const schema = await apiGet("/api/opui/webrtc/schema");
-    if (schema.ok) break;
-    await sleep(500);
-  }
-
   try {
-    pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-    pc.addTransceiver("video", { direction: "recvonly" });
-    pc.ontrack = (ev) => {
-      if (ev.streams?.[0]) {
-        video.srcObject = ev.streams[0];
-        wrap?.classList.add("streaming");
-        streaming = true;
-      }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitIceComplete(pc);
-
-    const resp = await apiPost("/api/opui/webrtc/offer", {
-      sdp: pc.localDescription.sdp,
-      init_camera: "roadCameraState",
-    });
-
-    if (!resp.ok || !resp.sdp) {
-      throw new Error(resp.error || "no SDP answer");
-    }
-
-    await pc.setRemoteDescription({ type: "answer", sdp: resp.sdp });
+    await startRoadWebrtc(video, wrap);
+    if (lastOnroadState) updateRoadCameraForState(lastOnroadState);
   } catch (err) {
     console.warn("WebRTC:", err);
     const fb = document.getElementById("camera-fallback");
@@ -71,15 +39,9 @@ export async function startRoadStream() {
 }
 
 export async function stopRoadStream() {
-  if (pc) {
-    pc.close();
-    pc = null;
-  }
-  streaming = false;
   const video = document.getElementById("road-video");
-  if (video) video.srcObject = null;
-  document.getElementById("camera-wrap")?.classList.remove("streaming", "is-onroad");
-  await apiPost("/api/opui/action/webrtc_disable");
+  const wrap = document.getElementById("camera-wrap");
+  await stopRoadWebrtc(video, wrap);
 }
 
 function applyCruiseStyle(st) {
@@ -146,6 +108,8 @@ function applyExperimentalButton(st) {
 
 export function updateOnroadHud(st) {
   if (!st?.ok) return;
+  lastOnroadState = st;
+  updateRoadCameraForState(st);
 
   const hud = document.getElementById("hud");
   const speedEl = document.getElementById("hud-speed");
@@ -219,27 +183,6 @@ export function updateOnroadHud(st) {
   updateTorqueBar(st);
 }
 
-function waitIceComplete(pc) {
-  return new Promise((resolve) => {
-    if (pc.iceGatheringState === "complete") {
-      resolve();
-      return;
-    }
-    const check = () => {
-      if (pc.iceGatheringState === "complete") {
-        pc.removeEventListener("icegatheringstatechange", check);
-        resolve();
-      }
-    };
-    pc.addEventListener("icegatheringstatechange", check);
-    setTimeout(resolve, 3000);
-  });
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 export function bindStreamButton() {
   document.getElementById("btn-start-stream")?.addEventListener("click", () => startRoadStream());
 }
@@ -247,7 +190,7 @@ export function bindStreamButton() {
 export function bindExperimentalButton() {
   document.getElementById("btn-experimental")?.addEventListener("click", async () => {
     const boot = await apiGet("/api/opui/bootstrap").catch(() => ({}));
-    const st = boot?.state || {};
+    const st = boot?.state || lastOnroadState || {};
     if (!st.experimental_mode_confirmed || !st.has_longitudinal_control) return;
     const cur = !!st.experimental_mode;
     const next = !cur;
@@ -255,5 +198,24 @@ export function bindExperimentalButton() {
     expHeldMode = next;
     expHoldUntil = performance.now() + 2000;
     applyExperimentalButton({ ...st, experimental_mode: next });
+    updateRoadCameraForState({ ...st, experimental_mode: next });
   });
+}
+
+export function bindDriverCameraDialog() {
+  const dlg = document.getElementById("driver-camera-dialog");
+  if (!dlg) return;
+
+  window.addEventListener("opui:open-driver-camera", async () => {
+    try {
+      await openDriverCamera(lastOnroadState);
+      if (!dlg.open) dlg.showModal();
+    } catch (err) {
+      console.warn("Driver camera:", err);
+    }
+  });
+
+  const onClose = () => closeDriverCamera().catch(() => {});
+  document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg.close());
+  dlg.addEventListener("close", onClose);
 }

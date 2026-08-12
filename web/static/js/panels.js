@@ -1077,9 +1077,7 @@ async function showTrainingGuide() {
 
 async function runDualSideAction(side) {
   if (side.custom === "driver_camera") {
-    const dlg = document.getElementById("driver-camera-dialog");
-    dlg?.showModal();
-    document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg?.close(), { once: true });
+    window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
     return;
   }
   if (side.action === "open_regulatory") {
@@ -1998,10 +1996,8 @@ function renderDriverCameraRow() {
     </div>
     <button type="button" class="opui-btn" ${disabled ? "disabled" : ""}>${escapeHtml(t("PREVIEW"))}</button>`;
   if (!disabled) {
-    row.querySelector("button")?.addEventListener("click", async () => {
-      const dlg = document.getElementById("driver-camera-dialog");
-      dlg?.showModal();
-      document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg?.close(), { once: true });
+    row.querySelector("button")?.addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
     });
   }
   return row;

@@ -42,7 +42,7 @@ from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_stat
 from webui.server.bridge.system_api import run_action, software_status
 from webui.server.bridge.trips_api import trips_stats
 from webui.server.bridge.vehicle_api import vehicle_brand_widgets, vehicle_platforms, vehicle_select
-from webui.server.bridge.webrtc_api import webrtc_offer, webrtc_schema
+from webui.server.bridge.webrtc_api import webrtc_notify, webrtc_offer, webrtc_schema
 from webui.server.deps import openpilot_root, read_version
 
 _PANEL_GET = re.compile(r"^/api/opui/panels/([^/]+)$")
@@ -253,7 +253,9 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
       return webrtc_schema()
 
     if method == "POST" and clean_path == "/api/opui/webrtc/offer":
-      return webrtc_offer(str(body.get("sdp", "")), str(body.get("init_camera", "roadCameraState")))
+      return webrtc_offer(str(body.get("sdp", "")), str(body.get("init_camera", "road")))
+    if method == "POST" and clean_path == "/api/opui/webrtc/notify":
+      return webrtc_notify(body if isinstance(body, dict) else {})
 
     if method == "GET" and clean_path == "/api/opui/params/toggles":
       return panel_values("toggles")
