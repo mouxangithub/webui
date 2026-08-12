@@ -322,6 +322,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/device/regulatory", api_device_regulatory)
   app.router.add_get("/api/opui/developer/error-log", api_developer_error_log)
   app.router.add_post("/api/opui/device/language", api_set_language)
+  app.router.add_get("/api/opui/webrtc/schema", api_webrtc_schema)
   app.router.add_post("/api/opui/webrtc/offer", api_webrtc_offer)
 
   # Legacy alias

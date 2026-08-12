@@ -17,6 +17,23 @@ NETWORK_TYPES = {
 }
 
 
+def _cpu_temp_c(ds) -> int | None:
+  if not hasattr(ds, "cpuTempC"):
+    return None
+  temp = ds.cpuTempC
+  try:
+    if hasattr(temp, "__len__") and not isinstance(temp, (str, bytes)):
+      temp = temp[0] if len(temp) else None
+  except TypeError:
+    pass
+  if temp is None:
+    return None
+  try:
+    return round(float(temp))
+  except (TypeError, ValueError):
+    return None
+
+
 def _derive_ui_status(ss, cs, mads_enabled: bool) -> str:
   if getattr(ss, "state", None) is not None:
     state_name = str(ss.state).lower()
@@ -95,7 +112,8 @@ def snapshot_ui_state() -> dict[str, Any]:
     if sm.valid["pandaStates"] and sm["pandaStates"]:
       panda_online = any(getattr(p, "pandaType", 0) != 0 for p in sm["pandaStates"])
 
-    net_type = NETWORK_TYPES.get(int(ds.networkType), "--")
+    net_raw = ds.networkType.raw if hasattr(ds, "networkType") else 0
+    net_type = NETWORK_TYPES.get(int(net_raw), "--")
     thermal = str(ds.thermalStatus).split(".")[-1].lower() if hasattr(ds, "thermalStatus") else "green"
 
     sunnylink_ping = ""
@@ -171,7 +189,7 @@ def snapshot_ui_state() -> dict[str, Any]:
         "network_type": net_type,
         "network_metered": bool(ds.networkMetered) if hasattr(ds, "networkMetered") else False,
         "thermal": thermal,
-        "cpu_temp": round(float(ds.cpuTempC)) if hasattr(ds, "cpuTempC") else None,
+        "cpu_temp": _cpu_temp_c(ds),
         "memory_usage_percent": int(ds.memoryUsagePercent) if hasattr(ds, "memoryUsagePercent") else None,
         "free_space_percent": int(ds.freeSpacePercent) if hasattr(ds, "freeSpacePercent") else None,
         "athena_status": str(ds.athenaStatus).split(".")[-1] if hasattr(ds, "athenaStatus") else "",

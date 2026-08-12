@@ -26,7 +26,7 @@ def firehose_status() -> dict[str, Any]:
     sm = messaging.SubMaster(["deviceState"], poll="deviceState")
     sm.update(200)
     ds = sm["deviceState"]
-    net = int(ds.networkType) if hasattr(ds, "networkType") else 0
+    net = ds.networkType.raw if hasattr(ds, "networkType") else 0
     net_names = {0: "--", 1: "Wi-Fi", 2: "ETH", 3: "2G", 4: "3G", 5: "LTE", 6: "5G"}
     raw = p.get("ApiCache_FirehoseStats") or "{}"
     try:
