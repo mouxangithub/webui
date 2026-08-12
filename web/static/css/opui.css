@@ -202,9 +202,8 @@ body {
   top: 35px;
   width: 200px;
   height: 117px;
-  border-radius: 20px;
-  background-color: #fff;
-  background-size: 55% auto;
+  background-color: transparent;
+  background-size: 100% 100%;
 }
 
 .opui-sidebar-btn--home,
@@ -214,8 +213,9 @@ body {
   top: 860px;
   width: 180px;
   height: 180px;
-  border-radius: 50%;
-  background-color: #fff;
+  border-radius: 0;
+  background-color: transparent;
+  background-size: 100% 100%;
 }
 
 .opui-sidebar-btn--home {

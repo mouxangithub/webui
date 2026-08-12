@@ -86,10 +86,14 @@ function applySidebarAssets() {
   const settingsImg = assetUrl("selfdrive/assets/images/button_settings.png");
   const homeImg = assetUrl("selfdrive/assets/images/button_home.png");
   const flagImg = assetUrl("selfdrive/assets/images/button_flag.png");
-  if (settingsBtn) settingsBtn.style.backgroundImage = `url("${settingsImg}")`;
+  if (settingsBtn) {
+    settingsBtn.style.backgroundImage = `url("${settingsImg}")`;
+    settingsBtn.style.backgroundSize = "100% 100%";
+  }
   if (bottomBtn) {
     bottomBtn.style.setProperty("--sidebar-home-img", `url("${homeImg}")`);
     bottomBtn.style.setProperty("--sidebar-flag-img", `url("${flagImg}")`);
+    bottomBtn.style.backgroundSize = "100% 100%";
   }
 }
 
@@ -361,6 +365,7 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindStreamButton();
 initModelCanvas();
+applySidebarAssets();
 setupWebSocket();
 
 bootstrap().then(() => {

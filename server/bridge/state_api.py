@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 UI_STATUS = ("disengaged", "engaged", "override", "lat_only", "long_only")
@@ -32,6 +33,17 @@ def _cpu_temp_c(ds) -> int | None:
     return round(float(temp))
   except (TypeError, ValueError):
     return None
+
+
+def _athena_connection_status(ds) -> str:
+  if not hasattr(ds, "lastAthenaPingTime"):
+    return "OFFLINE"
+  last_ping = int(ds.lastAthenaPingTime or 0)
+  if last_ping == 0:
+    return "OFFLINE"
+  if time.monotonic_ns() - last_ping < 80_000_000_000:
+    return "ONLINE"
+  return "ERROR"
 
 
 def _network_strength(ds) -> int:
@@ -221,7 +233,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       "cpu_temp": _cpu_temp_c(ds),
       "memory_usage_percent": int(ds.memoryUsagePercent) if hasattr(ds, "memoryUsagePercent") else None,
       "free_space_percent": int(ds.freeSpacePercent) if hasattr(ds, "freeSpacePercent") else None,
-      "athena_status": str(ds.athenaStatus).split(".")[-1] if hasattr(ds, "athenaStatus") else "",
+      "athena_status": _athena_connection_status(ds),
       "panda_online": panda_online,
       "sunnylink_ping": sunnylink_ping,
       "sunnylink_status": sunnylink_status,
