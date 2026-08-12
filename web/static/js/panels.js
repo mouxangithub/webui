@@ -146,6 +146,10 @@ function formatOptionLabel(w, rawVal, panelData = panelDataRef) {
     if (String(offsetType) === "1") return `${val} ${globalState.is_metric ? "km/h" : "mph"}`;
     return String(val);
   }
+  if (fmt === "acc_long_press") {
+    const mapped = valueMap[String(val)];
+    return mapped != null ? String(mapped) : String(val);
+  }
   if (hasValueMap) return formatMaxTimeLabel(val, valueMap);
   return String(val);
 }
@@ -181,6 +185,8 @@ export function setGlobalState(st) {
   globalState = st || globalState;
   updateEngagedWidgets();
   updateToggleCapabilities(st);
+  updateCruiseCapabilities(st);
+  updateVisualsCapabilities(st);
   updateSteeringCapabilities(st);
   updateSubpanelStates();
 }
@@ -207,6 +213,10 @@ function updateToggleCapabilities(st) {
     const disable = !hasLong;
     expInput.disabled = disable || (globalState.engaged && expRow?.dataset.needsCycle === "1");
     expRow?.querySelector(".opui-sp-toggle")?.classList.toggle("disabled", disable);
+    const expIcon = expRow?.querySelector(".opui-sp-row-icon");
+    if (expIcon) {
+      expIcon.src = `/api/opui/assets/selfdrive/assets/icons/${expInput?.checked ? "experimental.png" : "experimental_white.png"}`;
+    }
     if (disable && expInput.checked) {
       expInput.checked = false;
       expRow?.querySelector(".opui-sp-toggle")?.classList.remove("on");
@@ -239,6 +249,91 @@ function updateToggleCapabilities(st) {
   accelProf?.querySelectorAll("button").forEach((b) => {
     b.disabled = !hasLong || !accelOn;
   });
+}
+
+function setPanelRowDesc(row, text) {
+  if (!row || !text) return;
+  let descEl = row.querySelector(".opui-sp-row-desc:not(.opui-sp-row-desc--hint):not(.opui-sp-row-desc--experimental)");
+  if (!descEl) {
+    descEl = document.createElement("div");
+    descEl.className = "opui-sp-row-desc opui-sp-row-desc--expandable";
+    descEl.hidden = true;
+    row.querySelector(".opui-sp-row-text")?.appendChild(descEl);
+    row.querySelector(".opui-sp-row-text")?.classList.add("opui-sp-row-text--expandable");
+  }
+  descEl.innerHTML = escapeHtml(t(text)).replace(/\n/g, "<br>");
+}
+
+function setToggleRowState(param, { disabled, desc }) {
+  const row = document.querySelector(`[data-param="${CSS.escape(param)}"]`);
+  if (!row) return;
+  const input = row.querySelector("input[type=checkbox]");
+  const label = row.querySelector(".opui-sp-toggle");
+  if (disabled != null) {
+    if (input) input.disabled = !!disabled;
+    label?.classList.toggle("disabled", !!disabled);
+  }
+  if (desc) setPanelRowDesc(row, desc);
+}
+
+function updateCruiseCapabilities(st) {
+  if (!st) return;
+  const offroad = globalState.is_offroad;
+  const hasLong = st.has_longitudinal_control !== false;
+  const hasIcbm = !!st.has_icbm;
+  const pcm = !!st.pcm_cruise;
+  const sccOk = hasLong || hasIcbm;
+  const customAccOk = offroad && ((hasLong && !pcm) || hasIcbm);
+
+  let icbmDesc = "When enabled, sunnypilot will attempt to manage the built-in cruise control buttons by emulating button presses for limited longitudinal control.";
+  let icbmDisabled = !offroad;
+  if (!offroad) {
+    icbmDesc = "Start the vehicle to check vehicle compatibility.";
+  } else if (!hasIcbm) {
+    icbmDisabled = true;
+    if (hasLong) {
+      icbmDesc = "Disable the sunnypilot Longitudinal Control (alpha) toggle to allow Intelligent Cruise Button Management.";
+    } else {
+      icbmDesc = "sunnypilot Longitudinal Control is the default longitudinal control for this platform.";
+    }
+  }
+  setToggleRowState("IntelligentCruiseButtonManagement", { disabled: icbmDisabled, desc: icbmDesc });
+
+  setToggleRowState("DynamicExperimentalControl", { disabled: !hasLong });
+  setToggleRowState("SmartCruiseControlVision", { disabled: !sccOk });
+  setToggleRowState("SmartCruiseControlMap", { disabled: !sccOk });
+
+  let customDesc = "Enable custom Short & Long press increments for cruise speed increase/decrease.";
+  let customDisabled = !customAccOk;
+  if (!offroad) {
+    customDesc = "Start the vehicle to check vehicle compatibility.";
+    customDisabled = true;
+  } else if (!customAccOk) {
+    customDisabled = true;
+    if (pcm) customDesc = "This feature is not supported on this platform due to vehicle limitations.";
+    else customDesc = "This feature can only be used with sunnypilot longitudinal control enabled.";
+  }
+  setToggleRowState("CustomAccIncrementsEnabled", { disabled: customDisabled, desc: customDesc });
+
+  document.querySelectorAll('[data-capability="custom_acc"]').forEach((row) => {
+    const input = row.querySelector("input, button");
+    const disabled = !customAccOk || !paramIsOn(panelDataRef?.values?.CustomAccIncrementsEnabled);
+    if (input) input.disabled = disabled;
+    row.classList.toggle("opui-sp-row--disabled", disabled);
+  });
+}
+
+function updateVisualsCapabilities(st) {
+  if (!st) return;
+  const hasLong = st.has_longitudinal_control !== false;
+  const chevronRow = document.querySelector('[data-param="ChevronInfo"]');
+  if (chevronRow) {
+    const desc = hasLong
+      ? "Display useful metrics below the chevron that tracks the lead car only applicable to cars with sunnypilot longitudinal control."
+      : "This feature requires sunnypilot longitudinal control to be available.";
+    setPanelRowDesc(chevronRow, desc);
+    chevronRow.querySelectorAll("button").forEach((b) => { b.disabled = !hasLong; });
+  }
 }
 
 function updateSteeringCapabilities(st) {
@@ -412,6 +507,8 @@ export function applyPanelSync(data) {
     }
     updateEngagedWidgets();
     updateToggleCapabilities(globalState);
+    updateCruiseCapabilities(globalState);
+    updateVisualsCapabilities(globalState);
     updateSteeringCapabilities(globalState);
     updateDisplayDependencies(data);
     if (data.custom === "osm") {
@@ -434,6 +531,8 @@ export function applyPanelSync(data) {
   }
   updateEngagedWidgets();
   updateToggleCapabilities(globalState);
+  updateCruiseCapabilities(globalState);
+  updateVisualsCapabilities(globalState);
   updateSteeringCapabilities(globalState);
   updateDisplayDependencies(data);
   if (data.custom === "osm") {
@@ -830,6 +929,8 @@ function renderBoolRow(w) {
   }, {}, globalState, paramHandlers);
   row.dataset.param = w.param;
   row.dataset.widget = "bool";
+  if (w.dynamic_desc) row.dataset.dynamicDesc = w.dynamic_desc;
+  if (w.capability) row.dataset.capability = w.capability;
   if (w.needs_cycle) row.dataset.needsCycle = "1";
   if (w.offroad_only) row.dataset.offroadOnly = "1";
   if (stacked) {
@@ -932,11 +1033,16 @@ function renderChoiceRow(w) {
 function renderIntRow(w) {
   const row = document.createElement("div");
   row.className = "opui-sp-row";
+  if (w.capability) row.dataset.capability = w.capability;
+  row.dataset.param = w.param;
   let val = parseInt(w.value, 10);
   if (Number.isNaN(val)) val = w.min || 0;
   const min = w.min ?? 0;
   const max = w.max ?? 100;
   const step = w.step ?? 1;
+  const valueMap = w.value_map || {};
+  const hasMap = Object.keys(valueMap).length > 0;
+  const displayVal = hasMap ? (valueMap[String(val)] ?? val) : val;
 
   row.innerHTML = `
     <div class="opui-sp-row-text">
@@ -948,15 +1054,16 @@ function renderIntRow(w) {
   minus.type = "button";
   minus.textContent = "−";
   const span = document.createElement("span");
-  span.textContent = String(val);
+  span.textContent = String(displayVal);
   const plus = document.createElement("button");
   plus.type = "button";
   plus.textContent = "+";
 
   const save = async (v) => {
     v = Math.max(min, Math.min(max, v));
-    span.textContent = String(v);
-    const res = await putParam(w.param, String(v));
+    const store = hasMap ? (valueMap[String(v)] ?? v) : v;
+    span.textContent = String(hasMap ? (valueMap[String(v)] ?? v) : v);
+    const res = await putParam(w.param, String(store));
     if (!res.ok) toast(res.error || "保存失败");
   };
 
@@ -1597,9 +1704,18 @@ async function renderTripsPanel(container, data) {
     card.innerHTML = `
       <div class="opui-trips-title">${escapeHtml(title)}</div>
       <div class="opui-trips-cols">
-        <div class="opui-trips-col"><div class="opui-trips-num">${block.routes || 0}</div><div class="opui-trips-unit">${escapeHtml(t("Drives"))}</div></div>
-        <div class="opui-trips-col"><div class="opui-trips-num">${distStr}</div><div class="opui-trips-unit">${escapeHtml(unit)}</div></div>
-        <div class="opui-trips-col"><div class="opui-trips-num">${Math.round((block.minutes || 0) / 60)}</div><div class="opui-trips-unit">${escapeHtml(t("Hours"))}</div></div>
+        <div class="opui-trips-col">
+          <img class="opui-trips-icon" src="/api/opui/assets/icons_mici/wheel.png" alt="" />
+          <div class="opui-trips-num">${block.routes || 0}</div><div class="opui-trips-unit">${escapeHtml(t("Drives"))}</div>
+        </div>
+        <div class="opui-trips-col">
+          <img class="opui-trips-icon" src="/api/opui/assets/icons_mici/road.png" alt="" />
+          <div class="opui-trips-num">${distStr}</div><div class="opui-trips-unit">${escapeHtml(unit)}</div>
+        </div>
+        <div class="opui-trips-col">
+          <img class="opui-trips-icon" src="/api/opui/assets/sunnypilot/selfdrive/assets/icons/clock.png" alt="" />
+          <div class="opui-trips-num">${Math.round((block.minutes || 0) / 60)}</div><div class="opui-trips-unit">${escapeHtml(t("Hours"))}</div>
+        </div>
       </div>`;
     container.appendChild(card);
   }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=37" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=38" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -36,7 +36,10 @@
             <button type="button" id="home-pill-update" class="opui-home-pill opui-home-pill--update" hidden>UPDATE</button>
             <button type="button" id="home-pill-alerts" class="opui-home-pill opui-home-pill--alerts" hidden></button>
           </div>
-          <div id="home-version" class="opui-home-version"></div>
+          <div id="home-version" class="opui-home-version">
+            <span id="home-brand" class="opui-home-brand">sunnypilot</span>
+            <span id="home-desc" class="opui-home-desc"></span>
+          </div>
         </header>
         <div id="home-overlay" class="opui-home-overlay" hidden>
           <div class="opui-home-overlay-card">
@@ -221,6 +224,8 @@
       <button type="button" data-preset="alert_critical">严重告警</button>
       <button type="button" data-preset="e2e_green">E2E 绿灯</button>
       <button type="button" data-preset="standstill_timer">静止计时</button>
+      <button type="button" data-preset="long_only">仅纵向</button>
+      <button type="button" data-preset="alert_full">全屏告警</button>
       <button type="button" data-preset="home_update">Home·更新</button>
       <button type="button" data-preset="home_alerts">Home·告警</button>
     </div>
@@ -230,6 +235,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> 录音麦克风</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=37"></script>
+  <script type="module" src="/static/js/app.js?v=38"></script>
 </body>
 </html>

@@ -115,6 +115,7 @@ def _mock_overlay(w: int, h: int) -> dict[str, Any]:
     "edges": [],
     "path": path,
     "leads": [],
-    "experimental": False,
+    "experimental": True,
+    "rainbow": True,
     "dev_pc": True,
   }

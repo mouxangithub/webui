@@ -78,6 +78,7 @@ FONT_FILES = {
   "semibold": "selfdrive/assets/fonts/Inter-SemiBold.ttf",
   "bold": "selfdrive/assets/fonts/Inter-Bold.ttf",
   "op_medium": "selfdrive/assets/fonts/OpFont-Medium.otf",
+  "audiowide": "selfdrive/assets/fonts/Audiowide-Regular.ttf",
 }
 
 def tokens_payload() -> dict:

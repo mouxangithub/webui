@@ -463,14 +463,26 @@ body {
 }
 
 .opui-home-version {
-  font-size: 48px;
-  color: #fff;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 12px 24px 0;
   text-align: right;
+}
+.opui-home-brand {
+  font-family: Audiowide, Inter, sans-serif;
+  font-size: 48px;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+.opui-home-desc {
+  font-size: 36px;
+  color: #a8a8a8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
-  line-height: 1.1;
+  max-width: 60%;
 }
 
 .opui-home-content {
@@ -1922,6 +1934,14 @@ body {
 
 .opui-sp-row-text { flex: 1; min-width: 0; }
 .opui-sp-row-title { font-size: 50px; line-height: 1.1; }
+.opui-sp-row-icon {
+  width: 70px;
+  height: 70px;
+  flex-shrink: 0;
+  object-fit: contain;
+  margin-right: 8px;
+}
+.opui-sp-row--disabled { opacity: 0.45; pointer-events: none; }
 .opui-sp-row-desc { font-size: 40px; color: #808080; margin-top: 12px; }
 
 .opui-sp-toggle {
@@ -2136,6 +2156,7 @@ body {
 }
 .opui-trips-title { font-size: 50px; color: #c8c8c8; margin-bottom: 32px; }
 .opui-trips-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; text-align: center; }
+.opui-trips-icon { width: 72px; height: 72px; object-fit: contain; margin: 0 auto 12px; display: block; }
 .opui-trips-num { font-size: 92px; font-weight: 700; line-height: 1; }
 .opui-trips-unit { font-size: 55px; color: #a0a0a0; margin-top: 8px; }
 

@@ -99,6 +99,15 @@ async def api_dev_presets(request: web.Request) -> web.Response:
       "standstill": True, "standstill_timer_enabled": True, "standstill_timer": 125,
       "alert_size": "none",
     },
+    "long_only": {
+      "started": True, "engaged": True, "ui_status": "long_only", "speed_kmh": 65,
+      "alert_size": "none",
+    },
+    "alert_full": {
+      "started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 40,
+      "alert_text1": "TAKE CONTROL", "alert_text2": "Steering unavailable",
+      "alert_status": "critical", "alert_size": "full",
+    },
     "home_update": {
       "started": False, "engaged": False, "ui_status": "disengaged",
       "update_available": True, "fetch_available": False,

@@ -63,12 +63,16 @@ function applyDesignTokens(tokens) {
   style.id = "opui-fonts";
   const faces = Object.entries(fonts)
     .filter(([name]) => !name.toLowerCase().includes("op"))
-    .map(([name, path]) => `
+    .map(([name, path]) => {
+      const family = name === "audiowide" ? "Audiowide" : "Inter";
+      const weight = name.includes("Bold") ? 700 : name.includes("Semi") ? 600 : name.includes("Medium") ? 500 : 400;
+      return `
     @font-face {
-      font-family: "Inter";
-      font-weight: ${name.includes("Bold") ? 700 : name.includes("Semi") ? 600 : name.includes("Medium") ? 500 : 400};
+      font-family: "${family}";
+      font-weight: ${family === "Audiowide" ? 400 : weight};
       src: url("${assetUrl(path)}") format("${path.endsWith(".otf") ? "opentype" : "truetype"}");
-    }`).join("\n");
+    }`;
+    }).join("\n");
   style.textContent = faces;
   if (!style.parentNode) document.head.appendChild(style);
 

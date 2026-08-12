@@ -6,6 +6,10 @@ import { tr } from "./i18n.js";
 
 const stack = [];
 
+function assetUrl(rel) {
+  return `/api/opui/assets/${rel.replace(/^\//, "")}`;
+}
+
 function paramIsOn(val) {
   const v = String(val ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "on";
@@ -432,6 +436,8 @@ export function createSpToggle(w, panelData, globalState, handlers) {
   row.className = "opui-sp-row" + (w.stacked ? " opui-sp-row--stacked opui-sp-row--toggle-below" : "");
   const checked = paramIsOn(w.value);
   const disabled = w.locked || (w.needs_cycle && globalState.engaged) || (w.offroad_only && !globalState.is_offroad);
+  const iconSrc = w.icon ? assetUrl(checked && w.icon_active ? w.icon_active : w.icon) : "";
+  const iconHtml = iconSrc ? `<img class="opui-sp-row-icon" src="${iconSrc}" alt="" />` : "";
   const toggleHtml = `
     <label class="opui-sp-toggle${disabled ? " disabled" : ""}${checked ? " on" : ""}">
       <input type="checkbox" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
@@ -442,11 +448,23 @@ export function createSpToggle(w, panelData, globalState, handlers) {
       ${w.label ? `<div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>` : ""}
       ${w.needs_cycle ? `<div class="opui-sp-row-desc opui-sp-row-desc--hint">${tr("Changing this setting will restart sunnypilot if the car is powered on.")}</div>` : ""}
     </div>`;
-  row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${toggleHtml}${textHtml}`;
+  row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${iconHtml}${toggleHtml}${textHtml}`;
   bindRowExpand(row, { ...w, desc: w.desc || "" });
   const input = row.querySelector("input");
   const label = row.querySelector(".opui-sp-toggle");
   input?.addEventListener("change", async () => {
+    if (w.confirm && input.checked) {
+      const ok = await showConfirm({
+        message: tr(w.confirm),
+        confirmText: tr("OK"),
+        cancelText: tr("Cancel"),
+      });
+      if (!ok) {
+        input.checked = false;
+        label?.classList.remove("on");
+        return;
+      }
+    }
     if (w.confirm_experimental && input.checked) {
       const ok = await showConfirm({
         rich: true,

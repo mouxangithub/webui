@@ -81,7 +81,7 @@ export function updateSidebarMetrics(st) {
 
   setMetric("temp", {
     label: METRIC_LABELS.TEMP,
-    value: thermalOk ? zhValue("GOOD") : zhValue("HIGH"),
+    value: d.cpu_temp != null ? `${Math.round(d.cpu_temp)}°C` : (thermalOk ? zhValue("GOOD") : zhValue("HIGH")),
     danger: !thermalOk,
     visible: true,
   });

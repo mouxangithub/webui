@@ -194,6 +194,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   has_longitudinal = False
   alpha_long_available = False
+  has_icbm = False
+  pcm_cruise = False
   torque_control_allowed = True
   lateral_jerk_torque = False
   cp_loaded = False
@@ -207,8 +209,10 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   try:
     from openpilot.selfdrive.ui.ui_state import ui_state
     has_longitudinal = bool(ui_state.has_longitudinal_control)
+    has_icbm = bool(getattr(ui_state, "has_icbm", False))
     if ui_state.CP is not None:
       cp_loaded = True
+      pcm_cruise = bool(getattr(ui_state.CP, "pcmCruise", False))
       alpha_long_available = bool(getattr(ui_state.CP, "alphaLongitudinalAvailable", False))
       try:
         from opendbc.car.structs import car
@@ -331,6 +335,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "personality": personality,
     "personality_index": _personality_index(personality),
     "has_longitudinal_control": has_longitudinal,
+    "has_icbm": has_icbm,
+    "pcm_cruise": pcm_cruise,
     "alpha_longitudinal_available": alpha_long_available,
     "cp_loaded": cp_loaded,
     "torque_control_allowed": torque_control_allowed,

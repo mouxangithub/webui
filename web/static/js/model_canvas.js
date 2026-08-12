@@ -2,6 +2,8 @@
 
 let canvas = null;
 let ctx = null;
+let rainbowHue = 0;
+let lastOverlay = null;
 
 const LANE_GREEN = "rgba(13, 248, 122, 0.55)";
 const PATH_WHITE = "rgba(242, 242, 242, 0.7)";
@@ -75,12 +77,25 @@ function drawLane(lane) {
   }
 }
 
-function drawPath(path, experimental) {
+function drawPath(path, experimental, rainbow) {
   const pts = asPoints(path);
   if (pts.length < 2) return;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.lineWidth = 8;
+
+  if (rainbow) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const hue = (rainbowHue + i * 8) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 95%, 55%, 0.9)`;
+      ctx.beginPath();
+      ctx.moveTo(pts[i][0], pts[i][1]);
+      ctx.lineTo(pts[i + 1][0], pts[i + 1][1]);
+      ctx.stroke();
+    }
+    return;
+  }
+
   if (experimental) {
     const grad = ctx.createLinearGradient(0, pts[0][1], 0, pts[pts.length - 1][1]);
     grad.addColorStop(0, "rgba(13, 248, 122, 0.85)");
@@ -106,6 +121,7 @@ function drawLead(lead) {
 
 export function drawModelOverlay(data) {
   if (!ctx || !canvas || !data?.ok) return;
+  lastOverlay = data;
   const host = document.getElementById("model-overlay");
   const w = data.width || host?.clientWidth || 1600;
   const h = data.height || host?.clientHeight || 900;
@@ -117,6 +133,13 @@ export function drawModelOverlay(data) {
     const poly = asPoints(edge.polygon);
     if (poly.length >= 3) drawPoly(poly, "rgba(255, 80, 80, 0.25)", "rgba(255, 120, 120, 0.5)", 2);
   }
-  drawPath(data.path, data.experimental);
+  drawPath(data.path, data.experimental, data.rainbow);
   for (const lead of data.leads || []) drawLead(lead);
+
+  if (data.rainbow) {
+    rainbowHue = (rainbowHue + 2) % 360;
+    requestAnimationFrame(() => {
+      if (lastOverlay?.rainbow) drawModelOverlay({ ...lastOverlay, _animate: true });
+    });
+  }
 }

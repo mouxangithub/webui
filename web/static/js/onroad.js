@@ -175,6 +175,17 @@ export function updateOnroadHud(st) {
       alertBar.classList.remove("opui-alert--small", "opui-alert--mid", "opui-alert--full");
       delete alertBar.dataset.status;
     }
+    const devMode = Number(st.developer_ui) || 0;
+    const isFull = size === "full";
+    if (!isFull && devMode) {
+      alertBar.style.right = (devMode === 1 || devMode === 3)
+        ? "calc(var(--border-w) + var(--alert-margin) + 230px)" : "";
+      alertBar.style.bottom = (devMode === 2 || devMode === 3)
+        ? "calc(var(--border-w) + var(--alert-margin) + 40px)" : "";
+    } else {
+      alertBar.style.right = "";
+      alertBar.style.bottom = "";
+    }
   }
 
   updateSpHud(st);

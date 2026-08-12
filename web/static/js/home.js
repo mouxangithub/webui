@@ -35,7 +35,8 @@ export function updateHomeScreen(home) {
   lastHome = home;
 
   const versionEl = document.getElementById("home-version");
-  if (versionEl) versionEl.textContent = home.version_text || "";
+  const descEl = document.getElementById("home-desc");
+  if (descEl) descEl.textContent = home.version_text || "";
 
   renderHomePills(home);
   renderHomeView(home);
