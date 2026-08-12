@@ -70,10 +70,10 @@
 | SCC 标签 | `height/4`，±260/±40/±100 | `25%` calc | 🟡 |
 | Rocket fuel | 左竖条 28px 宽 | `.opui-rocket` | 🟡 |
 | DM 弧 | 左下 126px inset，192 按钮 | `.opui-dm-wrap` | 🟡 |
-| DM 点击 | 打开 driver cam | 无交互 | ❌ |
+| DM 点击 | 打开 driver cam | `#dm-arc-wrap` 点击弹窗 | ✅ |
 | 圆形 E2E 告警 | `circular_alerts.py` r=250 | `#hud-circular-alert` + `hud_circular.js` | ✅ |
 | 静止计时 | 圆牌内 STOPPED + 计时 | 合并入圆形告警 | ✅ |
-| TorqueBar | `torque_bar.py` | 无 | ❌ |
+| TorqueBar | `torque_bar.py` | `hud_torque.js` canvas 弧 | ✅ |
 | Developer UI | 底栏/右栏数据 | `hud_dev.js` + `dev_ui_api.py` | ✅ |
 
 ---
@@ -154,10 +154,10 @@
 4. ✅ HUD 渐变、限速位置、路名、ICBM 保持
 
 ### P1 — 交互与状态
-5. ✅ Developer UI / 圆形 E2E 告警（TorqueBar 待做）
+5. ✅ Developer UI / 圆形 E2E 告警 / TorqueBar
 6. ✅ Exp 按钮门禁与 hold 动画
 7. ✅ 书签 + 麦克风侧栏
-8. DM 弧点击 → driver cam
+8. ✅ DM 弧点击 → driver cam
 
 ### P2 — 离路/设置
 9. Home UPDATE/ALERTS 流
@@ -195,3 +195,4 @@ python3.12 -m webui.webuid
 | 2026-08-12 | 初版清单；告警+边框对齐；PC bootstrap/dev 优化 |
 | 2026-08-12 | 补充全文；`model_canvas.js`；HUD 渐变/限速/路名/ICBM；设计令牌注入 |
 | 2026-08-12 | P1：Developer UI、圆形 E2E/静止计时、Exp 门禁+hold、书签、侧栏麦克风（v34） |
+| 2026-08-12 | P1 收尾：TorqueBar、DM 弧点击 driver cam（v35） |

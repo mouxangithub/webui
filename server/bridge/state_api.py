@@ -307,6 +307,13 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   except Exception:
     pass
 
+  torque_utilization = 0.0
+  if torque_bar:
+    try:
+      torque_utilization = _torque_utilization(sm, ctrl, cs)
+    except Exception:
+      torque_utilization = 0.0
+
   return {
     "ok": True,
     "started": started,
@@ -360,8 +367,43 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "dev_ui": dev_ui,
     "recording_audio": recording_audio,
     "torque_bar": torque_bar,
+    "torque_utilization": torque_utilization,
     "circular_alert_allowed": circular_alert_allowed,
   }
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+  return max(lo, min(hi, v))
+
+
+def _torque_utilization(sm: Any, ctrl: Any, cs: Any) -> float:
+  try:
+    lat_which = ctrl.lateralControlState.which()
+    if lat_which in ("angleState", "curvatureState"):
+      v_ego = float(cs.vEgo)
+      actual_la = float(ctrl.curvature) * v_ego ** 2
+      desired_la = float(ctrl.desiredCurvature) * v_ego ** 2
+      accel_diff = desired_la - actual_la
+      roll = 0.0
+      if sm.valid.get("liveParameters"):
+        roll = float(sm["liveParameters"].roll)
+      roll_comp = roll * 9.81 * _clamp((v_ego - 5.0) / 10.0, 0.0, 1.0)
+      lateral_acceleration = actual_la - roll_comp
+      max_la = 3.0
+      try:
+        from openpilot.selfdrive.ui.ui_state import ui_state
+        if ui_state.CP is not None:
+          max_la = float(ui_state.CP.maxLateralAccel or max_la)
+      except Exception:
+        pass
+      if not bool(sm["carControl"].latActive):
+        return 0.0
+      return _clamp((lateral_acceleration + accel_diff) / max_la, -1.0, 1.0)
+    if sm.valid.get("carOutput"):
+      return float(-sm["carOutput"].actuatorsOutput.torque)
+  except Exception:
+    pass
+  return 0.0
 
 
 def _personality_index(name: str) -> int | None:

@@ -6,6 +6,7 @@ import {
 import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton } from "./onroad.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
+import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings } from "./i18n.js";
@@ -430,7 +431,7 @@ document.getElementById("sidebar-mic")?.addEventListener("click", () => {
 });
 
 document.getElementById("camera-wrap")?.addEventListener("click", (ev) => {
-  if (ev.target.closest(".opui-camera-fallback, .opui-exp-btn, #hud")) return;
+  if (ev.target.closest(".opui-camera-fallback, .opui-exp-btn, #hud, #dm-arc-wrap")) return;
   toggleOnroadSidebar();
 });
 
@@ -438,6 +439,7 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindStreamButton();
 bindExperimentalButton();
+bindDmArcClick();
 initModelCanvas();
 applySidebarAssets();
 setupWebSocket();

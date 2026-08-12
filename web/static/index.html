@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=34" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=35" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -112,6 +112,7 @@
         </div>
         <div id="dev-ui-bottom" class="opui-dev-ui-bottom" hidden></div>
         <div id="dev-ui-right" class="opui-dev-ui-right" hidden></div>
+        <canvas id="torque-bar-canvas" class="opui-torque-bar" hidden></canvas>
         <div id="alert-bar" class="opui-alert" hidden>
           <div class="opui-alert__inner">
             <span id="alert-text1" class="opui-alert__t1"></span>
@@ -217,6 +218,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> 录音麦克风</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=34"></script>
+  <script type="module" src="/static/js/app.js?v=35"></script>
 </body>
 </html>

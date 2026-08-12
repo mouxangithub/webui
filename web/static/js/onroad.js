@@ -2,6 +2,7 @@ import { apiGet, apiPost, apiPut } from "./api.js";
 import { updateSpHud } from "./hud_sp.js";
 import { updateDevUi } from "./hud_dev.js";
 import { updateCircularAlert } from "./hud_circular.js";
+import { updateTorqueBar } from "./hud_torque.js";
 
 let pc = null;
 let streaming = false;
@@ -215,6 +216,7 @@ export function updateOnroadHud(st) {
   updateSpHud(st);
   updateDevUi(st);
   updateCircularAlert(st);
+  updateTorqueBar(st);
 }
 
 function waitIceComplete(pc) {

@@ -96,9 +96,11 @@ function drawDmArc(dm, hideDm) {
   if (!wrap || !svg) return;
   if (!dm?.visible || hideDm) {
     wrap.hidden = true;
+    wrap.classList.remove("is-clickable");
     return;
   }
   wrap.hidden = false;
+  wrap.classList.add("is-clickable");
   wrap.classList.toggle("opui-dm-wrap--rhd", !!dm.rhd);
 
   const prob = Math.max(0, Math.min(1, dm.prob ?? 0));
@@ -115,4 +117,20 @@ function drawDmArc(dm, hideDm) {
   const vy = Math.abs(pose[0] || 0);
   if (hArc) hArc.setAttribute("stroke-dasharray", `${len * hx} ${len}`);
   if (vArc) vArc.setAttribute("stroke-dasharray", `${len * vy} ${len}`);
+}
+
+let dmArcBound = false;
+
+export function bindDmArcClick() {
+  if (dmArcBound) return;
+  const wrap = document.getElementById("dm-arc-wrap");
+  if (!wrap) return;
+  dmArcBound = true;
+  wrap.addEventListener("click", (ev) => {
+    if (wrap.hidden) return;
+    ev.stopPropagation();
+    const dlg = document.getElementById("driver-camera-dialog");
+    dlg?.showModal();
+    document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg?.close(), { once: true });
+  });
 }

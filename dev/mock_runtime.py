@@ -68,6 +68,8 @@ SIM: dict[str, Any] = {
   "e2e_green_light": False,
   "e2e_lead_depart": False,
   "engageable": True,
+  "torque_bar": True,
+  "torque_utilization": 0.42,
   "pcm_cruise_speed": False,
 }
 
@@ -256,6 +258,7 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "developer_ui": int(s.get("developer_ui", 0)),
     "recording_audio": bool(s.get("recording_audio", False)),
     "torque_bar": bool(s.get("torque_bar", False)),
+    "torque_utilization": float(s.get("torque_utilization", 0.0)),
     "circular_alert_allowed": s["started"] and s.get("alert_size", "none") in ("none", ""),
     "dev_ui": _mock_dev_ui(s) if s["started"] and int(s.get("developer_ui", 0)) > 0 else None,
     "dm_arc": {
