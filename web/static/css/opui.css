@@ -1775,10 +1775,19 @@ body {
 }
 .opui-modal-card--multi {
   width: min(1400px, 92vw);
+  height: min(920px, 82vh);
+  min-height: min(700px, 72vh);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   max-height: 88vh;
+}
+.opui-modal-card--multi .opui-modal-title {
+  flex-shrink: 0;
+}
+.opui-modal-card--multi .opui-modal-actions {
+  flex-shrink: 0;
+  margin-top: 24px;
 }
 .opui-modal-title { font-size: 70px; font-weight: 700; margin-bottom: 32px; }
 .opui-modal-body { font-size: 44px; line-height: 1.5; max-height: 50vh; overflow: auto; }
@@ -1846,8 +1855,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 25px;
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 360px;
   overflow-y: auto;
   margin-bottom: 8px;
   padding-right: 8px;
