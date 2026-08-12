@@ -10,6 +10,11 @@ function t(s) {
   return tr(s);
 }
 
+function paramIsOn(val) {
+  const v = String(val ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "on";
+}
+
 function resolveWidgetType(w) {
   const known = new Set([
     "section", "html", "action", "subpanel", "custom", "dual_button", "option",
@@ -36,7 +41,7 @@ function widgetVisible(w, panelData) {
   return String(dep) === String(w.visible_if.eq);
 }
 
-function formatOptionLabel(w, rawVal) {
+function formatOptionLabel(w, rawVal, panelData = panelDataRef) {
   const idx = parseInt(rawVal, 10);
   const val = Number.isNaN(idx) ? rawVal : idx;
   const fmt = w.label_format;
@@ -225,32 +230,52 @@ function panelVisibilityHash(data) {
 
 export function applyPanelSync(data) {
   if (!data?.ok) return;
+  panelDataRef = data;
   const hash = panelVisibilityHash(data);
   if (hash !== lastPanelVisibilityHash) {
-    const container = document.getElementById("panel-content");
-    if (container) renderGenericPanel(container, data);
+    lastPanelVisibilityHash = hash;
+    if (data.custom) {
+      window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+    } else {
+      const container = document.getElementById("panel-content");
+      if (container) renderGenericPanel(container, data);
+    }
+    updateEngagedWidgets();
+    updateToggleCapabilities(globalState);
+    updateDisplayDependencies(data);
     return;
   }
-  panelDataRef = data;
   const root = document.getElementById("panel-content");
   if (!root) return;
   for (const w of data.widgets || []) {
-    if (!w.param || !widgetVisible(w, data)) continue;
-    updateWidgetValue(root, w);
+    if (!widgetVisible(w, data)) continue;
+    if (w.type === "dual_button") {
+      updateDualButtonRow(root, w);
+      continue;
+    }
+    if (!w.param) continue;
+    updateWidgetValue(root, w, data);
   }
   updateEngagedWidgets();
   updateToggleCapabilities(globalState);
+  updateDisplayDependencies(data);
 }
 
-function updateWidgetValue(root, w) {
+let currentPanelRef = "";
+
+export function setCurrentPanelId(id) {
+  currentPanelRef = id || "";
+}
+
+function updateWidgetValue(root, w, panelData = panelDataRef) {
   const el = root.querySelector(`[data-param="${CSS.escape(w.param)}"]`);
   if (!el) return;
   const kind = el.dataset.widget || resolveWidgetType(w);
   if (kind === "bool") {
-    const checked = w.value === "1" || w.value === "true";
+    const checked = paramIsOn(w.value);
     const input = el.querySelector("input[type=checkbox]");
     const label = el.querySelector(".opui-sp-toggle");
-    if (input && input.checked !== checked) {
+    if (input) {
       input.checked = checked;
       label?.classList.toggle("on", checked);
     }
@@ -270,9 +295,48 @@ function updateWidgetValue(root, w) {
     return;
   }
   if (kind === "int" || kind === "option") {
-    const span = el.querySelector(".opui-int-control span, .opui-option-value");
-    if (span) span.textContent = kind === "option" ? formatOptionLabel(w, w.value) : String(w.value);
+    let val = parseInt(w.value, 10);
+    if (Number.isNaN(val)) val = w.min || 0;
+    const span = el.querySelector(".opui-option-value, .opui-int-control span");
+    if (span) {
+      span.textContent = kind === "option" ? formatOptionLabel(w, val, panelData) : String(val);
+    }
+    const minus = el.querySelector(".opui-option-bar button:first-child, .opui-int-control button:first-child");
+    const plus = el.querySelector(".opui-option-bar button:last-child, .opui-int-control button:last-child");
+    const min = w.min ?? 0;
+    const max = w.max ?? 100;
+    if (minus) minus.disabled = val <= min;
+    if (plus) plus.disabled = val >= max;
   }
+}
+
+function updateDualButtonRow(root, w) {
+  const left = w.left || {};
+  const right = w.right || {};
+  const row = root.querySelector(`[data-dual="${CSS.escape(`${left.label || ""}|${right.label || ""}`)}"]`);
+  if (!row) return;
+  for (const side of ["left", "right"]) {
+    const cfg = w[side];
+    if (!cfg?.toggle || !cfg.param) continue;
+    const btn = row.querySelector(`[data-side="${side}"]`);
+    if (!btn) continue;
+    btn.classList.toggle("primary", paramIsOn(cfg.value));
+  }
+}
+
+function updateDisplayDependencies(data) {
+  if (data?.panel !== "display") return;
+  const brightness = parseInt(data.values?.OnroadScreenOffBrightness ?? "0", 10);
+  const timerRow = document.querySelector('[data-param="OnroadScreenOffTimer"]');
+  const disabled = brightness === 0 || brightness === 1;
+  timerRow?.querySelectorAll(".opui-option-bar button").forEach((btn) => {
+    btn.disabled = disabled;
+  });
+  timerRow?.classList.toggle("disabled", disabled);
+}
+
+function widgetUsesStacked(w) {
+  return w.layout === "stacked";
 }
 
 export function syncDrivingPersonality(personality, personalityIndex) {
@@ -306,6 +370,7 @@ export async function loadPanelList() {
 }
 
 export async function renderPanel(panelId, container, titleEl, options = {}) {
+  currentPanelRef = panelId;
   notifyPanelWatch(panelId);
   const data = await apiGet(`/api/opui/panels/${encodeURIComponent(panelId)}`);
   if (!data.ok) {
@@ -361,6 +426,7 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
   }
 
   renderGenericPanel(container, data);
+  updateDisplayDependencies(data);
   lastPanelVisibilityHash = panelVisibilityHash(data);
 }
 
@@ -491,11 +557,24 @@ function renderReadonlyRow(w) {
 }
 
 function renderBoolRow(w) {
-  const row = createSpToggle({ ...w, label: t(w.label), desc: w.desc ? t(w.desc) : "" }, {}, globalState, paramHandlers);
+  const stacked = widgetUsesStacked(w);
+  const row = createSpToggle({
+    ...w,
+    label: stacked ? "" : t(w.label),
+    desc: w.desc ? t(w.desc) : "",
+    stacked,
+  }, {}, globalState, paramHandlers);
   row.dataset.param = w.param;
   row.dataset.widget = "bool";
   if (w.needs_cycle) row.dataset.needsCycle = "1";
   if (w.offroad_only) row.dataset.offroadOnly = "1";
+  if (stacked) {
+    row.classList.add("opui-sp-row--stacked", "opui-sp-row--toggle-below");
+    const title = document.createElement("div");
+    title.className = "opui-sp-row-title";
+    title.textContent = t(w.label);
+    row.querySelector(".opui-sp-row-text")?.prepend(title);
+  }
   return row;
 }
 
@@ -640,8 +719,11 @@ function formatMaxTimeLabel(index, valueMap) {
 }
 
 function renderOptionRow(w, panelData) {
+  const stacked = widgetUsesStacked(w);
   const row = document.createElement("div");
-  row.className = "opui-sp-row opui-sp-row--stacked";
+  row.className = "opui-sp-row" + (stacked ? " opui-sp-row--stacked opui-sp-row--control-below" : " opui-sp-row--stacked");
+  row.dataset.param = w.param;
+  row.dataset.widget = "option";
   const valueMap = w.value_map || {};
   let idx = parseInt(w.value, 10);
   if (Number.isNaN(idx)) idx = w.min || 0;
@@ -656,31 +738,37 @@ function renderOptionRow(w, panelData) {
     ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc)).replace(/\n/g, "<br>")}</div>` : ""}`;
   row.appendChild(text);
 
-  const ctrl = document.createElement("div");
-  ctrl.className = "opui-int-control";
+  const bar = document.createElement("div");
+  bar.className = stacked ? "opui-option-bar" : "opui-int-control";
   const minus = document.createElement("button");
   minus.type = "button";
   minus.textContent = "−";
   const span = document.createElement("span");
-  span.textContent = formatOptionLabel(w, idx);
+  span.className = "opui-option-value";
+  span.textContent = formatOptionLabel(w, idx, panelData);
   const plus = document.createElement("button");
   plus.type = "button";
   plus.textContent = "+";
 
   const save = async (v) => {
     idx = Math.max(min, Math.min(max, v));
-    span.textContent = formatOptionLabel(w, idx);
+    span.textContent = formatOptionLabel(w, idx, panelData);
+    minus.disabled = idx <= min;
+    plus.disabled = idx >= max;
     const res = await putParam(w.param, String(idx));
     if (!res.ok) toast(res.error || t("Save failed"));
     else {
       w.value = String(idx);
       if (panelData?.values) panelData.values[w.param] = String(idx);
+      if (w.param === "OnroadScreenOffBrightness") updateDisplayDependencies(panelData);
     }
   };
+  minus.disabled = idx <= min;
+  plus.disabled = idx >= max;
   minus.addEventListener("click", () => save(idx - step));
   plus.addEventListener("click", () => save(idx + step));
-  ctrl.append(minus, span, plus);
-  row.appendChild(ctrl);
+  bar.append(minus, span, plus);
+  row.appendChild(bar);
   return row;
 }
 
@@ -751,22 +839,23 @@ function renderDualButtonRow(w) {
 
   const row = document.createElement("div");
   row.className = "opui-dual-row";
+  row.dataset.dual = `${left.label || ""}|${right.label || ""}`;
   const lBtn = document.createElement("button");
   lBtn.type = "button";
   lBtn.className = "opui-dual-btn";
+  lBtn.dataset.side = "left";
   lBtn.textContent = t(left.label);
   const rBtn = document.createElement("button");
   rBtn.type = "button";
   rBtn.className = "opui-dual-btn";
+  rBtn.dataset.side = "right";
   rBtn.textContent = t(right.label);
 
   if (left.toggle) {
-    const on = left.value === "1" || left.value === "true";
-    lBtn.classList.toggle("primary", on);
+    lBtn.classList.toggle("primary", paramIsOn(left.value));
   }
   if (right.toggle) {
-    const on = right.value === "1" || right.value === "true";
-    rBtn.classList.toggle("primary", on);
+    rBtn.classList.toggle("primary", paramIsOn(right.value));
   }
   if (left.offroad_only && !offroad) lBtn.disabled = true;
   if (right.offroad_only && !offroad) rBtn.disabled = true;
@@ -778,8 +867,8 @@ function renderDualButtonRow(w) {
 
   lBtn.addEventListener("click", async () => {
     if (left.toggle && left.param) {
-      const on = !(left.value === "1" || left.value === "true");
-      const res = await apiPut(`/api/opui/params/${encodeURIComponent(left.param)}`, { value: on ? "1" : "0" });
+      const on = !paramIsOn(left.value);
+      const res = await putParam(left.param, on ? "1" : "0");
       if (res.ok) {
         lBtn.classList.toggle("primary", on);
         left.value = on ? "1" : "0";
@@ -790,8 +879,8 @@ function renderDualButtonRow(w) {
   });
   rBtn.addEventListener("click", async () => {
     if (right.toggle && right.param) {
-      const on = !(right.value === "1" || right.value === "true");
-      const res = await apiPut(`/api/opui/params/${encodeURIComponent(right.param)}`, { value: on ? "1" : "0" });
+      const on = !paramIsOn(right.value);
+      const res = await putParam(right.param, on ? "1" : "0");
       if (res.ok) {
         rBtn.classList.toggle("primary", on);
         right.value = on ? "1" : "0";

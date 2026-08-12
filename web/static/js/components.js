@@ -6,6 +6,11 @@ import { tr } from "./i18n.js";
 
 const stack = [];
 
+function paramIsOn(val) {
+  const v = String(val ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "on";
+}
+
 function experimentalE2eHtml() {
   return (
     `<h1>${tr("Experimental Mode")}</h1><br>`
@@ -285,19 +290,21 @@ export function showHtml(opts) {
 
 export function createSpToggle(w, panelData, globalState, handlers) {
   const row = document.createElement("div");
-  row.className = "opui-sp-row";
-  const checked = w.value === "1" || w.value === "true";
+  row.className = "opui-sp-row" + (w.stacked ? " opui-sp-row--stacked opui-sp-row--toggle-below" : "");
+  const checked = paramIsOn(w.value);
   const disabled = w.locked || (w.needs_cycle && globalState.engaged) || (w.offroad_only && !globalState.is_offroad);
-  row.innerHTML = `
+  const toggleHtml = `
     <label class="opui-sp-toggle${disabled ? " disabled" : ""}${checked ? " on" : ""}">
       <input type="checkbox" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
       <span class="opui-sp-toggle-track"><span class="opui-sp-toggle-thumb"></span></span>
-    </label>
+    </label>`;
+  const textHtml = `
     <div class="opui-sp-row-text">
-      <div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>
+      ${w.label ? `<div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>` : ""}
       ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(w.desc)}</div>` : ""}
       ${w.needs_cycle ? `<div class="opui-sp-row-desc">${tr("Requires reboot")}</div>` : ""}
     </div>`;
+  row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${toggleHtml}${textHtml}`;
   const input = row.querySelector("input");
   const label = row.querySelector(".opui-sp-toggle");
   input?.addEventListener("change", async () => {

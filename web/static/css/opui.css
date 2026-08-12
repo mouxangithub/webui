@@ -1232,6 +1232,61 @@ body {
 }
 
 /* sunnypilot SP list_view (170px rows, left toggle) */
+.opui-sp-row--control-below {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+  min-height: 260px;
+  padding-bottom: 32px;
+}
+
+.opui-sp-row--toggle-below .opui-sp-toggle {
+  align-self: flex-start;
+}
+
+.opui-option-bar {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 150px;
+  background: #393939;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.opui-option-bar button {
+  width: 150px;
+  min-width: 150px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 60px;
+  cursor: pointer;
+}
+
+.opui-option-bar button:active:not(:disabled) {
+  background: #696868;
+}
+
+.opui-option-bar button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.opui-option-bar .opui-option-value {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 50px;
+  text-align: center;
+  min-width: 0;
+}
+
+.opui-sp-row.disabled {
+  opacity: 0.45;
+}
+
 .opui-sp-row {
   display: flex;
   align-items: center;

@@ -32,7 +32,18 @@ def _serialize_value(val: Any) -> str:
       return val.decode("utf-8", errors="replace")
     except Exception:
       return val.hex()
+  if isinstance(val, bool):
+    return "1" if val else "0"
   return str(val)
+
+
+def _read_param_value(p: Params, key: str, ptype: str | None) -> str:
+  if ptype == "BOOL":
+    try:
+      return "1" if p.get_bool(key) else "0"
+    except Exception:
+      return "0"
+  return _serialize_value(p.get(key))
 
 
 def get_param(key: str) -> dict[str, Any]:
@@ -50,7 +61,7 @@ def get_param(key: str) -> dict[str, Any]:
     return {
       "ok": True,
       "key": key,
-      "value": _serialize_value(val),
+      "value": _read_param_value(p, key, ptype),
       "type": ptype,
       "locked": locked,
     }
@@ -79,7 +90,7 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
     if needs_cycle:
       p.put_bool("OnroadCycleRequested", True, block=True)
 
-    return {"ok": True, "key": key, "value": _serialize_value(p.get(key))}
+    return {"ok": True, "key": key, "value": _read_param_value(p, key, ptype)}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
 
@@ -105,7 +116,7 @@ def panel_values(panel_id: str) -> dict[str, Any]:
       return
     ptype = _param_type_name(p, key)
     if ptype is not None:
-      values[key] = _serialize_value(p.get(key))
+      values[key] = _read_param_value(p, key, ptype)
 
   for w in panel.get("widgets", []):
     if os.getenv("LITE") is not None and w.get("param") == "RecordAudio":
@@ -129,7 +140,7 @@ def panel_values(panel_id: str) -> dict[str, Any]:
         if sk:
           ptype = _param_type_name(p, sk)
           if ptype is not None:
-            val = _serialize_value(p.get(sk))
+            val = _read_param_value(p, sk, ptype)
             values[sk] = val
             side_w["value"] = val
             side_w["param_type"] = ptype
@@ -148,7 +159,7 @@ def panel_values(panel_id: str) -> dict[str, Any]:
       continue
 
     raw = p.get(key)
-    val = _serialize_value(raw)
+    val = _read_param_value(p, key, ptype)
     values[key] = val
     locked = False
     try:
