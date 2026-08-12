@@ -42,11 +42,14 @@ def snapshot_home() -> dict[str, Any]:
 
 
 def _mock_home() -> dict[str, Any]:
+  from webui.dev.mock_runtime import SIM
+
+  paired = bool(SIM.get("paired", False))
   return {
     "ok": True,
     "dev_pc": True,
-    "paired": True,
-    "prime": True,
+    "paired": paired,
+    "prime": paired,
     "experimental_mode": True,
     "version_text": "sunnypilot dev-preview / master-c3",
     "update_available": False,

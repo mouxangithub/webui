@@ -1,11 +1,11 @@
-import { apiGet } from "./api.js";
+import { apiGet, apiPost } from "./api.js";
 import {
-  loadPanelList, renderPanel, setGlobalState, setSubpanelNavigator,
+  loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
-import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud } from "./onroad.js";
+import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton } from "./onroad.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen } from "./home.js";
-import { updateSidebarMetrics, updateSidebarMode } from "./sidebar.js";
+import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings } from "./i18n.js";
@@ -42,8 +42,17 @@ function applyDesignTokens(tokens) {
   if (d.sidebar_width) root.style.setProperty("--sidebar-w", `${d.sidebar_width}px`);
   if (d.onroad_sidebar_width) root.style.setProperty("--onroad-sidebar-w", `${d.onroad_sidebar_width}px`);
   if (d.border_size) root.style.setProperty("--border-w", `${d.border_size}px`);
+  if (d.border_roundness != null) root.style.setProperty("--border-roundness", String(d.border_roundness));
   if (c.engaged) root.style.setProperty("--engaged", c.engaged);
   if (c.disengaged) root.style.setProperty("--disengaged", c.disengaged);
+  if (c.override) root.style.setProperty("--override", c.override);
+  if (c.lat_only) root.style.setProperty("--lat-only", c.lat_only);
+  if (c.long_only) root.style.setProperty("--long-only", c.long_only);
+  if (c.alert_normal) root.style.setProperty("--alert-normal", c.alert_normal);
+  if (c.alert_user) root.style.setProperty("--alert-user", c.alert_user);
+  if (c.alert_critical) root.style.setProperty("--alert-critical", c.alert_critical);
+  if (c.hud_engaged) root.style.setProperty("--hud-engaged", c.hud_engaged);
+  if (c.hud_disengaged) root.style.setProperty("--hud-disengaged", c.hud_disengaged);
   if (c.on_bg) root.style.setProperty("--sp-on-bg", c.on_bg);
   if (c.button_primary) root.style.setProperty("--sp-primary", c.button_primary);
 
@@ -94,6 +103,10 @@ function applySidebarAssets() {
     bottomBtn.style.setProperty("--sidebar-home-img", `url("${homeImg}")`);
     bottomBtn.style.setProperty("--sidebar-flag-img", `url("${flagImg}")`);
     bottomBtn.style.backgroundSize = "100% 100%";
+  }
+  const micBtn = document.getElementById("sidebar-mic");
+  if (micBtn) {
+    micBtn.style.backgroundImage = `url("${assetUrl("icons/microphone.png")}")`;
   }
 }
 
@@ -212,7 +225,23 @@ function renderNav() {
 }
 
 async function loadCurrentPanel() {
+  if (panelContent) {
+    panelContent.innerHTML = '<p class="opui-muted" style="padding:48px;text-align:center">加载中…</p>';
+  }
   await renderPanel(currentPanel, panelContent, panelTitle);
+}
+
+function showBootstrapBanner(message, tone = "warn") {
+  const el = document.getElementById("bootstrap-banner");
+  if (!el) return;
+  if (!message) {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  el.hidden = false;
+  el.dataset.tone = tone;
+  el.textContent = message;
 }
 
 async function bootstrap() {
@@ -220,30 +249,62 @@ async function bootstrap() {
   showHomeLoading();
   setScreen("home");
 
-  await opuiWs.waitHello(8000);
+  const httpPromise = apiGet("/api/opui/bootstrap").catch(() => null);
+  const wsHelloPromise = opuiWs.waitHello(2500);
+  const [httpMeta] = await Promise.all([httpPromise, wsHelloPromise]);
 
-  const meta = opuiWs.bootstrap;
-  if (meta) {
-    devPc = !!meta.dev_pc;
-    applyDesignTokens(meta);
-    if (meta.home) updateHomeScreen(meta.home);
+  let bootstrapData = opuiWs.bootstrap || httpMeta;
+  if (bootstrapData) {
+    devPc = !!bootstrapData.dev_pc;
+    window.__OPUI_DEV_PC = devPc;
+    applyDesignTokens(bootstrapData);
+    const home = bootstrapData.home;
+    if (home?.ok) {
+      updateHomeScreen(home);
+      setHomeState(home);
+    } else if (home?.error) {
+      showBootstrapBanner(`首页数据加载失败: ${home.error}`);
+      refreshHomeScreen();
+    }
+    const st = bootstrapData.state;
+    if (st?.ok) handleState(st);
     if (devPc) {
       document.getElementById("camera-wrap")?.classList.add("is-dev-pc");
+      showBootstrapBanner("PC 预览模式 — 部分数据为模拟，与 J3 车机可能不一致", "info");
+    } else if (st?.ok === false) {
+      showBootstrapBanner(`行车状态不可用: ${st.error || "未知错误"}`, "warn");
     }
   } else {
     try {
       const fallback = await apiGet("/api/opui/bootstrap");
+      bootstrapData = fallback;
       devPc = !!fallback.dev_pc;
+      window.__OPUI_DEV_PC = devPc;
       applyDesignTokens(fallback);
-      if (fallback.home) updateHomeScreen(fallback.home);
-      else refreshHomeScreen();
+      if (fallback.home?.ok) {
+        updateHomeScreen(fallback.home);
+        setHomeState(fallback.home);
+      } else {
+        showBootstrapBanner(`无法连接 WebSocket，HTTP 引导也失败: ${fallback.home?.error || "无响应"}`);
+        refreshHomeScreen();
+      }
+      if (fallback.state?.ok) handleState(fallback.state);
     } catch (_) {
+      showBootstrapBanner("WebUI 服务未就绪，请用 py -3 webui/dev/run_pc.py 启动本地预览");
       refreshHomeScreen();
     }
   }
 
+  if (!bootstrapData) {
+    showBootstrapBanner("WebSocket 未连接 — 请确认 webui 服务已启动");
+  }
+
+  const panelListPromise = bootstrapData?.panels_schema?.ok
+    ? Promise.resolve(bootstrapData.panels_schema.panels)
+    : loadPanelList();
+
   const [panelResult] = await Promise.all([
-    loadPanelList(),
+    panelListPromise,
     loadI18n(true),
   ]);
   panels = panelResult;
@@ -262,6 +323,7 @@ function handleState(st) {
   setGlobalState(st);
   updateSidebarMetrics(st);
   updateSidebarMode(!!st.started);
+  updateSidebarRecording(st);
 
   if (!st.ok) return;
 
@@ -296,7 +358,10 @@ function setupWebSocket() {
     if (msg?.data) handleState(msg.data);
   });
   opuiWs.on("home", (msg) => {
-    if (msg?.data) updateHomeScreen(msg.data);
+    if (msg?.data) {
+      updateHomeScreen(msg.data);
+      setHomeState(msg.data);
+    }
   });
   opuiWs.on("panel", (msg) => {
     if (app.dataset.screen !== "settings") return;
@@ -344,16 +409,24 @@ window.addEventListener("opui:refresh-panel", () => {
   if (app.dataset.screen === "settings") loadCurrentPanel();
 });
 
+window.addEventListener("opui:dev-state", (ev) => {
+  if (ev.detail) handleState(ev.detail);
+});
+
 $("#btn-close-settings").addEventListener("click", () => {
   setScreen(lastStarted ? "onroad" : "home");
 });
 
 $("#btn-sidebar-settings").addEventListener("click", () => openSettings("device"));
 
-$("#btn-sidebar-bottom").addEventListener("click", () => {
+$("#btn-sidebar-bottom").addEventListener("click", async () => {
   if (lastStarted) {
-    /* cereal bookmarkButton */
+    await apiPost("/api/opui/action/bookmark");
   }
+});
+
+document.getElementById("sidebar-mic")?.addEventListener("click", () => {
+  openSettings("toggles");
 });
 
 document.getElementById("camera-wrap")?.addEventListener("click", (ev) => {
@@ -364,6 +437,7 @@ document.getElementById("camera-wrap")?.addEventListener("click", (ev) => {
 $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindStreamButton();
+bindExperimentalButton();
 initModelCanvas();
 applySidebarAssets();
 setupWebSocket();

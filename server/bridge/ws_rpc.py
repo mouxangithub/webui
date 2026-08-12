@@ -52,7 +52,7 @@ _DEV_PRESET = re.compile(r"^/api/opui/dev/preset/([^/]+)$")
 
 
 def bootstrap_payload() -> dict[str, Any]:
-  return {
+  payload = {
     "ok": True,
     "name": "op-webui",
     "version": read_version(),
@@ -64,6 +64,11 @@ def bootstrap_payload() -> dict[str, Any]:
     "state": get_state(),
     **tokens_payload(),
   }
+  if payload["dev_pc"]:
+    schema = panel_schema()
+    if schema.get("ok"):
+      payload["panels_schema"] = schema
+  return payload
 
 
 def custom_panel_data(panel_id: str) -> dict[str, Any] | None:

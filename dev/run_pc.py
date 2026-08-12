@@ -8,6 +8,7 @@ Usage (from openpilot root):
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -23,12 +24,13 @@ def main() -> None:
 
   # Install mocks before any webui.server import
   sys.path.insert(0, str(WEBUI_ROOT.parent if (WEBUI_ROOT.parent / "webui").is_dir() else ROOT))
-  from webui.dev.mock_runtime import install_openpilot_mocks
+  from webui.webuid import ensure_runtime
 
   op_root = str(ROOT)
   if not (Path(op_root) / "openpilot").is_dir() and (Path(op_root).parent / "openpilot").is_dir():
     op_root = str(Path(op_root).parent)
-  install_openpilot_mocks(op_root)
+  os.environ.setdefault("OPENPILOT_ROOT", op_root)
+  ensure_runtime()
 
   from aiohttp import web
   from webui.server.app_factory import create_app

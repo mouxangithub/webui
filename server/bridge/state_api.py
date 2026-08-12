@@ -134,12 +134,27 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     pass
 
   speed_ms = float(cs.vEgo) if cs.vEgo == cs.vEgo else 0.0
+  v_ego_cluster = float(getattr(cs, "vEgoCluster", 0.0) or 0.0)
+  if v_ego_cluster != 0.0:
+    speed_ms = v_ego_cluster
+
   speed = speed_ms * 3.6 if is_metric else speed_ms * 2.23694
   unit = "km/h" if is_metric else "mph"
 
   set_speed = 255
-  if hasattr(cs, "cruiseState") and cs.cruiseState.speed > 0:
-    set_speed = cs.cruiseState.speed * (3.6 if is_metric else 2.23694)
+  try:
+    v_cruise_cluster = float(getattr(cs, "vCruiseCluster", 0.0) or 0.0)
+    cruise_raw = 0.0
+    if hasattr(ctrl, "deprecated") and float(getattr(ctrl.deprecated, "vCruise", 0) or 0) > 0:
+      cruise_raw = float(ctrl.deprecated.vCruise)
+    elif hasattr(cs, "cruiseState") and float(getattr(cs.cruiseState, "speed", 0) or 0) > 0:
+      cruise_raw = float(cs.cruiseState.speed)
+    if v_cruise_cluster > 0:
+      cruise_raw = v_cruise_cluster
+    if 0 < cruise_raw < 255:
+      set_speed = cruise_raw * (3.6 if is_metric else 2.23694)
+  except Exception:
+    pass
 
   mads = False
   try:
@@ -159,6 +174,23 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   experimental = bool(ss.experimentalMode) if hasattr(ss, "experimentalMode") else False
   personality = str(ss.personality).split(".")[-1].lower() if hasattr(ss, "personality") else ""
+
+  experimental_confirmed = False
+  recording_audio = False
+  developer_ui = 0
+  torque_bar = False
+  try:
+    from openpilot.common.params import Params
+    experimental_confirmed = Params().get_bool("ExperimentalModeConfirmed")
+  except Exception:
+    pass
+  try:
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    recording_audio = bool(getattr(ui_state, "recording_audio", False))
+    developer_ui = int(ui_state.developer_ui or 0)
+    torque_bar = bool(getattr(ui_state, "torque_bar", False))
+  except Exception:
+    pass
 
   has_longitudinal = False
   alpha_long_available = False
@@ -188,6 +220,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     pass
 
   sp_hud: dict[str, Any] = {}
+  long_override = False
+  try:
+    if sm.valid.get("carControl"):
+      long_override = bool(sm["carControl"].cruiseControl.override)
+  except Exception:
+    pass
   try:
     if sm.valid.get("selfdriveStateSP"):
       ssp = sm["selfdriveStateSP"]
@@ -201,7 +239,34 @@ def build_state_from_sm(sm) -> dict[str, Any]:
         "turn_signal_left": bool(getattr(ssp, "turnSignalLeft", False)),
         "turn_signal_right": bool(getattr(ssp, "turnSignalRight", False)),
         "rocket_fuel": getattr(ssp, "rocketFuel", None),
+        "long_override": long_override,
+        "cluster_speed": round(
+          float(getattr(getattr(cs, "cruiseState", None), "speedCluster", 0) or 0)
+          * (3.6 if is_metric else 2.23694),
+        ) if hasattr(cs, "cruiseState") else None,
       }
+    if sm.valid.get("longitudinalPlanSP"):
+      lp_sp = sm["longitudinalPlanSP"]
+      assist = getattr(lp_sp, "speedLimit", None)
+      sp_hud["speed_limit_assist_active"] = bool(getattr(getattr(assist, "assist", None), "active", False))
+      scc = getattr(lp_sp, "smartCruiseControl", None)
+      if scc is not None:
+        vision = getattr(scc, "vision", None)
+        map_ = getattr(scc, "map", None)
+        sp_hud["scc_vision_enabled"] = bool(getattr(vision, "enabled", False))
+        sp_hud["scc_vision_active"] = bool(getattr(vision, "active", False))
+        sp_hud["scc_map_enabled"] = bool(getattr(map_, "enabled", False))
+        sp_hud["scc_map_active"] = bool(getattr(map_, "active", False))
+      e2e = getattr(lp_sp, "e2eAlerts", None)
+      if e2e is not None:
+        sp_hud["e2e_green_light"] = bool(getattr(e2e, "greenLightAlert", False))
+        sp_hud["e2e_lead_depart"] = bool(getattr(e2e, "leadDepartAlert", False))
+    try:
+      from openpilot.selfdrive.ui.ui_state import ui_state
+      if getattr(ui_state, "CP_SP", None) is not None:
+        sp_hud["pcm_cruise_speed"] = bool(ui_state.CP_SP.pcmCruiseSpeed)
+    except Exception:
+      pass
   except Exception:
     pass
 
@@ -225,8 +290,22 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     pass
 
   alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
-  alert_heights = {"none": 0, "small": 184, "mid": 271, "full": 1080}
+  alert_heights = {"none": 0, "small": 271, "mid": 420, "full": 1080}
   alert_height = alert_heights.get(alert_size, 271 if ss.alertText1 else 0)
+
+  dev_ui = None
+  circular_alert_allowed = False
+  try:
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    from webui.server.bridge.dev_ui_api import snapshot_dev_ui
+    dev_ui = snapshot_dev_ui(sm, is_metric)
+    circular_alert_allowed = (
+      alert_size in ("none", "")
+      and sm.valid.get("driverStateV2")
+      and sm.recv_frame.get("driverStateV2", 0) >= ui_state.started_frame
+    )
+  except Exception:
+    pass
 
   return {
     "ok": True,
@@ -240,6 +319,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "unit": unit,
     "set_speed": round(set_speed) if set_speed != 255 else None,
     "experimental_mode": experimental,
+    "experimental_mode_confirmed": experimental_confirmed,
+    "engageable": bool(getattr(ss, "engageable", False) or engaged),
     "personality": personality,
     "personality_index": _personality_index(personality),
     "has_longitudinal_control": has_longitudinal,
@@ -275,6 +356,11 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     },
     "sp_hud": sp_hud,
     "dm_arc": dm_arc,
+    "developer_ui": developer_ui,
+    "dev_ui": dev_ui,
+    "recording_audio": recording_audio,
+    "torque_bar": torque_bar,
+    "circular_alert_allowed": circular_alert_allowed,
   }
 
 

@@ -41,20 +41,8 @@ from webui.server.bridge.ws_handler import ws_opui_handler
 
 
 async def api_bootstrap(_request: web.Request) -> web.Response:
-  import os
-  from webui.server.bridge.state_hub import get_home, get_state
-  return json_response({
-    "ok": True,
-    "name": "op-webui",
-    "version": read_version(),
-    "openpilot_root": str(openpilot_root()),
-    "dev_pc": os.environ.get("WEBUI_DEV_PC") == "1",
-    "design": {"width": 2160, "height": 1080, "variant": "BIG"},
-    "webrtc": {"port": 5001},
-    "home": get_home(),
-    "state": get_state(),
-    **tokens_payload(),
-  })
+  from webui.server.bridge.ws_rpc import bootstrap_payload
+  return json_response(bootstrap_payload())
 
 
 async def api_state(_request: web.Request) -> web.Response:

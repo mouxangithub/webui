@@ -31,7 +31,7 @@ export function syncStaticUiStrings() {
     if (el) el.textContent = tr(key);
   }
   const treeSearch = document.getElementById("tree-search");
-  if (treeSearch) treeSearch.placeholder = tr("Search…");
+  if (treeSearch) treeSearch.placeholder = tr("Search");
 }
 
 export function applyI18nPayload(data, force = false) {

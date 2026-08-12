@@ -4,9 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=21" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=34" />
 </head>
 <body>
+  <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
   <div id="opui-viewport">
   <div id="app" class="opui" data-screen="home">
     <!-- Offroad / settings sidebar (left 500px when settings) -->
@@ -23,6 +24,7 @@
         <div class="opui-net-type">Wi-Fi</div>
       </div>
       <div id="metrics" class="opui-side-metrics"></div>
+      <button type="button" id="sidebar-mic" class="opui-sidebar-mic" hidden title="录音中"></button>
       <button type="button" id="btn-sidebar-bottom" class="opui-sidebar-btn opui-sidebar-btn--home" title=""></button>
     </aside>
 
@@ -78,33 +80,51 @@
         <div id="hud-blinker-r" class="opui-blinker opui-blinker--r" hidden>▶</div>
         <div id="hud-bsl" class="opui-bsl opui-bsl--l" hidden></div>
         <div id="hud-bsr" class="opui-bsl opui-bsl--r" hidden></div>
-        <svg id="dm-arc" class="opui-dm-arc" viewBox="0 0 120 120" hidden>
-          <circle class="dm-arc-bg" cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="8"/>
-          <circle class="dm-arc-fill" cx="60" cy="60" r="50" fill="none" stroke="#80d8a6" stroke-width="8"
-            stroke-linecap="round" transform="rotate(-90 60 60)" stroke-dasharray="0 220"/>
-          <circle class="dm-arc-h" cx="60" cy="60" r="42" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"
-            stroke-linecap="round" transform="rotate(0 60 60)" stroke-dasharray="0 220"/>
-          <circle class="dm-arc-v" cx="60" cy="60" r="42" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"
-            stroke-linecap="round" transform="rotate(90 60 60)" stroke-dasharray="0 220"/>
+        <div id="hud-scc-v" class="opui-hud-scc" hidden>SCC-V</div>
+        <div id="hud-scc-m" class="opui-hud-scc opui-hud-scc--map" hidden>SCC-M</div>
+        <div id="hud-rocket" class="opui-rocket" hidden></div>
+        <div id="dm-arc-wrap" class="opui-dm-wrap" hidden>
+        <svg id="dm-arc" class="opui-dm-arc" viewBox="0 0 192 192">
+          <circle class="dm-arc-bg" cx="96" cy="96" r="80" fill="rgba(0,0,0,0.65)"/>
+          <circle class="dm-arc-fill" cx="96" cy="96" r="68" fill="none" stroke="#80d8a6" stroke-width="8"
+            stroke-linecap="round" transform="rotate(-90 96 96)" stroke-dasharray="0 300"/>
+          <circle class="dm-arc-h" cx="96" cy="96" r="58" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"
+            stroke-linecap="round" transform="rotate(0 96 96)" stroke-dasharray="0 300"/>
+          <circle class="dm-arc-v" cx="96" cy="96" r="58" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"
+            stroke-linecap="round" transform="rotate(90 96 96)" stroke-dasharray="0 300"/>
         </svg>
-        <div id="hud-standstill" class="opui-hud-standstill" hidden>
-          <div class="opui-hud-standstill-label">STOPPED</div>
-          <div id="hud-standstill-timer" class="opui-hud-standstill-timer">0:00</div>
+        </div>
+        <div id="hud-circular-alert" class="opui-hud-circular" hidden>
+          <div class="opui-hud-circular-ring" aria-hidden="true"></div>
+          <img id="hud-circular-img" class="opui-hud-circular-img" alt="" hidden />
+          <div id="hud-circular-text" class="opui-hud-circular-text" hidden></div>
+          <div id="hud-circular-stopped" class="opui-hud-circular-stopped" hidden>STOPPED</div>
+          <div id="hud-circular-timer" class="opui-hud-circular-timer" hidden>0:00</div>
         </div>
         <div class="opui-hud-speed-block">
           <span id="hud-speed">0</span>
           <span id="hud-unit" class="opui-hud-unit">km/h</span>
         </div>
-        <button type="button" id="btn-experimental" class="opui-exp-btn" hidden title="Experimental">α</button>
+        <button type="button" id="btn-experimental" class="opui-exp-btn" hidden title="Experimental">
+          <img id="exp-icon" class="opui-exp-icon" src="" alt="" />
+        </button>
+        <div class="opui-hud-bottom-fade" aria-hidden="true"></div>
         </div>
+        <div id="dev-ui-bottom" class="opui-dev-ui-bottom" hidden></div>
+        <div id="dev-ui-right" class="opui-dev-ui-right" hidden></div>
         <div id="alert-bar" class="opui-alert" hidden>
-          <span id="alert-text1"></span>
-          <span id="alert-text2" class="opui-alert-sub"></span>
+          <div class="opui-alert__inner">
+            <span id="alert-text1" class="opui-alert__t1"></span>
+            <span id="alert-text2" class="opui-alert__t2"></span>
+          </div>
+        </div>
+        <div id="border" class="opui-border" aria-hidden="true">
+          <div class="opui-border__outer"></div>
+          <div class="opui-border__inner opui-border--disengaged"></div>
         </div>
       </section>
     </main>
 
-    <div id="border" class="opui-border opui-border--disengaged"></div>
     <div id="toast" class="opui-toast" hidden></div>
     <dialog id="confirm-dialog" class="opui-dialog">
       <p id="confirm-msg"></p>
@@ -115,9 +135,9 @@
     </dialog>
 
     <div id="modal-confirm" class="opui-modal" hidden>
-      <div class="opui-modal-card opui-modal-card--confirm">
-        <div id="modal-confirm-msg" class="opui-modal-body"></div>
-        <div class="opui-modal-actions opui-modal-actions--split">
+      <div class="opui-modal-card opui-modal-card--confirm opui-modal-card--dialog">
+        <div id="modal-confirm-msg" class="opui-modal-body opui-modal-scroll"></div>
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--split">
           <button type="button" id="modal-confirm-cancel" class="opui-btn opui-btn--dialog">Cancel</button>
           <button type="button" id="modal-confirm-ok" class="opui-btn opui-btn--dialog opui-btn--primary">Confirm</button>
         </div>
@@ -125,22 +145,26 @@
     </div>
 
     <div id="modal-keyboard" class="opui-modal opui-modal--keyboard" hidden>
-      <div class="opui-modal-card opui-keyboard-card">
+      <div class="opui-modal-card opui-modal-card--dialog opui-modal-card--keyboard">
         <div id="keyboard-title" class="opui-modal-title"></div>
         <div id="keyboard-display" class="opui-keyboard-display"></div>
         <div id="keyboard-grid" class="opui-keyboard-grid"></div>
-        <button type="button" id="keyboard-cancel" class="opui-btn">Cancel</button>
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--split">
+          <button type="button" id="keyboard-cancel" class="opui-btn opui-btn--dialog">Cancel</button>
+        </div>
       </div>
     </div>
 
     <div id="modal-tree" class="opui-modal" hidden>
-      <div class="opui-modal-card opui-tree-card">
-        <div id="tree-title" class="opui-modal-title"></div>
-        <div id="tree-search-wrap"><input id="tree-search" class="opui-input" placeholder="Search…" /></div>
-        <div id="tree-body" class="opui-tree-body"></div>
-        <div class="opui-modal-actions">
-          <button type="button" id="tree-cancel" class="opui-btn">Cancel</button>
-          <button type="button" id="tree-select" class="opui-btn opui-btn--primary">Select</button>
+      <div class="opui-modal-card opui-modal-card--tree">
+        <div class="opui-tree-header">
+          <div id="tree-title" class="opui-modal-title"></div>
+          <div id="tree-search-wrap" class="opui-tree-search-wrap"><input id="tree-search" class="opui-tree-search" type="search" autocomplete="off" /></div>
+        </div>
+        <div id="tree-body" class="opui-tree-body opui-modal-scroll"></div>
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--split">
+          <button type="button" id="tree-cancel" class="opui-btn opui-btn--dialog">Cancel</button>
+          <button type="button" id="tree-select" class="opui-btn opui-btn--dialog">Select</button>
         </div>
       </div>
     </div>
@@ -148,8 +172,8 @@
     <div id="modal-multi" class="opui-modal" hidden>
       <div class="opui-modal-card opui-modal-card--multi">
         <div id="multi-title" class="opui-modal-title"></div>
-        <div id="multi-list" class="opui-multi-list"></div>
-        <div class="opui-modal-actions opui-modal-actions--split">
+        <div id="multi-list" class="opui-multi-list opui-modal-scroll"></div>
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--split">
           <button type="button" id="multi-cancel" class="opui-btn opui-btn--dialog">Cancel</button>
           <button type="button" id="multi-select" class="opui-btn opui-btn--dialog opui-btn--primary">Select</button>
         </div>
@@ -157,10 +181,12 @@
     </div>
 
     <div id="modal-html" class="opui-modal" hidden>
-      <div class="opui-modal-card opui-html-card">
+      <div class="opui-modal-card opui-modal-card--dialog opui-modal-card--html">
         <div id="html-title" class="opui-modal-title"></div>
-        <div id="html-body" class="opui-html-scroll"></div>
-        <button type="button" id="html-ok" class="opui-btn opui-btn--primary">OK</button>
+        <div id="html-body" class="opui-modal-scroll opui-html-content"></div>
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--end">
+          <button type="button" id="html-ok" class="opui-btn opui-btn--dialog opui-btn--primary">OK</button>
+        </div>
       </div>
     </div>
 
@@ -182,12 +208,15 @@
       <button type="button" data-preset="override">Override</button>
       <button type="button" data-preset="lat_only">仅横向</button>
       <button type="button" data-preset="alert_critical">严重告警</button>
+      <button type="button" data-preset="e2e_green">E2E 绿灯</button>
+      <button type="button" data-preset="standstill_timer">静止计时</button>
     </div>
     <label class="opui-dev-row"><input type="checkbox" id="dev-started" /> 已上路 (started)</label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-engaged" /> 已激活 (engaged)</label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> Experimental</label>
+    <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> 录音麦克风</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=21"></script>
+  <script type="module" src="/static/js/app.js?v=34"></script>
 </body>
 </html>

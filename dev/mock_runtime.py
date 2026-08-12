@@ -6,10 +6,20 @@ Installed by webui/dev/run_pc.py before any webui server imports.
 
 from __future__ import annotations
 
+import enum
 import os
 import types
-from dataclasses import dataclass, field
 from typing import Any
+
+
+class ParamKeyType(enum.Enum):
+  STRING = enum.auto()
+  BOOL = enum.auto()
+  INT = enum.auto()
+  FLOAT = enum.auto()
+  TIME = enum.auto()
+  JSON = enum.auto()
+  BYTES = enum.auto()
 
 # Mutable simulation (toggled via /api/opui/dev/simulation)
 SIM: dict[str, Any] = {
@@ -33,6 +43,11 @@ SIM: dict[str, Any] = {
   "sunnylink": {"status": "ONLINE", "tone": "good"},
   "road_name": "Dev Preview Rd",
   "speed_limit": 60,
+  "speed_limit_assist": "preActive",
+  "scc_vision_enabled": True,
+  "scc_vision_active": True,
+  "scc_map_enabled": True,
+  "scc_map_active": True,
   "blindspot_left": False,
   "blindspot_right": False,
   "turn_signal_left": False,
@@ -41,6 +56,19 @@ SIM: dict[str, Any] = {
   "dm_prob": 0.82,
   "dm_pose": [0.05, -0.12, 0.02],
   "alert_size": "none",
+  "car_fingerprint": "TOYOTA_WILDLANDER_PHEV",
+  "car_brand": "toyota",
+  "paired": False,
+  "experimental_mode_confirmed": True,
+  "recording_audio": False,
+  "developer_ui": 3,
+  "standstill": False,
+  "standstill_timer_enabled": True,
+  "standstill_timer": 0,
+  "e2e_green_light": False,
+  "e2e_lead_depart": False,
+  "engageable": True,
+  "pcm_cruise_speed": False,
 }
 
 
@@ -71,7 +99,7 @@ def _seed_params() -> dict[str, bytes | str]:
     "LocalDriveStats": b'{"all":{"distance":1234.5,"routes":42,"minutes":890}}',
     "LastSunnylinkPingTime": b"2026-08-11T12:00:00Z",
     "LanguageSetting": b"zh-CHS",
-    "MaxTimeOffroad": b"10",
+    "MaxTimeOffroad": b"1800",
     "DeviceBootMode": b"0",
     "QuietMode": b"0",
     "OnroadUploads": b"1",
@@ -93,21 +121,22 @@ class MockParams:
   def get_type(self, key: str):
     if key not in MockParams._store and not key.endswith("Lock"):
       if os.environ.get("WEBUI_DEV_PC") == "1":
-        return types.SimpleNamespace(name="STRING")
+        return ParamKeyType.STRING
       return None
     val = MockParams._store.get(key, b"0")
     if isinstance(val, bytes):
       val = val.decode(errors="replace")
     if val in ("0", "1") and key not in (
       "LongitudinalPersonality", "DistractionDetectionLevel", "ChevronInfo",
-      "DevUIInfo", "SpeedLimitMode", "MadsSteeringMode",
+      "DevUIInfo", "SpeedLimitMode", "MadsSteeringMode", "MaxTimeOffroad",
+      "DeviceBootMode",
     ):
-      return types.SimpleNamespace(name="BOOL")
+      return ParamKeyType.BOOL
     try:
       int(val)
-      return types.SimpleNamespace(name="INT")
+      return ParamKeyType.INT
     except (TypeError, ValueError):
-      return types.SimpleNamespace(name="STRING")
+      return ParamKeyType.STRING
 
   def get(self, key: str, block: bool = False, default=None, return_default: bool = False):
     if key not in MockParams._store:
@@ -143,6 +172,23 @@ class MockParams:
     MockParams._store = _seed_params()
 
 
+def _mock_dev_ui(s: dict[str, Any]) -> dict[str, Any]:
+  mode = int(s.get("developer_ui", 0))
+  return {
+    "mode": mode,
+    "bottom": [
+      {"label": "A_EGO", "value": "0.0", "unit": "m/s²", "color": "#ffffff"},
+      {"label": "LEAD SPEED", "value": "0", "unit": "km/h", "color": "#ffffff"},
+    ],
+    "right": [
+      {"label": "REL DIST", "value": "42", "unit": "m", "color": "#ffbc00"},
+      {"label": "REL SPEED", "value": "5", "unit": "km/h", "color": "#ffffff"},
+      {"label": "REAL STEER", "value": "2.1°", "unit": "", "color": "#ffffff"},
+      {"label": "ACTUAL L.A.", "value": "0.12", "unit": "m/s²", "color": "#00ff00"},
+    ],
+  }
+
+
 def snapshot_dev_ui_state() -> dict[str, Any]:
   s = SIM
   unit = "km/h" if s["is_metric"] else "mph"
@@ -150,7 +196,7 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
   set_speed = s["set_speed_kmh"] if s["is_metric"] else round(s["set_speed_kmh"] * 0.621371)
 
   alert = {"text1": s["alert_text1"], "text2": s["alert_text2"], "size": s.get("alert_size", "mid"), "status": s["alert_status"]}
-  sizes = {"none": 0, "small": 184, "mid": 271, "full": 1080}
+  sizes = {"none": 0, "small": 271, "mid": 420, "full": 1080}
   alert["height_px"] = sizes.get(alert["size"], 0) if s["alert_text1"] else 0
 
   return {
@@ -166,6 +212,8 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "unit": unit,
     "set_speed": set_speed if s["started"] else None,
     "experimental_mode": s["experimental_mode"],
+    "experimental_mode_confirmed": s.get("experimental_mode_confirmed", True),
+    "engageable": s.get("engageable", True),
     "alert": alert,
     "device": {
       "network_type": s["network_type"],
@@ -187,13 +235,29 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "sp_hud": {
       "speed_limit": s.get("speed_limit"),
       "speed_limit_assist": s.get("speed_limit_assist", ""),
+      "speed_limit_assist_active": bool(s.get("speed_limit_assist")),
       "road_name": s.get("road_name", ""),
+      "standstill_timer": s.get("standstill_timer"),
       "blindspot_left": s.get("blindspot_left", False),
       "blindspot_right": s.get("blindspot_right", False),
       "turn_signal_left": s.get("turn_signal_left", False),
       "turn_signal_right": s.get("turn_signal_right", False),
       "rocket_fuel": s.get("rocket_fuel"),
+      "long_override": s.get("long_override", False),
+      "cluster_speed": s.get("set_speed_kmh"),
+      "pcm_cruise_speed": s.get("pcm_cruise_speed", False),
+      "scc_vision_enabled": s.get("scc_vision_enabled", False),
+      "scc_vision_active": s.get("scc_vision_active", False),
+      "scc_map_enabled": s.get("scc_map_enabled", False),
+      "scc_map_active": s.get("scc_map_active", False),
+      "e2e_green_light": s.get("e2e_green_light", False),
+      "e2e_lead_depart": s.get("e2e_lead_depart", False),
     },
+    "developer_ui": int(s.get("developer_ui", 0)),
+    "recording_audio": bool(s.get("recording_audio", False)),
+    "torque_bar": bool(s.get("torque_bar", False)),
+    "circular_alert_allowed": s["started"] and s.get("alert_size", "none") in ("none", ""),
+    "dev_ui": _mock_dev_ui(s) if s["started"] and int(s.get("developer_ui", 0)) > 0 else None,
     "dm_arc": {
       "visible": True,
       "prob": s.get("dm_prob", 0.8),
@@ -239,6 +303,7 @@ def install_openpilot_mocks(root: str) -> None:
 
   params_mod.Params = MockParams
   params_mod.UnknownKeyName = UnknownKeyName
+  params_mod.ParamKeyType = ParamKeyType
   swaglog_mod = types.ModuleType("openpilot.common.swaglog")
   swaglog_mod.cloudlog = _CloudLog()
 

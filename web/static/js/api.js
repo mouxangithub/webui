@@ -3,9 +3,25 @@
 import { opuiWs } from "./ws.js";
 
 const ASSET_RE = /^\/api\/opui\/assets\//;
+const HTTP_FIRST_RE = /^\/api\/opui\/(panels|dev|i18n|device|bootstrap)/;
+const HTTP_TIMEOUT_MS = 8000;
 
 function useHttp(path) {
-  return ASSET_RE.test(path);
+  if (ASSET_RE.test(path)) return true;
+  if (/^\/api\/opui\/bootstrap/.test(path)) return true;
+  if (window.__OPUI_DEV_PC && HTTP_FIRST_RE.test(path)) return true;
+  return false;
+}
+
+async function fetchJson(path, init = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HTTP_TIMEOUT_MS);
+  try {
+    const r = await fetch(path, { ...init, signal: ctrl.signal });
+    return r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function apiGet(path) {
@@ -14,8 +30,7 @@ export async function apiGet(path) {
       return await opuiWs.rpc("GET", path);
     } catch (_) { /* fallback */ }
   }
-  const r = await fetch(path);
-  return r.json();
+  return fetchJson(path);
 }
 
 export async function apiPut(path, body) {
@@ -24,12 +39,11 @@ export async function apiPut(path, body) {
       return await opuiWs.rpc("PUT", path, body);
     } catch (_) { /* fallback */ }
   }
-  const r = await fetch(path, {
+  return fetchJson(path, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return r.json();
 }
 
 export async function apiPost(path, body = {}) {
@@ -38,12 +52,11 @@ export async function apiPost(path, body = {}) {
       return await opuiWs.rpc("POST", path, body);
     } catch (_) { /* fallback */ }
   }
-  const r = await fetch(path, {
+  return fetchJson(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return r.json();
 }
 
 export function toast(msg, ms = 3000) {

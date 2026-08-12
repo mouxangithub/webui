@@ -62,6 +62,14 @@ def home_seq() -> int:
     return _home_seq
 
 
+def refresh_dev_state() -> None:
+  """PC dev only — push mock state immediately after simulation changes."""
+  if os.environ.get("WEBUI_DEV_PC") != "1":
+    return
+  from webui.dev.mock_runtime import snapshot_dev_ui_state
+  _set_state(snapshot_dev_ui_state())
+
+
 def _set_state(st: dict[str, Any]) -> None:
   global _state, _state_seq
   with _lock:
@@ -122,7 +130,7 @@ def _dev_loop() -> None:
     if home_ticks >= 25:
       _set_home(snapshot_home())
       home_ticks = 0
-    time.sleep(0.2)
+    time.sleep(0.1)
 
 
 def _device_loop() -> None:

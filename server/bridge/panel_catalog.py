@@ -17,7 +17,8 @@ PANELS: list[dict[str, Any]] = [
       {"type": "readonly", "param": "HardwareSerial", "label": "Serial"},
       {"type": "separator"},
       {"type": "action", "action": "pair_device", "label": "Pair Device", "button": "PAIR",
-       "desc": "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."},
+       "desc": "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer.",
+       "hide_when_paired": True},
       {"type": "separator"},
       {"type": "action", "action": "reset_calibration", "label": "Reset Calibration", "button": "RESET",
        "desc": "sunnypilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.",
@@ -221,21 +222,13 @@ PANELS: list[dict[str, Any]] = [
     "id": "osm",
     "title": "OSM",
     "custom": "osm",
-    "widgets": [
-      {"type": "readonly", "param": "MapdVersion", "label": "Mapd Version"},
-      {"type": "readonly", "param": "OsmLocationTitle", "label": "Location"},
-      {"type": "readonly", "param": "OsmDownloadedDate", "label": "Downloaded"},
-      {"type": "bool", "param": "OsmLocal", "label": "Use Local OSM DB"},
-      {"type": "action", "action": "osm_check_updates", "label": "Check Map Updates", "button": "CHECK"},
-    ],
+    "widgets": [],
   },
   {
     "id": "trips",
     "title": "Trips",
     "custom": "trips",
-    "widgets": [
-      {"type": "readonly", "param": "LocalDriveStats", "label": "Drive Statistics"},
-    ],
+    "widgets": [],
   },
   {
     "id": "vehicle",

@@ -1,20 +1,26 @@
-/** sunnypilot onroad HUD extensions (speed limit, road name, blinkers, DM arc, rocket fuel). */
-
-let standstillElapsed = 0;
-let lastStandstillTs = 0;
+/** sunnypilot onroad HUD extensions (speed limit, road name, blinkers, DM arc, rocket fuel, SCC). */
 
 export function updateSpHud(st) {
   const hud = document.getElementById("hud");
-  if (!hud || !st?.started) return;
+  if (!hud) return;
+
+  if (!st?.started) {
+    clearSpHud();
+    return;
+  }
 
   const sp = st.sp_hud || {};
+  const alertSize = (st.alert?.size || "none").toLowerCase();
+  const hideDm = alertSize && alertSize !== "none";
+
   const slaWrap = document.getElementById("hud-speed-limit-wrap");
   setText("hud-speed-limit", sp.speed_limit != null ? String(Math.round(sp.speed_limit)) : "");
   if (slaWrap) {
-    slaWrap.classList.toggle("opui-hud-sla--assist", sp.speed_limit_assist === "preActive");
+    const assist = sp.speed_limit_assist === "preActive" || sp.speed_limit_assist_active;
+    slaWrap.classList.toggle("opui-hud-sla--assist", assist);
   }
 
-  updateStandstillTimer(st);
+  updateSccTags(sp);
 
   const blinkL = document.getElementById("hud-blinker-l");
   const blinkR = document.getElementById("hud-blinker-r");
@@ -35,32 +41,32 @@ export function updateSpHud(st) {
   }
 
   setText("hud-road-name", sp.road_name);
-  drawDmArc(st.dm_arc);
+  drawDmArc(st.dm_arc, hideDm);
 }
 
-function updateStandstillTimer(st) {
-  const wrap = document.getElementById("hud-standstill");
-  const timerEl = document.getElementById("hud-standstill-timer");
-  if (!wrap || !timerEl) return;
+function clearSpHud() {
+  ["hud-speed-limit-wrap", "hud-blinker-l", "hud-blinker-r", "hud-bsl", "hud-bsr",
+    "hud-rocket", "hud-road-name", "hud-scc-v", "hud-scc-m", "dm-arc-wrap"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
+}
 
-  const enabled = st.standstill_timer_enabled && st.standstill;
-  if (!enabled) {
-    wrap.hidden = true;
-    standstillElapsed = 0;
-    lastStandstillTs = 0;
-    return;
+function updateSccTags(sp) {
+  const vision = document.getElementById("hud-scc-v");
+  const map = document.getElementById("hud-scc-m");
+  const override = !!sp.long_override;
+
+  if (vision) {
+    vision.hidden = !sp.scc_vision_enabled;
+    vision.classList.toggle("is-override", override);
+    vision.classList.toggle("is-dim", !sp.scc_vision_active && sp.scc_vision_enabled);
   }
-
-  const now = performance.now();
-  if (lastStandstillTs > 0) {
-    standstillElapsed += (now - lastStandstillTs) / 1000;
+  if (map) {
+    map.hidden = !sp.scc_map_enabled;
+    map.classList.toggle("is-override", override);
+    map.classList.toggle("is-dim", !sp.scc_map_active && sp.scc_map_enabled);
   }
-  lastStandstillTs = now;
-
-  const minute = Math.floor(standstillElapsed / 60);
-  const second = Math.floor(standstillElapsed - minute * 60);
-  timerEl.textContent = `${minute}:${String(second).padStart(2, "0")}`;
-  wrap.hidden = false;
 }
 
 function setText(id, text) {
@@ -84,22 +90,24 @@ function setText(id, text) {
   el.textContent = text;
 }
 
-function drawDmArc(dm) {
+function drawDmArc(dm, hideDm) {
+  const wrap = document.getElementById("dm-arc-wrap");
   const svg = document.getElementById("dm-arc");
-  if (!svg) return;
-  if (!dm?.visible) {
-    svg.hidden = true;
+  if (!wrap || !svg) return;
+  if (!dm?.visible || hideDm) {
+    wrap.hidden = true;
     return;
   }
-  svg.hidden = false;
-  svg.classList.toggle("opui-dm-arc--rhd", !!dm.rhd);
+  wrap.hidden = false;
+  wrap.classList.toggle("opui-dm-wrap--rhd", !!dm.rhd);
+
   const prob = Math.max(0, Math.min(1, dm.prob ?? 0));
   const fill = svg.querySelector(".dm-arc-fill");
   const hArc = svg.querySelector(".dm-arc-h");
   const vArc = svg.querySelector(".dm-arc-v");
-  const len = 220;
+  const len = 300;
   if (fill) {
-    fill.setAttribute("stroke", dm.engaged ? "#1AF242" : "#919b95");
+    fill.setAttribute("stroke", dm.engaged ? "#1AF242" : "#8b8b8b");
     fill.setAttribute("stroke-dasharray", `${len * prob} ${len}`);
   }
   const pose = dm.pose || [0, 0, 0];

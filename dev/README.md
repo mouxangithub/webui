@@ -1,60 +1,36 @@
 # PC 本地预览
 
-在 Windows / macOS / Linux 上快速启动 Web UI，**无需 AGNOS 编译、cereal 或 NetworkManager**。
-
-## 启动
-
-在 **openpilot 根目录**执行：
+在 **openpilot 根目录** 运行：
 
 ```bash
-py -3 webui/dev/run_pc.py
-# 或
-py -3 webui/dev/run_pc.py --port 5080 --host 127.0.0.1
+py -3 webui/dev/run_pc.py --port 5080
 ```
 
-浏览器打开：**http://127.0.0.1:5080/**
-
-右下角会出现 **Dev 模拟面板**，可一键切换：
-
-| 预设 | 效果 |
-|------|------|
-| 离路 Home | `started=false` |
-| 行驶·已激活 | 绿框 + 车速 HUD |
-| 行驶·未激活 | 蓝框 |
-| Override | 灰框 |
-| 仅横向 MADS | 青框 |
-| 严重告警 | 底部红色告警条 |
-
-也可手动调车速、勾选「已上路 / 已激活」、Experimental 等。
-
-## 与车机对比
-
-| 项 | PC 预览 (`run_pc.py`) | 车机 AGNOS |
-|----|----------------------|------------|
-| Params | 内存 Mock，可读写 | 真实 `/data/params` |
-| 行车状态 | Dev 面板模拟 | 实时 cereal |
-| 前路相机 | 无 WebRTC（占位） | `webrtcd` 真流 |
-| Wi-Fi | 假网络列表 | NetworkManager |
-| 模型/OSM 树形 UI | 参数级，无完整对话框 | raylib 完整控件 |
-| 车道线/模型叠加 | 未实现 | VisionIPC + OpenGL |
-
-## 依赖
+或（自动检测并启用 Mock）：
 
 ```bash
-pip install aiohttp
+py -3 -m webui.webuid --host 127.0.0.1 --port 5080
 ```
 
-## 车机正式运行
+浏览器打开 `http://127.0.0.1:5080/`，强刷缓存（`?v=33`）。
 
-```bash
-cd /data/openpilot
-PYTHONPATH=. python3 -m webui.webuid --port 5080
-```
+**GUI 对齐清单**（与原生 BIG UI 逐项对照）：[`docs/GUI_ALIGNMENT.md`](../docs/GUI_ALIGNMENT.md)
 
-或由 `launch_chffrplus.sh` 自动拉起。
+## 与 J3 车机的差异
 
-## 是否 1:1？
+| 项 | PC 预览 | J3 真机 |
+|----|---------|---------|
+| Params | 内存 Mock | `/data/params` |
+| 行车状态 | Dev 面板模拟 | cereal SubMaster |
+| 车型 | 默认 `TOYOTA_WILDLANDER_PHEV`（SIM） | `CarParamsPersistent` |
+| 相机 | 无 WebRTC 流 | 设备相机 |
+| 配对状态 | 默认未配对（可改 SIM.paired） | Prime / DongleId |
 
-**不是。** 当前 Web UI 约覆盖车机 BIG UI 的 **功能面（设置项 + 状态机）约 70–80%**，**像素/动效/相机/模型叠加** 仍明显弱于 raylib 原生 UI。PC 预览用于**布局与交互开发**，不能替代车机验收。
+PC 仅用于 UI 布局与交互调试；发布前请在 J3 上验证。
 
-完整差距清单见 [docs/GAP_VS_DEVICE.md](../docs/GAP_VS_DEVICE.md)。
+## 黑屏排查
+
+1. 确认终端无 `ImportError: ParamKeyType`（需最新 `mock_runtime.py`）
+2. 必须用 `run_pc.py` 或 `webuid` 自动 Mock，不要裸跑未 patch 的 server
+3. 浏览器 F12 → Console / Network：`/ws/opui` hello、`/api/opui/bootstrap` 应 `ok: true`
+4. 若只见设置页灰框：点左侧 ✕ 回到首页，或检查 `/api/opui/panels/device`

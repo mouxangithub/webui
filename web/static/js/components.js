@@ -57,7 +57,7 @@ function initModalBackdropDismiss() {
       const dismiss = modal._backdropDismiss;
       if (typeof dismiss === "function") dismiss();
     });
-    modal.querySelector(".opui-modal-card")?.addEventListener("click", (e) => e.stopPropagation());
+    modal.querySelector("[class*='opui-modal-card']")?.addEventListener("click", (e) => e.stopPropagation());
   });
 }
 
@@ -259,31 +259,61 @@ export function showTree(opts) {
     }
     titleEl.textContent = title;
     searchWrap.hidden = !searchable;
-    if (search) search.placeholder = tr("Search…");
+    if (search) {
+      search.value = "";
+      search.placeholder = tr("Search");
+    }
     const cancelBtn = document.getElementById("tree-cancel");
     if (cancelBtn) cancelBtn.textContent = tr("Cancel");
     if (selectBtn) selectBtn.textContent = tr("Select");
     let pick = selectedRef;
     let query = "";
+    const expanded = new Set();
+
+    const syncSelectBtn = () => {
+      if (!selectBtn) return;
+      const enabled = !!pick && pick !== selectedRef;
+      selectBtn.disabled = !enabled;
+      selectBtn.classList.toggle("opui-btn--primary", enabled);
+    };
+
+    const folderLabel = (name) => {
+      if (name == null || name === "") return tr("Default");
+      return name;
+    };
 
     const render = () => {
       body.innerHTML = "";
-      const q = query.toLowerCase();
+      const q = query.toLowerCase().trim();
+      const searching = !!q;
       for (const folder of folders) {
         const bundles = (folder.bundles || []).filter((b) => {
           const label = (b.name || b.ref || "").toLowerCase();
-          return !q || label.includes(q) || (folder.name || "").toLowerCase().includes(q);
+          const folderName = folderLabel(folder.name).toLowerCase();
+          return !q || label.includes(q) || folderName.includes(q);
         });
         if (!bundles.length) continue;
-        const hdr = document.createElement("div");
-        hdr.className = "opui-tree-folder";
-        hdr.textContent = folder.name || "Models";
-        body.appendChild(hdr);
+        const hasFolder = !!(folder.name != null && folder.name !== "");
+        const isOpen = searching || !hasFolder || expanded.has(folder.name);
+        if (hasFolder) {
+          const hdr = document.createElement("button");
+          hdr.type = "button";
+          hdr.className = "opui-tree-dialog-item opui-tree-dialog-item--folder";
+          hdr.textContent = `${isOpen ? "−" : "+"} ${folderLabel(folder.name)}`;
+          hdr.addEventListener("click", () => {
+            if (expanded.has(folder.name)) expanded.delete(folder.name);
+            else expanded.add(folder.name);
+            render();
+          });
+          body.appendChild(hdr);
+          if (!isOpen) continue;
+        }
         for (const b of bundles) {
           const row = document.createElement("button");
           row.type = "button";
-          row.className = "opui-tree-item" + (b.ref === pick ? " selected" : "");
-          row.innerHTML = `<span>${escapeHtml(b.name || b.ref)}</span>`;
+          const indent = hasFolder ? " opui-tree-dialog-item--child" : "";
+          row.className = `opui-tree-dialog-item${indent}` + (b.ref === pick ? " selected" : "");
+          row.innerHTML = `<span class="opui-tree-dialog-label">${escapeHtml(b.name || b.ref)}</span>`;
           if (onFavorite) {
             const star = document.createElement("span");
             star.className = "opui-tree-star";
@@ -298,7 +328,7 @@ export function showTree(opts) {
           }
           row.addEventListener("click", () => {
             pick = b.ref;
-            selectBtn.disabled = pick === selectedRef;
+            syncSelectBtn();
             render();
           });
           body.appendChild(row);
@@ -306,8 +336,8 @@ export function showTree(opts) {
       }
     };
 
-    search.oninput = () => { query = search.value; render(); };
-    selectBtn.disabled = true;
+    if (search) search.oninput = () => { query = search.value; render(); };
+    syncSelectBtn();
     const close = () => {
       popModal(root);
       resolve(null);
@@ -326,15 +356,33 @@ export function showHtml(opts) {
   const { title = "", html = "" } = opts;
   return new Promise((resolve) => {
     const root = document.getElementById("modal-html");
-    document.getElementById("html-title").textContent = title;
-    document.getElementById("html-body").innerHTML = html;
+    const titleEl = document.getElementById("html-title");
+    const bodyEl = document.getElementById("html-body");
+    const okBtn = document.getElementById("html-ok");
+    if (!root || !bodyEl) {
+      resolve(true);
+      return;
+    }
+    if (titleEl) titleEl.textContent = title;
+    bodyEl.innerHTML = normalizeHtmlFragment(html);
+    if (okBtn) okBtn.textContent = tr("OK");
     const close = () => {
       popModal(root);
       resolve(true);
     };
-    document.getElementById("html-ok")?.addEventListener("click", close, { once: true });
+    okBtn?.addEventListener("click", close, { once: true });
     pushModal(root, close);
   });
+}
+
+function normalizeHtmlFragment(html) {
+  const raw = String(html || "").trim();
+  if (!raw) return "";
+  const tpl = document.createElement("template");
+  tpl.innerHTML = raw;
+  const body = tpl.content.querySelector("body");
+  if (body) return body.innerHTML;
+  return raw;
 }
 
 function escapeHtml(s) {

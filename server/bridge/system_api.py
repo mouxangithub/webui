@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import os
 from typing import Any
 
 
@@ -108,6 +109,19 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
     if action == "webrtc_disable":
       p.put_bool("IsLiveStreaming", False, block=True)
       return {"ok": True, "action": action}
+
+    if action == "bookmark":
+      try:
+        import openpilot.cereal.messaging as messaging
+        pm = messaging.PubMaster(["bookmarkButton"])
+        msg = messaging.new_message("bookmarkButton")
+        msg.valid = True
+        pm.send("bookmarkButton", msg)
+        return {"ok": True, "action": action}
+      except Exception as exc:
+        if os.environ.get("WEBUI_DEV_PC") == "1":
+          return {"ok": True, "action": action, "dev_pc": True}
+        return {"ok": False, "error": str(exc)}
 
     if action == "set_branch":
       branch = str(payload.get("branch", "")).strip()

@@ -1,130 +1,122 @@
-/** ModelV2 lane/path overlay — mirrors device ModelRenderer projection. */
+/** Canvas overlay for modelV2 lanes / path / leads (mirrors ModelRenderer). */
 
 let canvas = null;
 let ctx = null;
-let lastFrame = null;
+
+const LANE_GREEN = "rgba(13, 248, 122, 0.55)";
+const PATH_WHITE = "rgba(242, 242, 242, 0.7)";
+const LEAD_FILL = "rgba(255, 196, 0, 0.45)";
 
 export function initModelCanvas() {
-  const wrap = document.getElementById("model-overlay");
-  if (!wrap) return;
-  canvas = document.getElementById("model-canvas");
-  if (!canvas) {
-    canvas = document.createElement("canvas");
-    canvas.id = "model-canvas";
-    canvas.className = "opui-model-canvas";
-    wrap.appendChild(canvas);
-  }
+  const host = document.getElementById("model-overlay");
+  if (!host || canvas) return;
+  canvas = document.createElement("canvas");
+  canvas.className = "opui-model-canvas";
+  host.appendChild(canvas);
   ctx = canvas.getContext("2d");
 }
 
-export function showModelOverlay(visible) {
-  const wrap = document.getElementById("model-overlay");
-  if (wrap) wrap.hidden = !visible;
+export function showModelOverlay(show) {
+  const el = document.getElementById("model-overlay");
+  if (el) el.hidden = !show;
 }
 
-export function drawModelOverlay(frame) {
-  if (!ctx || !canvas) return;
-  lastFrame = frame;
-  if (!frame?.ok) return;
-
-  const w = frame.width || 1600;
-  const h = frame.height || 900;
-  if (canvas.width !== w) canvas.width = w;
-  if (canvas.height !== h) canvas.height = h;
-
-  ctx.clearRect(0, 0, w, h);
-
-  const exp = !!frame.experimental;
-  const laneColor = exp ? "rgba(255,200,80,0.75)" : "rgba(255,255,255,0.55)";
-  const pathColor = frame.rainbow ? null : (exp ? "rgba(255,200,80,0.9)" : "rgba(0,200,255,0.85)");
-  const edgeColor = "rgba(200,60,60,0.5)";
-
-  for (const lane of frame.lanes || []) {
-    const prob = lane.prob ?? 0;
-    if (prob < 0.3) continue;
-    if (lane.center?.length) {
-      strokePolyline(lane.center, laneColor, 3 + prob * 2);
-    } else if (lane.polygon?.length) {
-      fillPolygon(lane.polygon, `rgba(255,255,255,${0.08 + prob * 0.12})`);
-    }
-  }
-
-  for (const edge of frame.edges || []) {
-    if ((edge.std ?? 0) < 0.3) continue;
-    if (edge.polygon?.length) fillPolygon(edge.polygon, edgeColor);
-  }
-
-  if (frame.path?.length) {
-    if (frame.rainbow) {
-      strokeRainbowPath(frame.path, 5);
-    } else {
-      strokePolyline(frame.path, pathColor, 5);
-    }
-  }
-
-  for (const lead of frame.leads || []) {
-    if (lead.glow?.length) fillPolygon(lead.glow, `rgba(255,255,255,${lead.alpha ?? 0.25})`);
-    if (lead.chevron?.length) strokePolyline(lead.chevron, "rgba(255,255,255,0.9)", 3);
-  }
+function resize(w, h) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(w * dpr));
+  canvas.height = Math.max(1, Math.floor(h * dpr));
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function strokePolyline(pts, color, width) {
-  if (!pts.length || !color) return;
-  ctx.beginPath();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  const [x0, y0] = firstPoint(pts);
-  ctx.moveTo(x0, y0);
-  for (let i = 1; i < pts.length; i++) {
-    const [x, y] = pointAt(pts, i);
-    ctx.lineTo(x, y);
-  }
-  ctx.stroke();
+function asPoints(raw) {
+  if (!raw?.length) return [];
+  if (Array.isArray(raw[0])) return raw;
+  const pts = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) pts.push([raw[i], raw[i + 1]]);
+  return pts;
 }
 
-function fillPolygon(pts, color) {
-  if (!pts.length) return;
-  ctx.beginPath();
-  const [x0, y0] = firstPoint(pts);
-  ctx.moveTo(x0, y0);
-  for (let i = 1; i < pts.length; i++) {
-    const [x, y] = pointAt(pts, i);
-    ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-}
-
-function strokeRainbowPath(pts, width) {
+function drawPoly(pts, fill, stroke, lineW = 2) {
   if (pts.length < 2) return;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x1, y1] = pointAt(pts, i);
-    const [x2, y2] = pointAt(pts, i + 1);
-    const hue = (i / pts.length) * 300;
-    ctx.beginPath();
-    ctx.strokeStyle = `hsla(${hue}, 90%, 60%, 0.9)`;
-    ctx.lineWidth = width;
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lineW;
     ctx.stroke();
   }
 }
 
-function firstPoint(pts) {
-  const p = pts[0];
-  if (Array.isArray(p)) return p;
-  return [pts[0], pts[1]];
+function drawLane(lane) {
+  const prob = lane.prob ?? 0.5;
+  const alpha = Math.max(0.15, Math.min(0.85, prob));
+  const fill = `rgba(13, 248, 122, ${alpha * 0.55})`;
+  const poly = asPoints(lane.polygon);
+  if (poly.length >= 3) {
+    drawPoly(poly, fill, null);
+    return;
+  }
+  const center = asPoints(lane.center);
+  if (center.length >= 2) {
+    ctx.strokeStyle = fill;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(center[0][0], center[0][1]);
+    for (let i = 1; i < center.length; i++) ctx.lineTo(center[i][0], center[i][1]);
+    ctx.stroke();
+  }
 }
 
-function pointAt(pts, i) {
-  const p = pts[i];
-  if (Array.isArray(p)) return p;
-  return [pts[i * 2], pts[i * 2 + 1]];
+function drawPath(path, experimental) {
+  const pts = asPoints(path);
+  if (pts.length < 2) return;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 8;
+  if (experimental) {
+    const grad = ctx.createLinearGradient(0, pts[0][1], 0, pts[pts.length - 1][1]);
+    grad.addColorStop(0, "rgba(13, 248, 122, 0.85)");
+    grad.addColorStop(0.5, "rgba(114, 255, 92, 0.65)");
+    grad.addColorStop(1, "rgba(114, 255, 92, 0)");
+    ctx.strokeStyle = grad;
+  } else {
+    ctx.strokeStyle = PATH_WHITE;
+  }
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke();
 }
 
-export function getLastFrame() {
-  return lastFrame;
+function drawLead(lead) {
+  const glow = asPoints(lead.glow);
+  const chevron = asPoints(lead.chevron);
+  const alpha = (lead.alpha ?? 180) / 255;
+  if (glow.length >= 3) drawPoly(glow, `rgba(255, 196, 0, ${alpha * 0.35})`, null);
+  if (chevron.length >= 3) drawPoly(chevron, LEAD_FILL, "rgba(255, 220, 80, 0.9)", 2);
+}
+
+export function drawModelOverlay(data) {
+  if (!ctx || !canvas || !data?.ok) return;
+  const host = document.getElementById("model-overlay");
+  const w = data.width || host?.clientWidth || 1600;
+  const h = data.height || host?.clientHeight || 900;
+  resize(w, h);
+  ctx.clearRect(0, 0, w, h);
+
+  for (const lane of data.lanes || []) drawLane(lane);
+  for (const edge of data.edges || []) {
+    const poly = asPoints(edge.polygon);
+    if (poly.length >= 3) drawPoly(poly, "rgba(255, 80, 80, 0.25)", "rgba(255, 120, 120, 0.5)", 2);
+  }
+  drawPath(data.path, data.experimental);
+  for (const lead of data.leads || []) drawLead(lead);
 }

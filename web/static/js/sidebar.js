@@ -158,3 +158,9 @@ export function updateSidebarMode(started) {
   bottomBtn.classList.toggle("opui-sidebar-btn--home", !started);
   bottomBtn.disabled = !started;
 }
+
+export function updateSidebarRecording(st) {
+  const mic = document.getElementById("sidebar-mic");
+  if (!mic) return;
+  mic.hidden = !st?.recording_audio;
+}

@@ -25,6 +25,9 @@ PO_LANG: dict[str, str] = {
 }
 
 
+_STRINGS_CACHE: dict[str, dict[str, str]] = {}
+
+
 def _normalize_lang_setting(lang: str) -> str:
   lang = (lang or "en").strip().removeprefix("main_")
   aliases = {"main": "en", "zh": "zh-CHS", "pt": "pt-BR"}
@@ -90,6 +93,9 @@ def _parse_po_file(path: Path) -> dict[str, str]:
 
 def _load_strings(lang_setting: str) -> dict[str, str]:
   po_code = PO_LANG.get(lang_setting, PO_LANG.get(lang_setting.removeprefix("main_"), "en"))
+  cached = _STRINGS_CACHE.get(po_code)
+  if cached is not None:
+    return cached
   tdir = _translations_dir()
   if not tdir:
     return {}
@@ -100,9 +106,10 @@ def _load_strings(lang_setting: str) -> dict[str, str]:
   try:
     from openpilot.system.ui.lib.multilang import load_translations
     translations, _plurals = load_translations(po_path)
-    return translations
   except Exception:
-    return _parse_po_file(po_path)
+    translations = _parse_po_file(po_path)
+  _STRINGS_CACHE[po_code] = translations
+  return translations
 
 
 def _current_language() -> str:

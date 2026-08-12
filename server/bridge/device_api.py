@@ -70,7 +70,11 @@ def regulatory_html() -> dict[str, Any]:
   if not path:
     return {"ok": False, "error": "fcc.html not found"}
   try:
-    return {"ok": True, "html": path.read_text(encoding="utf-8", errors="replace")}
+    import re
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    match = re.search(r"<body[^>]*>(.*)</body>", raw, re.I | re.S)
+    html = match.group(1).strip() if match else raw
+    return {"ok": True, "html": html}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
 
