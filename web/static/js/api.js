@@ -1,11 +1,29 @@
-/** HTTP helpers */
+/** HTTP helpers — routes through WebSocket RPC when connected. */
+
+import { opuiWs } from "./ws.js";
+
+const ASSET_RE = /^\/api\/opui\/assets\//;
+
+function useHttp(path) {
+  return ASSET_RE.test(path);
+}
 
 export async function apiGet(path) {
+  if (!useHttp(path) && opuiWs.connected) {
+    try {
+      return await opuiWs.rpc("GET", path);
+    } catch (_) { /* fallback */ }
+  }
   const r = await fetch(path);
   return r.json();
 }
 
 export async function apiPut(path, body) {
+  if (!useHttp(path) && opuiWs.connected) {
+    try {
+      return await opuiWs.rpc("PUT", path, body);
+    } catch (_) { /* fallback */ }
+  }
   const r = await fetch(path, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -15,6 +33,11 @@ export async function apiPut(path, body) {
 }
 
 export async function apiPost(path, body = {}) {
+  if (!useHttp(path) && opuiWs.connected) {
+    try {
+      return await opuiWs.rpc("POST", path, body);
+    } catch (_) { /* fallback */ }
+  }
   const r = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

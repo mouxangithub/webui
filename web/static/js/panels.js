@@ -106,6 +106,46 @@ const paramHandlers = {
 export function setGlobalState(st) {
   globalState = st || globalState;
   updateEngagedWidgets();
+  updateToggleCapabilities(st);
+}
+
+function updateToggleCapabilities(st) {
+  if (!st) return;
+  const hasLong = st.has_longitudinal_control !== false;
+  const expRow = document.querySelector('[data-param="ExperimentalMode"]');
+  const expInput = expRow?.querySelector("input[type=checkbox]");
+  const longRow = document.querySelector('[data-param="LongitudinalPersonality"]');
+  const accelEn = document.querySelector('[data-param="AccelPersonalityEnabled"]');
+  const accelProf = document.querySelector('[data-param="AccelPersonality"]');
+
+  if (expInput) {
+    const disable = !hasLong;
+    expInput.disabled = disable || expInput.disabled;
+    expRow?.querySelector(".opui-sp-toggle")?.classList.toggle("disabled", disable);
+  }
+  longRow?.querySelectorAll("button").forEach((b) => { b.disabled = !hasLong; });
+  accelEn?.querySelector("input")?.toggleAttribute("disabled", !hasLong);
+
+  const accelOn = panelDataRef?.values?.AccelPersonalityEnabled === "1";
+  accelProf?.querySelectorAll("button").forEach((b) => {
+    b.disabled = !hasLong || !accelOn;
+  });
+}
+
+export function applyPanelCustom(panelId, data) {
+  if (!data?.ok) return;
+  if (panelId === "software") {
+    const el = document.getElementById("software-updater-status");
+    if (el) {
+      el.textContent = `${data.updater_state || "--"} · ${data.update_available ? "有更新" : "无更新"}`;
+    }
+  }
+  if (panelId === "firehose") {
+    const el = document.getElementById("firehose-status-text");
+    if (el) {
+      el.textContent = data.active ? "Active" : "Inactive";
+    }
+  }
 }
 
 function updateEngagedWidgets() {
@@ -1196,6 +1236,7 @@ async function renderFirehosePanel(container) {
 
   const statusColor = fh.active ? "#2ecc71" : "#e74c3c";
   const status = document.createElement("p");
+  status.id = "firehose-status-text";
   status.className = "opui-firehose-status";
   status.style.color = statusColor;
   status.textContent = fh.active ? t("ACTIVE") : t("INACTIVE");
@@ -1241,9 +1282,10 @@ async function renderSoftwarePanel(container, data) {
 
   const extra = document.createElement("div");
   extra.className = "opui-row";
+  extra.id = "software-updater-row";
   extra.innerHTML = `
     <div class="opui-row-label">Updater 状态</div>
-    <div class="opui-row-value">${escapeHtml(sw.updater_state)} · ${sw.update_available ? "有更新" : "无更新"}</div>`;
+    <div class="opui-row-value" id="software-updater-status">${escapeHtml(sw.updater_state)} · ${sw.update_available ? "有更新" : "无更新"}</div>`;
   container.appendChild(extra);
 
   if (sw.new_description) {

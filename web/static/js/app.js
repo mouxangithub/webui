@@ -1,14 +1,14 @@
 import { apiGet } from "./api.js";
 import {
   loadPanelList, renderPanel, setGlobalState, setSubpanelNavigator,
-  applyPanelSync, syncDrivingPersonality, notifyPanelWatch,
+  applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
 import { bindStreamButton, startRoadStream, stopRoadStream, updateOnroadHud } from "./onroad.js";
 import { updateHomeScreen } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode } from "./sidebar.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
-import { loadI18n, translatePanelTitle } from "./i18n.js";
+import { loadI18n, translatePanelTitle, applyI18nPayload } from "./i18n.js";
 import { opuiWs } from "./ws.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -24,7 +24,6 @@ let panels = [];
 let currentPanel = "device";
 let lastStarted = false;
 let devPc = false;
-let designTokens = null;
 let onroadSidebarVisible = false;
 
 function assetUrl(rel) {
@@ -34,7 +33,6 @@ function assetUrl(rel) {
 
 function applyDesignTokens(tokens) {
   if (!tokens) return;
-  designTokens = tokens;
   const root = document.documentElement;
   const d = tokens.design || {};
   const c = tokens.colors || {};
@@ -93,6 +91,17 @@ function applySidebarAssets() {
   }
 }
 
+function syncModelOverlayWatch() {
+  if (app.dataset.screen !== "onroad" || !opuiWs.connected) {
+    opuiWs.unwatchModelOverlay();
+    return;
+  }
+  const wrap = document.getElementById("camera-wrap");
+  const w = wrap?.clientWidth || 1600;
+  const h = wrap?.clientHeight || 900;
+  opuiWs.watchModelOverlay(w, h);
+}
+
 function setScreen(name) {
   app.dataset.screen = name;
   $("#screen-home").hidden = name !== "home";
@@ -105,14 +114,17 @@ function setScreen(name) {
     metricsSidebar.hidden = false;
     app.classList.remove("opui--onroad-sidebar-hidden");
     notifyPanelWatch(null);
+    opuiWs.unwatchModelOverlay();
   } else if (name === "onroad") {
     metricsSidebar.hidden = !onroadSidebarVisible;
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
     notifyPanelWatch(null);
+    syncModelOverlayWatch();
   } else {
     metricsSidebar.hidden = true;
     app.classList.remove("opui--onroad-sidebar-hidden");
     notifyPanelWatch(currentPanel);
+    opuiWs.unwatchModelOverlay();
   }
 
   showModelOverlay(name === "onroad");
@@ -166,18 +178,26 @@ async function loadCurrentPanel() {
 }
 
 async function bootstrap() {
-  try {
-    const meta = await apiGet("/api/opui/bootstrap");
+  opuiWs.connect();
+  await opuiWs.waitHello(8000);
+
+  const meta = opuiWs.bootstrap;
+  if (meta) {
     devPc = !!meta.dev_pc;
     applyDesignTokens(meta);
     if (devPc) {
       document.getElementById("camera-wrap")?.classList.add("is-dev-pc");
     }
-  } catch (_) { /* dev offline */ }
+  } else {
+    try {
+      const fallback = await apiGet("/api/opui/bootstrap");
+      devPc = !!fallback.dev_pc;
+      applyDesignTokens(fallback);
+    } catch (_) { /* offline */ }
+  }
 
   panels = await loadPanelList();
   if (!panels.length) {
-    console.warn("panels API empty, using fallback list");
     panels = [
       { id: "device", title: "Device" },
       { id: "toggles", title: "Toggles" },
@@ -221,22 +241,33 @@ function handleState(st) {
   lastStarted = !!st.started;
 }
 
-async function pollModelOverlay() {
-  if (app.dataset.screen !== "onroad") return;
-  try {
-    const wrap = document.getElementById("camera-wrap");
-    const w = wrap?.clientWidth || 1600;
-    const h = wrap?.clientHeight || 900;
-    const frame = await apiGet(`/api/opui/model/overlay?w=${w}&h=${h}`);
-    drawModelOverlay(frame);
-  } catch (_) { /* ignore */ }
-}
-
-async function pollStateFallback() {
-  try {
-    const st = await apiGet("/api/opui/state");
-    handleState(st);
-  } catch (_) { /* ignore */ }
+function setupWebSocket() {
+  opuiWs.on("state", (msg) => {
+    if (msg?.data) handleState(msg.data);
+  });
+  opuiWs.on("home", (msg) => {
+    if (msg?.data && app.dataset.screen === "home") updateHomeScreen(msg.data);
+  });
+  opuiWs.on("panel", (msg) => {
+    if (app.dataset.screen !== "settings") return;
+    if (msg.panel !== currentPanel) return;
+    applyPanelSync(msg.data);
+  });
+  opuiWs.on("panel_custom", (msg) => {
+    if (app.dataset.screen !== "settings") return;
+    if (msg.panel !== currentPanel) return;
+    applyPanelCustom(msg.panel, msg.data);
+  });
+  opuiWs.on("model_overlay", (msg) => {
+    if (app.dataset.screen === "onroad" && msg?.data) drawModelOverlay(msg.data);
+  });
+  opuiWs.on("i18n", (msg) => {
+    if (msg?.data?.ok) applyI18nPayload(msg.data);
+  });
+  opuiWs.on("open", () => {
+    if (app.dataset.screen === "settings") notifyPanelWatch(currentPanel);
+    syncModelOverlayWatch();
+  });
 }
 
 setSubpanelNavigator((panelId) => {
@@ -275,37 +306,13 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 bindStreamButton();
 initModelCanvas();
 
-function setupWebSocket() {
-  opuiWs.on("state", (msg) => {
-    if (msg?.data) handleState(msg.data);
-  });
-  opuiWs.on("home", (msg) => {
-    if (msg?.data && app.dataset.screen === "home") updateHomeScreen(msg.data);
-  });
-  opuiWs.on("panel", (msg) => {
-    if (app.dataset.screen !== "settings") return;
-    if (msg.panel !== currentPanel) return;
-    applyPanelSync(msg.data);
-  });
-  opuiWs.on("open", () => {
-    if (app.dataset.screen === "settings") notifyPanelWatch(currentPanel);
-  });
-  opuiWs.connect();
-}
-
 bootstrap().then(async () => {
+  setupWebSocket();
   initDevPanel();
   fitOpuiScale();
-  window.addEventListener("resize", fitOpuiScale);
-  await loadI18n(true);
+  window.addEventListener("resize", () => {
+    fitOpuiScale();
+    syncModelOverlayWatch();
+  });
   setScreen("home");
-  setupWebSocket();
-  pollStateFallback();
-  setInterval(() => {
-    if (!opuiWs.connected) pollStateFallback();
-  }, 2000);
-  setInterval(async () => {
-    if (await loadI18n()) renderNav();
-  }, 3000);
-  setInterval(pollModelOverlay, 100);
 });

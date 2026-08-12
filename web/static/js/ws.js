@@ -1,4 +1,4 @@
-/** WebSocket client for live UI state + panel param sync. */
+/** WebSocket client for live UI state + panel param sync + RPC. */
 
 const WS_PATH = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/opui`;
 
@@ -12,6 +12,8 @@ class OpuiSocket {
     this._reconnectMs = 500;
     this._watchPanel = null;
     this._shouldRun = false;
+    this.bootstrap = null;
+    this._helloWaiters = [];
   }
 
   get connected() {
@@ -30,6 +32,13 @@ class OpuiSocket {
     }
   }
 
+  _resolvePending(id, msg) {
+    const pending = this._pending.get(id);
+    if (!pending) return;
+    this._pending.delete(id);
+    pending.resolve(msg);
+  }
+
   connect() {
     this._shouldRun = true;
     if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) {
@@ -40,7 +49,10 @@ class OpuiSocket {
     ws.onopen = () => {
       this._connected = true;
       this._reconnectMs = 500;
-      this._send({ type: "subscribe", channels: ["state", "home"] });
+      this._send({
+        type: "subscribe",
+        channels: ["state", "home", "i18n"],
+      });
       if (this._watchPanel) {
         this._send({ type: "watch_panel", panel: this._watchPanel });
       }
@@ -57,16 +69,36 @@ class OpuiSocket {
     ws.onmessage = (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch (_) { return; }
-      const { type } = msg;
-      if (type === "put_param_result" && msg.id != null) {
-        const pending = this._pending.get(msg.id);
-        if (pending) {
-          this._pending.delete(msg.id);
-          pending.resolve(msg);
-        }
+      const { type, id } = msg;
+
+      if (type === "hello") {
+        this.bootstrap = msg.bootstrap || null;
+        this._emit("hello", msg);
+        for (const resolve of this._helloWaiters.splice(0)) resolve(msg);
       }
+
+      if ((type === "put_param_result" || type === "rpc_result") && id != null) {
+        this._resolvePending(id, msg);
+      }
+
       this._emit(type, msg);
     };
+  }
+
+  waitHello(timeoutMs = 5000) {
+    if (this.bootstrap) return Promise.resolve({ bootstrap: this.bootstrap });
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const i = this._helloWaiters.indexOf(done);
+        if (i >= 0) this._helloWaiters.splice(i, 1);
+        resolve({ bootstrap: this.bootstrap });
+      }, timeoutMs);
+      const done = (msg) => {
+        clearTimeout(timer);
+        resolve(msg);
+      };
+      this._helloWaiters.push(done);
+    });
   }
 
   disconnect() {
@@ -84,33 +116,66 @@ class OpuiSocket {
 
   watchPanel(panelId) {
     this._watchPanel = panelId || null;
-    if (panelId) {
+    if (this._connected && panelId) {
       this._send({ type: "watch_panel", panel: panelId });
+    } else if (this._connected && !panelId) {
+      this._send({ type: "watch_panel", panel: "" });
     }
   }
 
-  putParam(key, value, needsCycle = false) {
-    if (this._connected) {
-      const id = `r${++this._req}`;
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          this._pending.delete(id);
-          reject(new Error("timeout"));
-        }, 8000);
-        this._pending.set(id, {
-          resolve: (msg) => {
-            clearTimeout(timer);
-            resolve(msg);
-          },
-        });
-        if (!this._send({ type: "put_param", id, key, value: String(value), needs_cycle: !!needsCycle })) {
+  watchModelOverlay(w, h) {
+    if (!this._connected) return;
+    this._send({ type: "watch_model_overlay", w, h });
+  }
+
+  unwatchModelOverlay() {
+    if (!this._connected) return;
+    this._send({ type: "unwatch_model_overlay" });
+  }
+
+  rpc(method, path, body = null) {
+    const id = `r${++this._req}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._pending.delete(id);
+        reject(new Error("rpc timeout"));
+      }, 30000);
+      this._pending.set(id, {
+        resolve: (msg) => {
           clearTimeout(timer);
-          this._pending.delete(id);
-          reject(new Error("not connected"));
-        }
+          resolve(msg);
+        },
       });
-    }
-    return null;
+      const payload = { type: "rpc", id, method, path };
+      if (body != null) payload.body = body;
+      if (!this._send(payload)) {
+        clearTimeout(timer);
+        this._pending.delete(id);
+        reject(new Error("not connected"));
+      }
+    });
+  }
+
+  putParam(key, value, needsCycle = false) {
+    if (!this._connected) return null;
+    const id = `p${++this._req}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._pending.delete(id);
+        reject(new Error("timeout"));
+      }, 8000);
+      this._pending.set(id, {
+        resolve: (msg) => {
+          clearTimeout(timer);
+          resolve(msg);
+        },
+      });
+      if (!this._send({ type: "put_param", id, key, value: String(value), needs_cycle: !!needsCycle })) {
+        clearTimeout(timer);
+        this._pending.delete(id);
+        reject(new Error("not connected"));
+      }
+    });
   }
 }
 

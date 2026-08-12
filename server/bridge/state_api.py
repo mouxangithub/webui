@@ -117,6 +117,16 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   experimental = bool(ss.experimentalMode) if hasattr(ss, "experimentalMode") else False
   personality = str(ss.personality).split(".")[-1].lower() if hasattr(ss, "personality") else ""
 
+  has_longitudinal = False
+  alpha_long_available = False
+  try:
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    has_longitudinal = bool(ui_state.has_longitudinal_control)
+    if ui_state.CP is not None:
+      alpha_long_available = bool(getattr(ui_state.CP, "alphaLongitudinalAvailable", False))
+  except Exception:
+    pass
+
   sp_hud: dict[str, Any] = {}
   try:
     if sm.valid.get("selfdriveStateSP"):
@@ -172,6 +182,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "experimental_mode": experimental,
     "personality": personality,
     "personality_index": _personality_index(personality),
+    "has_longitudinal_control": has_longitudinal,
+    "alpha_longitudinal_available": alpha_long_available,
     "alert": {
       "text1": ss.alertText1 or "",
       "text2": ss.alertText2 or "",

@@ -1,0 +1,267 @@
+"""WebSocket RPC — mirrors REST /api/opui/* for WS-only clients."""
+
+from __future__ import annotations
+
+import os
+import re
+from typing import Any
+from urllib.parse import parse_qs, urlparse
+
+from webui.server.bridge.design_tokens import tokens_payload
+from webui.server.bridge.developer_api import developer_error_log
+from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
+from webui.server.bridge.firehose_api import firehose_status
+from webui.server.bridge.home_api import snapshot_home
+from webui.server.bridge.i18n_api import snapshot_i18n
+from webui.server.bridge.model_overlay import snapshot_model_overlay
+from webui.server.bridge.models_api import models_select, models_status
+from webui.server.bridge.network_api import wifi_connect, wifi_forget, wifi_scan, wifi_status
+from webui.server.bridge.osm_api import (
+  osm_delete_maps,
+  osm_download_progress,
+  osm_map_size_mb,
+  osm_regions,
+  osm_select_region,
+)
+from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param
+from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
+from webui.server.bridge.state_hub import get_home, get_state
+from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
+from webui.server.bridge.system_api import run_action, software_status
+from webui.server.bridge.trips_api import trips_stats
+from webui.server.bridge.vehicle_api import vehicle_brand_widgets, vehicle_platforms, vehicle_select
+from webui.server.bridge.webrtc_api import webrtc_offer, webrtc_schema
+from webui.server.deps import openpilot_root, read_version
+
+_PANEL_GET = re.compile(r"^/api/opui/panels/([^/]+)$")
+_PARAM_GET = re.compile(r"^/api/opui/params/([^/]+)$")
+_ACTION_POST = re.compile(r"^/api/opui/action/([^/]+)$")
+_DEV_PRESET = re.compile(r"^/api/opui/dev/preset/([^/]+)$")
+
+
+def bootstrap_payload() -> dict[str, Any]:
+  return {
+    "ok": True,
+    "name": "op-webui",
+    "version": read_version(),
+    "openpilot_root": str(openpilot_root()),
+    "dev_pc": os.environ.get("WEBUI_DEV_PC") == "1",
+    "design": {"width": 2160, "height": 1080, "variant": "BIG"},
+    "webrtc": {"port": 5001},
+    **tokens_payload(),
+  }
+
+
+def custom_panel_data(panel_id: str) -> dict[str, Any] | None:
+  if panel_id == "software":
+    return software_status()
+  if panel_id == "firehose":
+    return firehose_status()
+  if panel_id == "sunnylink":
+    return sunnylink_status()
+  if panel_id == "trips":
+    return trips_stats()
+  if panel_id == "models":
+    return models_status()
+  if panel_id == "osm":
+    return {
+      "ok": True,
+      "regions": osm_regions(),
+      "size": osm_map_size_mb(),
+      "progress": osm_download_progress(),
+    }
+  if panel_id == "network":
+    return {"ok": True, "wifi": wifi_status()}
+  if panel_id == "vehicle":
+    return {
+      "ok": True,
+      "platforms": vehicle_platforms(),
+      "brand_widgets": vehicle_brand_widgets(),
+    }
+  return None
+
+
+def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+  body = body or {}
+  parsed = urlparse(path)
+  clean_path = parsed.path
+  query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
+
+  try:
+    if method == "GET" and clean_path == "/api/opui/bootstrap":
+      return bootstrap_payload()
+
+    if method == "GET" and clean_path == "/api/opui/state":
+      return get_state()
+
+    if method == "GET" and clean_path == "/api/opui/home":
+      return get_home()
+
+    if method == "GET" and clean_path == "/api/opui/i18n":
+      return snapshot_i18n()
+
+    if method == "GET" and clean_path == "/api/opui/panels":
+      return panel_schema()
+
+    m = _PANEL_GET.match(clean_path)
+    if method == "GET" and m:
+      return panel_values(m.group(1))
+
+    m = _PARAM_GET.match(clean_path)
+    if method == "GET" and m:
+      return get_param(m.group(1))
+
+    if method == "PUT" and (m := _PARAM_GET.match(clean_path)):
+      return put_param(
+        m.group(1),
+        str(body.get("value", "")),
+        needs_cycle=bool(body.get("needs_cycle", False)),
+      )
+
+    if method == "POST" and clean_path == "/api/opui/params/batch":
+      return batch_get(body.get("keys", []))
+
+    m = _ACTION_POST.match(clean_path)
+    if method == "POST" and m:
+      return run_action(m.group(1), body)
+
+    if method == "GET" and clean_path == "/api/opui/software":
+      return software_status()
+
+    if method == "GET" and clean_path == "/api/opui/wifi/status":
+      return wifi_status()
+
+    if method == "GET" and clean_path == "/api/opui/wifi/scan":
+      return wifi_scan()
+
+    if method == "POST" and clean_path == "/api/opui/wifi/connect":
+      return wifi_connect(str(body.get("ssid", "")), str(body.get("password", "")))
+
+    if method == "POST" and clean_path == "/api/opui/wifi/forget":
+      return wifi_forget(str(body.get("ssid", "")))
+
+    if method == "GET" and clean_path == "/api/opui/trips":
+      return trips_stats()
+
+    if method == "GET" and clean_path == "/api/opui/models":
+      return models_status()
+
+    if method == "POST" and clean_path == "/api/opui/models/select":
+      index = body.get("index")
+      return models_select(str(body.get("ref", "")), int(index) if index is not None else None)
+
+    if method == "GET" and clean_path == "/api/opui/tokens":
+      return {"ok": True, **tokens_payload()}
+
+    if method == "GET" and clean_path == "/api/opui/model/overlay":
+      w = int(query.get("w", body.get("w", 1600)))
+      h = int(query.get("h", body.get("h", 900)))
+      return snapshot_model_overlay(w, h)
+
+    if method == "GET" and clean_path == "/api/opui/ssh/status":
+      return ssh_status()
+
+    if method == "POST" and clean_path == "/api/opui/ssh/fetch":
+      return ssh_fetch_keys(str(body.get("username", "")))
+
+    if method == "POST" and clean_path == "/api/opui/ssh/remove":
+      return ssh_remove_keys()
+
+    if method == "GET" and clean_path == "/api/opui/osm/regions":
+      return osm_regions()
+
+    if method == "POST" and clean_path == "/api/opui/osm/select":
+      return osm_select_region(
+        str(body.get("country", "")),
+        str(body.get("country_title", "")),
+        str(body.get("state", "")),
+        str(body.get("state_title", "")),
+      )
+
+    if method == "GET" and clean_path == "/api/opui/osm/size":
+      return osm_map_size_mb()
+
+    if method == "GET" and clean_path == "/api/opui/osm/progress":
+      return osm_download_progress()
+
+    if method == "POST" and clean_path == "/api/opui/osm/delete":
+      return osm_delete_maps()
+
+    if method == "GET" and clean_path == "/api/opui/vehicle/platforms":
+      return vehicle_platforms()
+
+    if method == "GET" and clean_path == "/api/opui/vehicle/brand-widgets":
+      return vehicle_brand_widgets()
+
+    if method == "POST" and clean_path == "/api/opui/vehicle/select":
+      return vehicle_select(str(body.get("bundle", "")))
+
+    if method == "GET" and clean_path == "/api/opui/sunnylink/status":
+      return sunnylink_status()
+
+    if method == "GET" and clean_path == "/api/opui/sunnylink/pair":
+      return sunnylink_pair_url()
+
+    if method == "GET" and clean_path == "/api/opui/firehose":
+      return firehose_status()
+
+    if method == "GET" and clean_path == "/api/opui/device/extras":
+      return device_extras()
+
+    if method == "GET" and clean_path == "/api/opui/device/regulatory":
+      return regulatory_html()
+
+    if method == "GET" and clean_path == "/api/opui/developer/error-log":
+      return developer_error_log()
+
+    if method == "POST" and clean_path == "/api/opui/device/language":
+      return set_language(str(body.get("language", "")))
+
+    if method == "GET" and clean_path == "/api/opui/webrtc/schema":
+      return webrtc_schema()
+
+    if method == "POST" and clean_path == "/api/opui/webrtc/offer":
+      return webrtc_offer(str(body.get("sdp", "")), str(body.get("init_camera", "roadCameraState")))
+
+    if method == "GET" and clean_path == "/api/opui/params/toggles":
+      return panel_values("toggles")
+
+    if os.environ.get("WEBUI_DEV_PC") == "1":
+      if method == "GET" and clean_path == "/api/opui/dev/simulation":
+        from webui.dev.mock_runtime import SIM
+        return {"ok": True, "simulation": dict(SIM)}
+      if method == "POST" and clean_path == "/api/opui/dev/simulation":
+        from webui.dev.mock_runtime import SIM
+        for k, v in body.items():
+          if k in SIM:
+            SIM[k] = v
+        if SIM.get("started") and SIM.get("ui_status") == "engaged":
+          SIM["engaged"] = True
+        elif SIM.get("ui_status") == "disengaged":
+          SIM["engaged"] = False
+        return {"ok": True, "simulation": dict(SIM)}
+      m = _DEV_PRESET.match(clean_path)
+      if method == "POST" and m:
+        from webui.server.routes.dev import api_dev_presets
+        # inline preset logic
+        from webui.dev.mock_runtime import SIM
+        preset = m.group(1)
+        presets = {
+          "home": {"started": False, "engaged": False, "ui_status": "disengaged", "alert_text1": "", "alert_text2": ""},
+          "onroad_engaged": {"started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 88},
+          "onroad_disengaged": {"started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 45},
+          "override": {"started": True, "engaged": True, "ui_status": "override", "speed_kmh": 100},
+          "lat_only": {"started": True, "engaged": True, "ui_status": "lat_only", "speed_kmh": 60},
+          "alert_critical": {
+            "started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 0,
+            "alert_text1": "Brake!", "alert_text2": "Take control immediately", "alert_status": "critical",
+          },
+        }
+        if preset not in presets:
+          return {"ok": False, "error": f"unknown preset: {preset}"}
+        SIM.update(presets[preset])
+        return {"ok": True, "preset": preset, "simulation": dict(SIM)}
+
+    return {"ok": False, "error": f"unsupported rpc: {method} {clean_path}"}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
