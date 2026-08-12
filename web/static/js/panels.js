@@ -1093,45 +1093,105 @@ function renderActionRow(w) {
 }
 
 async function renderNetworkPanel(container, data) {
-  renderGenericPanel(container, data);
-  const toolbar = document.createElement("div");
-  toolbar.className = "opui-row";
-  toolbar.innerHTML = `<button type="button" class="opui-btn" id="wifi-scan">SCAN</button>`;
-  container.appendChild(toolbar);
+  container.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "opui-wifi-header";
+  const scanBtn = document.createElement("button");
+  scanBtn.type = "button";
+  scanBtn.className = "opui-wifi-scan-btn";
+  scanBtn.textContent = t("Scan");
+  const advBtn = document.createElement("button");
+  advBtn.type = "button";
+  advBtn.className = "opui-wifi-adv-btn";
+  advBtn.textContent = t("Advanced");
+  advBtn.addEventListener("click", () => {
+    if (onNavigateSubpanel) onNavigateSubpanel("network__advanced");
+  });
+  header.append(scanBtn, advBtn);
+  container.appendChild(header);
 
   const list = document.createElement("div");
   list.className = "opui-wifi-list";
   container.appendChild(list);
 
-  const paint = async () => {
-    list.innerHTML = `<p class="opui-muted" style="padding:24px">Scanning…</p>`;
+  const asset = (rel) => `/api/opui/assets/${rel.replace(/^\//, "")}`;
+  const strengthIcon = (strength) => {
+    const level = Math.max(0, Math.min(3, Math.round((strength || 0) / 33)));
+    const names = [
+      "selfdrive/assets/icons/wifi_strength_low.png",
+      "selfdrive/assets/icons/wifi_strength_medium.png",
+      "selfdrive/assets/icons/wifi_strength_high.png",
+      "selfdrive/assets/icons/wifi_strength_full.png",
+    ];
+    return asset(names[level]);
+  };
+
+  const paint = async (scanning = false) => {
+    if (scanning) {
+      list.innerHTML = `<p class="opui-wifi-status">${escapeHtml(t("Scanning Wi-Fi networks..."))}</p>`;
+    }
     const scan = await apiGet("/api/opui/wifi/scan");
     list.innerHTML = "";
     if (!scan.ok) {
-      list.innerHTML = `<p class="opui-muted" style="padding:24px">Wi-Fi unavailable: ${scan.error}</p>`;
+      list.innerHTML = `<p class="opui-wifi-status">${escapeHtml(t("Wi-Fi unavailable"))}: ${escapeHtml(scan.error || "")}</p>`;
       return;
     }
-    for (const n of scan.networks || []) {
+    const networks = scan.networks || [];
+    if (!networks.length) {
+      list.innerHTML = `<p class="opui-wifi-status">${escapeHtml(t("No networks found"))}</p>`;
+      return;
+    }
+    for (const n of networks) {
       const item = document.createElement("div");
       item.className = "opui-wifi-item" + (n.connected ? " connected" : "");
-      item.innerHTML = `
-        <span>${escapeHtml(n.ssid)}</span>
-        <span>${n.strength}%</span>
-        <button type="button" class="opui-btn opui-btn--small">${n.connected ? "FORGET" : "CONNECT"}</button>`;
-      const btn = item.querySelector("button");
-      btn?.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (n.connected) {
-          if (!(await showConfirm({ message: `Forget ${n.ssid}?`, confirmText: "Forget" }))) return;
+      const ssidBtn = document.createElement("button");
+      ssidBtn.type = "button";
+      ssidBtn.className = "opui-wifi-ssid";
+      ssidBtn.textContent = n.ssid;
+      const meta = document.createElement("div");
+      meta.className = "opui-wifi-meta";
+      if (n.saved) {
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "opui-wifi-forget";
+        forget.textContent = t("Forget");
+        forget.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const msg = t('Forget Wi-Fi Network "{}"?').replace("{}", n.ssid);
+          if (!(await showConfirm({ message: msg, confirmText: t("Forget"), cancelText: t("Cancel") }))) return;
           const res = await apiPost("/api/opui/wifi/forget", { ssid: n.ssid });
-          if (res.ok) toast(`Forgot ${n.ssid}`);
+          if (res.ok) toast(t("Forgot") + ` ${n.ssid}`);
+          else toast(res.error || t("Failed"));
           paint();
-          return;
-        }
+        });
+        meta.appendChild(forget);
+      }
+      if (n.connected) {
+        const mark = document.createElement("img");
+        mark.className = "opui-wifi-icon";
+        mark.src = asset("selfdrive/assets/icons/checkmark.png");
+        mark.alt = "";
+        meta.appendChild(mark);
+      } else if (n.security > 0) {
+        const lock = document.createElement("img");
+        lock.className = "opui-wifi-icon";
+        lock.src = asset("selfdrive/assets/icons/lock_closed.png");
+        lock.alt = "";
+        meta.appendChild(lock);
+      }
+      const signal = document.createElement("img");
+      signal.className = "opui-wifi-icon opui-wifi-signal";
+      signal.src = strengthIcon(n.strength);
+      signal.alt = "";
+      meta.appendChild(signal);
+      item.append(ssidBtn, meta);
+      ssidBtn.addEventListener("click", async () => {
+        if (n.connected) return;
         let password = "";
         if (n.security > 0) {
           password = await showKeyboard({
-            title: `Password (${n.ssid})`,
+            title: `${t("Enter password")} (${n.ssid})`,
             password: true,
             minLen: 8,
             maxLen: 64,
@@ -1139,13 +1199,20 @@ async function renderNetworkPanel(container, data) {
           if (!password) return;
         }
         const res = await apiPost("/api/opui/wifi/connect", { ssid: n.ssid, password });
-        if (res.ok) toast(`Connecting ${n.ssid}`);
-        else toast(res.error || "Connect failed");
+        if (res.ok) toast(`${t("Connecting")} ${n.ssid}`);
+        else toast(res.error || t("Connect failed"));
       });
       list.appendChild(item);
     }
   };
-  toolbar.querySelector("#wifi-scan")?.addEventListener("click", paint);
+
+  scanBtn.addEventListener("click", async () => {
+    scanBtn.disabled = true;
+    scanBtn.textContent = t("Scanning...");
+    await paint(true);
+    scanBtn.disabled = false;
+    scanBtn.textContent = t("Scan");
+  });
   paint();
 }
 
@@ -1370,6 +1437,7 @@ function renderLanguageRow() {
       title: t("Select a language"),
       options: langs.map((l) => l.label),
       selected: Math.max(0, idx),
+      current: Math.max(0, idx),
     });
     if (pick == null) return;
     const lang = langs[pick];
@@ -1378,6 +1446,10 @@ function renderLanguageRow() {
     if (res.ok) {
       toast(`${t("Language")}: ${lang.label}`);
       deviceExtrasCache = { ...ex, current_language: lang.id };
+      const { loadI18n } = await import("./i18n.js");
+      await loadI18n(true);
+      requestPanelRefresh();
+      window.dispatchEvent(new CustomEvent("opui:language-changed"));
     }
   });
   return row;
@@ -1404,16 +1476,26 @@ function renderDriverCameraRow() {
 }
 
 async function renderSunnylinkPanel(container, data) {
-  renderGenericPanel(container, data);
+  container.innerHTML = "";
   const sl = await apiGet("/api/opui/sunnylink/status");
-  if (!sl.ok) return;
   const hdr = document.createElement("div");
   hdr.className = "opui-sunnylink-header";
-  hdr.innerHTML = `<h2>sunnylink</h2><p style="color:${sl.tier_color}">${escapeHtml(sl.description || "")}</p>`;
-  container.prepend(hdr);
+  hdr.innerHTML = `
+    <div class="opui-sunnylink-title">${escapeHtml(t("🚀 sunnylink 🚀"))}</div>
+    <div class="opui-sunnylink-desc opui-sunnylink-desc--green">${escapeHtml(t("For secure backup, restore, and remote configuration"))}</div>
+    <div class="opui-sunnylink-desc opui-sunnylink-desc--orange">${escapeHtml(t("Sponsorship isn't required for basic backup/restore"))}<br>${escapeHtml(t("Click the Sponsor button for more details"))}</div>
+    ${sl.ok && sl.dongle_id ? `<div class="opui-sunnylink-id">${escapeHtml(t("Device ID"))}: ${escapeHtml(sl.dongle_id)}</div>` : ""}`;
+  container.appendChild(hdr);
+
+  const body = document.createElement("div");
+  body.className = "opui-sunnylink-body";
+  container.appendChild(body);
+  renderGenericPanel(body, data);
+
+  if (!sl.ok) return;
 
   if (sl.backup?.status && sl.backup.status !== "idle") {
-    container.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
+    body.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
   }
 
   const dual = createDualButton(
@@ -1422,26 +1504,16 @@ async function renderSunnylinkPanel(container, data) {
     async () => {
       const res = await apiPost("/api/opui/action/sunnylink_backup");
       if (res.ok) toast(t("Backup started"));
-      else toast(res.error || "Failed");
+      else toast(res.error || t("Failed"));
     },
     async () => {
-      if (!(await showConfirm({ message: t("Restore latest backup?"), confirmText: t("Restore") }))) return;
+      if (!(await showConfirm({ message: t("Restore latest backup?"), confirmText: t("Restore"), cancelText: t("Cancel") }))) return;
       const res = await apiPost("/api/opui/action/sunnylink_restore");
       if (res.ok) toast(t("Restore started"));
-      else toast(res.error || "Failed");
+      else toast(res.error || t("Failed"));
     },
   );
-  container.appendChild(dual);
-
-  const pair = document.createElement("div");
-  pair.className = "opui-sp-row";
-  pair.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${t("Pair GitHub")}</div></div>
-    <button type="button" class="opui-btn">${t("PAIR")}</button>`;
-  pair.querySelector("button")?.addEventListener("click", async () => {
-    const r = await apiGet("/api/opui/sunnylink/pair");
-    if (r.ok && r.url) window.open(r.url, "_blank");
-  });
-  container.appendChild(pair);
+  body.appendChild(dual);
 }
 
 async function renderFirehosePanel(container) {

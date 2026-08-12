@@ -8,7 +8,7 @@ import { updateHomeScreen, showHomeLoading, refreshHomeScreen } from "./home.js"
 import { updateSidebarMetrics, updateSidebarMode } from "./sidebar.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
-import { loadI18n, translatePanelTitle } from "./i18n.js";
+import { loadI18n, translatePanelTitle, syncStaticUiStrings } from "./i18n.js";
 import { opuiWs } from "./ws.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -216,6 +216,7 @@ async function bootstrap() {
     loadI18n(true),
   ]);
   panels = panelResult;
+  syncStaticUiStrings();
   if (!panels.length) {
     panels = [
       { id: "device", title: "Device" },
@@ -282,7 +283,10 @@ function setupWebSocket() {
   opuiWs.on("i18n", async (msg) => {
     if (msg?.data?.ok) {
       const { applyI18nPayload } = await import("./i18n.js");
-      if (applyI18nPayload(msg.data, true)) renderNav();
+      if (applyI18nPayload(msg.data, true)) {
+        renderNav();
+        if (app.dataset.screen === "settings") loadCurrentPanel();
+      }
     }
   });
   opuiWs.on("open", () => {
@@ -299,6 +303,10 @@ setSubpanelNavigator((panelId) => {
 
 window.addEventListener("opui:open-settings", (ev) => {
   openSettings(ev.detail?.panel || "device");
+});
+
+window.addEventListener("opui:language-changed", () => {
+  renderNav();
 });
 
 window.addEventListener("opui:refresh-panel", () => {

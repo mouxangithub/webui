@@ -57,6 +57,7 @@ def wifi_scan() -> dict[str, Any]:
         "strength": n.strength,
         "security": int(n.security_type),
         "connected": connected == n.ssid,
+        "saved": wm.is_connection_saved(n.ssid),
       })
     networks.sort(key=lambda x: -x["strength"])
     return {"ok": True, "networks": networks}

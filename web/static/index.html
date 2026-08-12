@@ -146,10 +146,13 @@
     </div>
 
     <div id="modal-multi" class="opui-modal" hidden>
-      <div class="opui-modal-card">
+      <div class="opui-modal-card opui-modal-card--multi">
         <div id="multi-title" class="opui-modal-title"></div>
         <div id="multi-list" class="opui-multi-list"></div>
-        <button type="button" id="multi-cancel" class="opui-btn">Cancel</button>
+        <div class="opui-modal-actions opui-modal-actions--split">
+          <button type="button" id="multi-cancel" class="opui-btn opui-btn--dialog">Cancel</button>
+          <button type="button" id="multi-select" class="opui-btn opui-btn--dialog opui-btn--primary">Select</button>
+        </div>
       </div>
     </div>
 
@@ -185,6 +188,6 @@
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> Experimental</label>
     <label class="opui-dev-row">车速 <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
   </aside>
-  <script type="module" src="/static/js/app.js?v=10"></script>
+  <script type="module" src="/static/js/app.js?v=11"></script>
 </body>
 </html>

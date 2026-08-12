@@ -18,10 +18,17 @@ PO_LANG: dict[str, str] = {
   "ja": "ja",
   "ko": "ko",
   "pt": "pt-BR",
+  "pt-BR": "pt-BR",
   "th": "th",
   "tr": "tr",
   "uk": "uk",
 }
+
+
+def _normalize_lang_setting(lang: str) -> str:
+  lang = (lang or "en").strip().removeprefix("main_")
+  aliases = {"main": "en", "zh": "zh-CHS", "pt": "pt-BR"}
+  return aliases.get(lang, lang)
 
 
 def _translations_dir() -> Path | None:
@@ -101,18 +108,19 @@ def _load_strings(lang_setting: str) -> dict[str, str]:
 def _current_language() -> str:
   try:
     from openpilot.common.params import Params
-    return str(Params().get("LanguageSetting") or "main")
+    return _normalize_lang_setting(str(Params().get("LanguageSetting") or "en"))
   except Exception:
-    return "main"
+    return "en"
 
 
 def snapshot_i18n() -> dict[str, Any]:
   lang = _current_language()
   strings = _load_strings(lang)
+  po_code = PO_LANG.get(lang, PO_LANG.get(lang.removeprefix("main_"), "en"))
   return {
     "ok": True,
     "language": lang,
-    "po_code": PO_LANG.get(lang, "en"),
+    "po_code": po_code,
     "strings": strings,
     "sync_note": "Shares Params LanguageSetting with on-device GUI; changes apply to both after param write.",
   }

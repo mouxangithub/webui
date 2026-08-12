@@ -68,7 +68,7 @@ def _seed_params() -> dict[str, bytes | str]:
     "ApiCache_FirehoseStats": b'{"status":"idle"}',
     "LocalDriveStats": b'{"all":{"distance":1234.5,"routes":42,"minutes":890}}',
     "LastSunnylinkPingTime": b"2026-08-11T12:00:00Z",
-    "LanguageSetting": b"zh",
+    "LanguageSetting": b"zh-CHS",
     "MaxTimeOffroad": b"10",
     "DeviceBootMode": b"0",
     "QuietMode": b"0",
@@ -204,9 +204,9 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
 
 def mock_wifi_networks() -> list[dict[str, Any]]:
   return [
-    {"ssid": "Home-5G", "strength": 92, "security": 2, "connected": True},
-    {"ssid": "Office", "strength": 67, "security": 2, "connected": False},
-    {"ssid": "Guest", "strength": 45, "security": 0, "connected": False},
+    {"ssid": "Home-5G", "strength": 92, "security": 2, "connected": True, "saved": True},
+    {"ssid": "Office", "strength": 67, "security": 2, "connected": False, "saved": True},
+    {"ssid": "Guest", "strength": 45, "security": 0, "connected": False, "saved": False},
   ]
 
 

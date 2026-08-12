@@ -63,7 +63,7 @@ PANELS: list[dict[str, Any]] = [
     "widgets": [
       {"type": "bool", "param": "SunnylinkEnabled", "label": "Enable sunnylink"},
       {"type": "readonly", "param": "SunnylinkDongleId", "label": "sunnylink Dongle ID"},
-      {"type": "bool", "param": "EnableSunnylinkUploader", "label": "Enable Uploader"},
+      {"type": "bool", "param": "EnableSunnylinkUploader", "label": "Enable sunnylink uploader (infrastructure test)"},
       {"type": "readonly", "param": "LastSunnylinkPingTime", "label": "Last Ping"},
     ],
   },

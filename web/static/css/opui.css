@@ -1009,21 +1009,130 @@ body {
 .opui-html-block h2 { font-size: 48px; margin-top: 0; }
 
 /* WiFi */
+.opui-wifi-header {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px 48px 28px;
+  min-height: 140px;
+}
+
+.opui-wifi-scan-btn,
+.opui-wifi-adv-btn {
+  border: none;
+  border-radius: 30px;
+  background: #393939;
+  color: #fff;
+  cursor: pointer;
+}
+
+.opui-wifi-scan-btn {
+  min-width: 400px;
+  height: 100px;
+  font-size: 60px;
+}
+
+.opui-wifi-adv-btn {
+  position: absolute;
+  right: 48px;
+  top: 20px;
+  min-width: 280px;
+  height: 100px;
+  font-size: 48px;
+}
+
 .opui-wifi-list {
-  padding: 0 24px;
+  padding: 0 48px 32px;
+}
+
+.opui-wifi-status {
+  padding: 48px 24px;
+  text-align: center;
+  color: #aaa;
+  font-size: 48px;
 }
 
 .opui-wifi-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid #444;
+  min-height: 160px;
+  padding: 0 8px;
+  border-bottom: 1px solid #696868;
+}
+
+.opui-wifi-item.connected .opui-wifi-ssid {
+  color: var(--engaged);
+}
+
+.opui-wifi-ssid {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 55px;
+  text-align: left;
+  padding: 24px 16px;
   cursor: pointer;
 }
 
-.opui-wifi-item:hover { background: #333; }
-.opui-wifi-item.connected { color: var(--engaged); }
+.opui-wifi-meta {
+  display: flex;
+  align-items: center;
+  gap: 50px;
+  flex-shrink: 0;
+}
+
+.opui-wifi-forget {
+  min-width: 200px;
+  height: 80px;
+  border: none;
+  border-radius: 20px;
+  background: #4a4a4a;
+  color: #fff;
+  font-size: 45px;
+  cursor: pointer;
+}
+
+.opui-wifi-icon {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.opui-sunnylink-header {
+  padding: 24px 48px 8px;
+  text-align: center;
+}
+
+.opui-sunnylink-title {
+  font-size: 72px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.opui-sunnylink-desc {
+  font-size: 36px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.opui-sunnylink-desc--green { color: #00ff00; }
+.opui-sunnylink-desc--orange { color: #ffa500; }
+
+.opui-sunnylink-id {
+  margin-top: 12px;
+  font-size: 30px;
+  color: #aaa;
+  text-align: right;
+}
+
+.opui-sunnylink-body {
+  padding-top: 8px;
+}
 
 /* Onroad */
 .opui-screen--onroad { padding: 0; }
@@ -1405,7 +1514,14 @@ body {
   min-width: 0;
 }
 
-.opui-sp-row--control-inline .opui-option-bar,
+.opui-sp-row--control-inline .opui-sp-row-title {
+  white-space: nowrap;
+}
+
+.opui-sp-row--control-inline .opui-option-bar {
+  width: min(920px, 58%);
+  flex-shrink: 0;
+}
 .opui-sp-row--control-inline .opui-multi-btn-group {
   flex-shrink: 0;
   margin-left: auto;
@@ -1577,18 +1693,31 @@ body {
   justify-content: center;
 }
 .opui-modal-card {
-  background: #292929;
+  background: #1e1e1e;
   border-radius: 24px;
-  padding: 32px;
-  max-width: 90vw;
-  max-height: 85vh;
+  padding: 50px;
+  max-width: 92vw;
+  max-height: 88vh;
   overflow: auto;
-  min-width: 480px;
+  min-width: 720px;
 }
-.opui-modal-title { font-size: 44px; margin-bottom: 24px; }
-.opui-modal-body { font-size: 36px; line-height: 1.5; max-height: 50vh; overflow: auto; }
+.opui-modal-card--multi {
+  width: min(1400px, 92vw);
+}
+.opui-modal-title { font-size: 70px; font-weight: 700; margin-bottom: 32px; }
+.opui-modal-body { font-size: 44px; line-height: 1.5; max-height: 50vh; overflow: auto; }
 .opui-modal-body.opui-rich h3 { margin-top: 0; }
-.opui-modal-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 24px; }
+.opui-modal-actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 32px; }
+.opui-modal-actions--split {
+  justify-content: stretch;
+  gap: 50px;
+}
+.opui-btn--dialog {
+  flex: 1;
+  height: 160px;
+  font-size: 52px;
+  border-radius: 20px;
+}
 
 .opui-keyboard-card { width: 1200px; }
 .opui-keyboard-display {
@@ -1637,18 +1766,19 @@ body {
 .opui-tree-item.selected { background: rgba(70,91,234,0.35); }
 .opui-tree-star { margin-left: 12px; font-size: 32px; }
 
-.opui-multi-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow: auto; }
+.opui-multi-list { display: flex; flex-direction: column; gap: 25px; max-height: 55vh; overflow: auto; margin-bottom: 8px; }
 .opui-multi-opt {
-  padding: 20px 24px;
-  border: 2px solid #444;
-  border-radius: 12px;
-  background: transparent;
+  padding: 28px 50px;
+  min-height: 135px;
+  border: none;
+  border-radius: 20px;
+  background: #393939;
   color: #fff;
-  font-size: 36px;
+  font-size: 48px;
   text-align: left;
   cursor: pointer;
 }
-.opui-multi-opt.selected { border-color: #465BEA; background: rgba(70,91,234,0.2); }
+.opui-multi-opt.selected { background: #465BEA; }
 
 .opui-html-scroll { max-height: 60vh; overflow: auto; font-size: 34px; }
 .opui-driver-cam video { width: 640px; max-width: 90vw; background: #000; border-radius: 12px; }

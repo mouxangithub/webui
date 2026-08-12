@@ -26,7 +26,8 @@ STATE_INTERVAL = 0.2
 PANEL_INTERVAL = 0.4
 HOME_INTERVAL = 1.5
 CUSTOM_INTERVAL = 1.0
-MODEL_INTERVAL = 0.1
+_last_i18n_lang: str | None = None
+I18N_INTERVAL = 0.5
 
 
 def _values_hash(values: dict[str, Any]) -> str:
@@ -149,6 +150,10 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     if result.get("ok") and method == "PUT" and "/api/opui/params/" in path:
       key = path.rsplit("/", 1)[-1].split("?")[0]
       await _broadcast_panel_updates_for_key(key)
+      if key == "LanguageSetting":
+        await _broadcast_i18n(force=True)
+    if result.get("ok") and method == "POST" and path.rstrip("/").endswith("/api/opui/device/language"):
+      await _broadcast_i18n(force=True)
     return
 
   if mtype == "put_param":
@@ -160,6 +165,8 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     await ws.send_json({"type": "put_param_result", "id": req_id, **result})
     if result.get("ok"):
       await _broadcast_panel_updates_for_key(key)
+      if key == "LanguageSetting":
+        await _broadcast_i18n(force=True)
     return
 
   if mtype == "ping":
@@ -167,6 +174,28 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     return
 
   await ws.send_json({"type": "error", "error": f"unknown type: {mtype}"})
+
+
+async def _broadcast_i18n(force: bool = False) -> None:
+  global _last_i18n_lang
+  from webui.server.bridge.i18n_api import snapshot_i18n
+
+  data = snapshot_i18n()
+  lang = str(data.get("language") or "")
+  if not force and lang == _last_i18n_lang:
+    return
+  _last_i18n_lang = lang
+  dead: list[web.WebSocketResponse] = []
+  for ws, meta in list(_meta.items()):
+    if not meta.get("i18n"):
+      continue
+    try:
+      await ws.send_json({"type": "i18n", "data": data})
+    except Exception:
+      dead.append(ws)
+  for ws in dead:
+    _connections.discard(ws)
+    _meta.pop(ws, None)
 
 
 async def _broadcast_panel_updates_for_key(_key: str) -> None:
@@ -202,6 +231,7 @@ async def ws_broadcast_loop() -> None:
   last_home_push = 0.0
   last_custom_push = 0.0
   last_model_push = 0.0
+  last_i18n_push = 0.0
   while True:
     try:
       await asyncio.sleep(0.05)
@@ -305,6 +335,10 @@ async def ws_broadcast_loop() -> None:
         for ws in dead:
           _connections.discard(ws)
           _meta.pop(ws, None)
+
+      if now - last_i18n_push >= I18N_INTERVAL:
+        last_i18n_push = now
+        await _broadcast_i18n()
     except asyncio.CancelledError:
       raise
     except Exception as exc:

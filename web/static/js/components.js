@@ -52,8 +52,8 @@ export function showConfirm(opts) {
   const {
     message = "",
     rich = false,
-    confirmText = "Confirm",
-    cancelText = "Cancel",
+    confirmText = tr("Confirm"),
+    cancelText = tr("Cancel"),
     single = false,
   } = typeof opts === "string" ? { message: opts } : opts;
 
@@ -111,6 +111,8 @@ export function showKeyboard(opts = {}) {
       return;
     }
     titleEl.textContent = title;
+    const cancelBtn = document.getElementById("keyboard-cancel");
+    if (cancelBtn) cancelBtn.textContent = tr("Cancel");
     let buf = value;
     const render = () => {
       display.textContent = password ? "•".repeat(buf.length) : buf;
@@ -164,39 +166,65 @@ export function showKeyboard(opts = {}) {
 }
 
 export function showMultiOption(opts) {
-  const { title = "Select", options = [], selected = 0 } = opts;
+  const {
+    title = tr("Select"),
+    options = [],
+    selected = 0,
+    current = selected,
+  } = opts;
   return new Promise((resolve) => {
     const root = document.getElementById("modal-multi");
     const titleEl = document.getElementById("multi-title");
     const list = document.getElementById("multi-list");
-    if (!root || !list) {
+    const cancelBtn = document.getElementById("multi-cancel");
+    const selectBtn = document.getElementById("multi-select");
+    if (!root || !list || !selectBtn) {
       resolve(selected);
       return;
     }
     titleEl.textContent = title;
+    if (cancelBtn) cancelBtn.textContent = tr("Cancel");
+    selectBtn.textContent = tr("Select");
     list.innerHTML = "";
+    let pending = selected;
+    const updateSelectState = () => {
+      selectBtn.disabled = pending === current;
+      list.querySelectorAll(".opui-multi-opt").forEach((btn, i) => {
+        btn.classList.toggle("selected", i === pending);
+      });
+    };
     options.forEach((opt, i) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "opui-multi-opt" + (i === selected ? " selected" : "");
+      btn.className = "opui-multi-opt" + (i === pending ? " selected" : "");
       btn.textContent = typeof opt === "string" ? opt : opt.label;
       btn.addEventListener("click", () => {
-        popModal(root);
-        resolve(i);
+        pending = i;
+        updateSelectState();
       });
       list.appendChild(btn);
     });
-    document.getElementById("multi-cancel")?.addEventListener("click", () => {
+    updateSelectState();
+    const finish = (value) => {
       popModal(root);
-      resolve(null);
-    }, { once: true });
+      cancelBtn?.removeEventListener("click", onCancel);
+      selectBtn.removeEventListener("click", onSelect);
+      resolve(value);
+    };
+    const onCancel = () => finish(null);
+    const onSelect = () => {
+      if (selectBtn.disabled) return;
+      finish(pending);
+    };
+    cancelBtn?.addEventListener("click", onCancel, { once: true });
+    selectBtn.addEventListener("click", onSelect, { once: true });
     pushModal(root);
   });
 }
 
 export function showTree(opts) {
   const {
-    title = "Select",
+    title = tr("Select"),
     folders = [],
     selectedRef = "",
     searchable = true,
@@ -216,6 +244,10 @@ export function showTree(opts) {
     }
     titleEl.textContent = title;
     searchWrap.hidden = !searchable;
+    if (search) search.placeholder = tr("Search…");
+    const cancelBtn = document.getElementById("tree-cancel");
+    if (cancelBtn) cancelBtn.textContent = tr("Cancel");
+    if (selectBtn) selectBtn.textContent = tr("Select");
     let pick = selectedRef;
     let query = "";
 
