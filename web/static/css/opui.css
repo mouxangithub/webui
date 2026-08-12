@@ -82,6 +82,7 @@ body {
 .opui[data-screen="settings"] .opui-main {
   left: var(--sidebar-w);
   width: calc(100% - var(--sidebar-w));
+  background: #000;
 }
 
 .opui[data-screen="onroad"] .opui-main,
@@ -125,7 +126,7 @@ body {
   color: var(--text-muted);
   font-size: 55px;
   text-align: left;
-  padding: 0 28px 0 90px;
+  padding: 0 40px 0 50px;
   cursor: pointer;
   flex-shrink: 0;
   display: flex;
@@ -140,7 +141,6 @@ body {
   object-fit: contain;
   flex-shrink: 0;
   opacity: 0.85;
-  margin-left: -62px;
 }
 
 .opui-nav button.active .opui-nav-icon { opacity: 1; }
@@ -1289,10 +1289,15 @@ body {
 }
 
 /* sunnypilot SP list_view (170px rows, left toggle) */
-.opui-sp-row--control-below {
+.opui-sp-row--stacked {
   flex-direction: column;
-  align-items: stretch;
-  gap: 24px;
+  align-items: flex-start;
+  gap: 20px;
+  min-height: auto;
+  padding-bottom: 28px;
+}
+
+.opui-sp-row--control-below {
   min-height: 260px;
   padding-bottom: 32px;
 }
