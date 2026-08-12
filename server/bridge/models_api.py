@@ -7,6 +7,18 @@ import os
 from typing import Any
 
 
+def _cache_size_mb() -> float:
+  try:
+    from openpilot.sunnypilot.models.runners.constants import CUSTOM_MODEL_PATH
+    import os
+    if not os.path.exists(CUSTOM_MODEL_PATH):
+      return 0.0
+    total = sum(os.path.getsize(os.path.join(CUSTOM_MODEL_PATH, f)) for f in os.listdir(CUSTOM_MODEL_PATH))
+    return total / (1024 ** 2)
+  except Exception:
+    return 0.0
+
+
 def models_status() -> dict[str, Any]:
   if os.environ.get("WEBUI_DEV_PC") == "1":
     return _mock_models()
@@ -57,6 +69,7 @@ def models_status() -> dict[str, Any]:
       "download": download,
       "last_sync": p.get("ModelManager_LastSyncTime") or "",
       "cache_clear_pending": p.get_bool("ModelManager_ClearCache"),
+      "cache_size_mb": _cache_size_mb(),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -96,5 +109,6 @@ def _mock_models() -> dict[str, Any]:
         {"type": "onPolicy", "progress": 0},
       ],
     },
+    "cache_size_mb": 12.5,
     "dev_pc": True,
   }

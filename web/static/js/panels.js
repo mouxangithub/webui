@@ -226,15 +226,30 @@ function applySoftwareCustom(sw) {
   const installNotes = document.getElementById("software-install-notes");
   if (installRow) installRow.hidden = !sw.install_visible;
   if (installVal) installVal.textContent = sw.new_description || "";
-  if (installNotes) {
-    installNotes.textContent = sw.new_release_notes || "";
-    installNotes.hidden = !sw.new_release_notes;
-  }
 
   const curNotes = document.getElementById("software-current-notes");
   if (curNotes) {
-    curNotes.textContent = sw.current_release_notes || "";
-    curNotes.hidden = !sw.current_release_notes;
+    const html = sw.current_release_notes || "";
+    if (html.trim().startsWith("<")) {
+      curNotes.innerHTML = html;
+      curNotes.classList.add("opui-html-block", "opui-release-notes");
+    } else {
+      curNotes.textContent = html;
+      curNotes.classList.remove("opui-html-block");
+    }
+    curNotes.hidden = !html;
+  }
+
+  if (installNotes) {
+    const html = sw.new_release_notes || "";
+    if (html.trim().startsWith("<")) {
+      installNotes.innerHTML = html;
+      installNotes.classList.add("opui-html-block", "opui-release-notes");
+    } else {
+      installNotes.textContent = html;
+      installNotes.classList.remove("opui-html-block");
+    }
+    installNotes.hidden = !html;
   }
 }
 
@@ -654,8 +669,11 @@ function renderBoolRow(w) {
 
 function renderMultipleButtonRow(w, panelData) {
   const inline = w.layout === "inline";
+  const stacked = w.layout === "stacked" || !inline;
   const row = document.createElement("div");
-  row.className = "opui-sp-row" + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked");
+  row.className = "opui-sp-row"
+    + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked")
+    + (stacked ? " opui-sp-row--segmented" : "");
   row.dataset.param = w.param;
   row.dataset.widget = "multiple_button";
   const buttons = (w.buttons || []).map((b) => t(b));
@@ -1250,21 +1268,25 @@ function formatStat(v) {
 }
 
 async function renderModelsPanel(container, data) {
-  renderGenericPanel(container, data);
+  container.innerHTML = "";
   const m = await apiGet("/api/opui/models");
-  if (!m.ok) return;
+  if (!m.ok) {
+    container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(m.error || t("Failed"))}</p>`;
+    return;
+  }
 
   const pickRow = document.createElement("div");
   pickRow.className = "opui-sp-row";
+  const modelName = m.active_name || formatBundleDisplay(data.values?.ModelManager_ActiveBundle) || "—";
   pickRow.innerHTML = `
     <div class="opui-sp-row-text">
-      <div class="opui-sp-row-title">Current Model</div>
-      <div class="opui-sp-row-desc">${escapeHtml(m.active_name || m.active_ref || "—")}</div>
+      <div class="opui-sp-row-title">${escapeHtml(t("Current Model"))}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(modelName)}</div>
     </div>
-    <button type="button" class="opui-btn">SELECT</button>`;
+    <button type="button" class="opui-btn">${escapeHtml(t("SELECT"))}</button>`;
   pickRow.querySelector("button")?.addEventListener("click", async () => {
     const ref = await showTree({
-      title: "Select Model",
+      title: t("Select a Model"),
       folders: m.tree || [],
       selectedRef: m.active_ref,
       searchable: true,
@@ -1273,27 +1295,48 @@ async function renderModelsPanel(container, data) {
     const bundle = (m.tree || []).flatMap((f) => f.bundles || []).find((b) => b.ref === ref);
     const res = await apiPost("/api/opui/models/select", { ref, index: bundle?.index });
     if (res.ok) {
-      toast("Model selected");
+      toast(t("Model selected"));
       await renderModelsPanel(container, data);
-    } else toast(res.error || "Failed");
+    } else toast(res.error || t("Failed"));
   });
   container.appendChild(pickRow);
 
   if (m.download?.name) {
-    const types = ["Driving Model", "Vision Model", "Policy Model", "Off-Policy Model", "On-Policy Model"];
-    const parts = m.download.models?.length ? m.download.models : types.map((type) => ({ type, progress: 0 }));
+    const types = {
+      supercombo: t("Driving Model"),
+      vision: t("Vision Model"),
+      policy: t("Policy Model"),
+      offPolicy: t("Off-Policy Model"),
+      onPolicy: t("On-Policy Model"),
+    };
+    const parts = m.download.models?.length ? m.download.models : Object.keys(types).map((type) => ({ type, progress: 0 }));
     for (const part of parts) {
-      container.appendChild(createProgressRow(`${part.type} — ${m.download.name}`, part.progress || 0));
+      const label = types[part.type] || part.type;
+      container.appendChild(createProgressRow(`${label} — ${m.download.name}`, part.progress || 0));
     }
     const cancel = document.createElement("div");
     cancel.className = "opui-sp-row";
-    cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${t("Cancel Download")}</div></div>
-      <button type="button" class="opui-btn danger">${t("Cancel")}</button>`;
+    cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Cancel Download"))}</div></div>
+      <button type="button" class="opui-btn danger">${escapeHtml(t("Cancel"))}</button>`;
     cancel.querySelector("button")?.addEventListener("click", async () => {
       await apiPost("/api/opui/action/models_cancel_download");
       toast(t("Download cancelled"));
+      await renderModelsPanel(container, data);
     });
     container.appendChild(cancel);
+  }
+
+  renderGenericPanel(container, data);
+
+  const clearRow = container.querySelector('[data-action="models_clear_cache"]');
+  if (clearRow && m.cache_size_mb != null) {
+    const text = clearRow.querySelector(".opui-sp-row-text");
+    if (text && !text.querySelector(".opui-sp-row-desc")) {
+      const d = document.createElement("div");
+      d.className = "opui-sp-row-desc";
+      d.textContent = `${Number(m.cache_size_mb).toFixed(2)} ${t("MB")}`;
+      text.appendChild(d);
+    }
   }
 }
 
@@ -1478,6 +1521,8 @@ function renderDriverCameraRow() {
 async function renderSunnylinkPanel(container, data) {
   container.innerHTML = "";
   const sl = await apiGet("/api/opui/sunnylink/status");
+  const values = data.values || {};
+
   const hdr = document.createElement("div");
   hdr.className = "opui-sunnylink-header";
   hdr.innerHTML = `
@@ -1487,33 +1532,53 @@ async function renderSunnylinkPanel(container, data) {
     ${sl.ok && sl.dongle_id ? `<div class="opui-sunnylink-id">${escapeHtml(t("Device ID"))}: ${escapeHtml(sl.dongle_id)}</div>` : ""}`;
   container.appendChild(hdr);
 
-  const body = document.createElement("div");
-  body.className = "opui-sunnylink-body";
-  container.appendChild(body);
-  renderGenericPanel(body, data);
+  const widgets = [
+    {
+      type: "bool", param: "SunnylinkEnabled", label: "Enable sunnylink",
+      value: values.SunnylinkEnabled, desc: "This is the master switch, it will allow you to cutoff any sunnylink requests should you want to do that.",
+    },
+    {
+      type: "bool", param: "EnableSunnylinkUploader", label: "Enable sunnylink uploader (infrastructure test)",
+      value: values.EnableSunnylinkUploader,
+      desc: "Enable sunnylink uploader to allow sunnypilot to upload your driving data to sunnypilot servers. (Only for highest tiers, and does NOT bring ANY benefit to you yet. We are just testing data volume.)",
+    },
+  ];
+  for (const w of widgets) {
+    const el = renderWidget({ ...w, type: "bool" }, data);
+    if (el) container.appendChild(el);
+  }
 
   if (!sl.ok) return;
 
   if (sl.backup?.status && sl.backup.status !== "idle") {
-    body.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
+    container.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
   }
 
   const dual = createDualButton(
-    { label: t("Create Backup") },
-    { label: t("Restore Latest") },
+    { label: t("Backup Settings") },
+    { label: t("Restore Settings") },
     async () => {
+      if (!(await showConfirm({
+        message: t("Are you sure you want to backup your current sunnypilot settings?"),
+        confirmText: t("Backup"),
+        cancelText: t("Cancel"),
+      }))) return;
       const res = await apiPost("/api/opui/action/sunnylink_backup");
       if (res.ok) toast(t("Backup started"));
       else toast(res.error || t("Failed"));
     },
     async () => {
-      if (!(await showConfirm({ message: t("Restore latest backup?"), confirmText: t("Restore"), cancelText: t("Cancel") }))) return;
+      if (!(await showConfirm({
+        message: t("Are you sure you want to restore the last backed up sunnypilot settings?"),
+        confirmText: t("Restore"),
+        cancelText: t("Cancel"),
+      }))) return;
       const res = await apiPost("/api/opui/action/sunnylink_restore");
       if (res.ok) toast(t("Restore started"));
       else toast(res.error || t("Failed"));
     },
   );
-  body.appendChild(dual);
+  container.appendChild(dual);
 }
 
 async function renderFirehosePanel(container) {
@@ -1606,7 +1671,7 @@ async function renderSoftwarePanel(container, data) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Current Version"))}</div>
       <div class="opui-sp-row-desc" id="software-current-desc">${escapeHtml(sw.current || t("N/A"))}</div>
-      <pre class="opui-release-notes" id="software-current-notes" hidden></pre>
+      <div class="opui-release-notes" id="software-current-notes" hidden></div>
     </div>`;
   container.appendChild(version);
 
@@ -1620,11 +1685,12 @@ async function renderSoftwarePanel(container, data) {
     <button type="button" class="opui-btn" id="software-download-btn">${escapeHtml(t("CHECK"))}</button>`;
   download.querySelector("#software-download-btn")?.addEventListener("click", async () => {
     const btn = download.querySelector("#software-download-btn");
-    const label = btn?.textContent?.trim().toUpperCase();
-    const action = label === "DOWNLOAD" ? "updater_download" : "updater_check";
+    const label = btn?.textContent?.trim();
+    const action = label === t("DOWNLOAD") ? "updater_download" : "updater_check";
     if (btn) btn.disabled = true;
     const res = await apiPost(`/api/opui/action/${action}`);
     if (!res.ok) toast(res.error || t("Failed"));
+    else if (btn) btn.disabled = false;
   });
   container.appendChild(download);
 
@@ -1636,7 +1702,7 @@ async function renderSoftwarePanel(container, data) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Install Update"))}</div>
       <div class="opui-sp-row-desc" id="software-install-value"></div>
-      <pre class="opui-release-notes" id="software-install-notes" hidden></pre>
+      <div class="opui-release-notes" id="software-install-notes" hidden></div>
     </div>
     <button type="button" class="opui-btn" id="software-install-btn">${escapeHtml(t("INSTALL"))}</button>`;
   install.querySelector("#software-install-btn")?.addEventListener("click", async () => {
@@ -1645,15 +1711,6 @@ async function renderSoftwarePanel(container, data) {
     else toast(res.error || t("Failed"));
   });
   container.appendChild(install);
-
-  const filtered = {
-    ...data,
-    widgets: (data.widgets || []).filter((w) => !["updater_check", "updater_download", "updater_install"].includes(w.action)
-      && w.param !== "UpdaterCurrentDescription"),
-  };
-  const genericHost = document.createElement("div");
-  container.appendChild(genericHost);
-  renderGenericPanel(genericHost, filtered);
 
   if (sw.branches?.length) {
     const branchRow = document.createElement("div");
@@ -1666,22 +1723,46 @@ async function renderSoftwarePanel(container, data) {
       <button type="button" class="opui-btn">${escapeHtml(t("SELECT"))}</button>`;
     branchRow.querySelector("button")?.addEventListener("click", async () => {
       const idx = Math.max(0, sw.branches.indexOf(sw.target_branch));
-      const pick = await showMultiOption({ title: t("Target Branch"), options: sw.branches, selected: idx });
+      const pick = await showMultiOption({
+        title: t("Target Branch"),
+        options: sw.branches,
+        selected: idx,
+        current: idx,
+      });
       if (pick == null) return;
       const b = sw.branches[pick];
       const res = await apiPost("/api/opui/action/set_branch", { branch: b });
-      if (res.ok) toast(`${t("Target Branch")}: ${b}`);
+      if (res.ok) {
+        toast(`${t("Target Branch")}: ${b}`);
+        requestPanelRefresh();
+      }
     });
     container.appendChild(branchRow);
   }
 
+  renderGenericPanel(container, data);
+
   applySoftwareCustom(sw);
+}
+
+function formatBundleDisplay(raw) {
+  if (raw == null || raw === "") return "—";
+  if (typeof raw === "object") {
+    return raw.displayName || raw.internalName || raw.ref || "—";
+  }
+  const s = String(raw);
+  const display = s.match(/displayName['"]:\s*['"]([^'"]+)['"]/);
+  if (display) return display[1];
+  const internal = s.match(/internalName['"]:\s*['"]([^'"]+)['"]/);
+  if (internal) return internal[1];
+  return formatValue(s);
 }
 
 function formatValue(v) {
   if (v == null || v === "") return "—";
-  if (v.length > 200) return v.slice(0, 200) + "…";
-  return v;
+  const s = String(v);
+  if (s.length > 200) return s.slice(0, 200) + "…";
+  return s;
 }
 
 function escapeHtml(s) {

@@ -1012,7 +1012,7 @@ body {
 .opui-wifi-header {
   position: relative;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   padding: 20px 48px 28px;
   min-height: 140px;
@@ -1530,6 +1530,36 @@ body {
 .opui-multi-btn-group--inline button {
   min-width: 364px;
   width: 364px;
+}
+
+.opui-sp-row--segmented {
+  align-items: center;
+}
+
+.opui-sp-row--segmented .opui-sp-row-text {
+  width: 100%;
+  text-align: center;
+}
+
+.opui-sp-row--segmented .opui-multi-btn-group {
+  align-self: center;
+}
+
+.opui-release-notes {
+  margin-top: 16px;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 0 8px;
+}
+
+.opui-release-notes.opui-html-block {
+  padding: 16px 8px;
+  font-size: 32px;
+}
+
+.opui-release-notes.opui-html-block ul {
+  margin: 12px 0;
+  padding-left: 28px;
 }
 
 .opui-sp-row-text--expandable {
