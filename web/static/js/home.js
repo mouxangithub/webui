@@ -34,7 +34,9 @@ export function updateHomeScreen(home) {
 
   const expBanner = document.getElementById("home-exp-banner");
   if (expBanner) {
-    expBanner.hidden = !home.experimental_mode;
+    expBanner.hidden = false;
+    expBanner.classList.toggle("opui-home-exp--experimental", !!home.experimental_mode);
+    expBanner.classList.toggle("opui-home-exp--chill", !home.experimental_mode);
     const icon = expBanner.querySelector(".opui-home-exp-icon");
     if (icon) {
       icon.src = assetUrl(home.experimental_mode

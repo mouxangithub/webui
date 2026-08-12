@@ -202,6 +202,9 @@ body {
   top: 35px;
   width: 200px;
   height: 117px;
+  border-radius: 20px;
+  background-color: #fff;
+  background-size: 55% auto;
 }
 
 .opui-sidebar-btn--home,
@@ -493,7 +496,7 @@ body {
   height: 125px;
   border: none;
   border-radius: 16px;
-  background: linear-gradient(90deg, #ff9b3f, #db3822);
+  background: linear-gradient(90deg, #14ffab, #2395ff);
   color: #000;
   font-size: 44px;
   font-weight: 600;
@@ -505,6 +508,14 @@ body {
   cursor: pointer;
   flex-shrink: 0;
   box-sizing: border-box;
+}
+
+.opui-home-exp--experimental {
+  background: linear-gradient(90deg, #ff9b3f, #db3822);
+}
+
+.opui-home-exp--chill {
+  background: linear-gradient(90deg, #14ffab, #2395ff);
 }
 
 .opui-home-exp-label {
