@@ -80,11 +80,13 @@ export function updateSidebarMetrics(st) {
     danger: !d.panda_online,
     visible: true,
   });
-  const athena = String(d.athena_status || "");
+  const athena = String(d.athena_status || "").toUpperCase();
+  const isOnline = athena === "ONLINE";
   setMetric("connect", {
     label: METRIC_LABELS.CONNECT,
-    value: zhValue(d.athena_status) || (athena.includes("CONNECTED") ? "在线" : "离线"),
-    warn: !athena.includes("CONNECTED"),
+    value: zhValue(d.athena_status) || (isOnline ? "在线" : "离线"),
+    warn: athena === "OFFLINE",
+    danger: athena === "ERROR",
     visible: true,
   });
 
