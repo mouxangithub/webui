@@ -5,23 +5,40 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from openpilot.common.params import Params, UnknownKeyName
+from openpilot.common.params import ParamKeyType, Params, UnknownKeyName
 
 from webui.server.bridge.panel_catalog import PANELS, get_panel, panel_schema
+
+_PARAM_TYPE_NAMES: dict[ParamKeyType, str] = {
+  ParamKeyType.STRING: "STRING",
+  ParamKeyType.BOOL: "BOOL",
+  ParamKeyType.INT: "INT",
+  ParamKeyType.FLOAT: "FLOAT",
+  ParamKeyType.TIME: "TIME",
+  ParamKeyType.JSON: "JSON",
+  ParamKeyType.BYTES: "BYTES",
+}
 
 
 def _params() -> Params:
   return Params()
 
 
-def _param_type_name(p: Params, key: str) -> str | None:
+def _param_type(p: Params, key: str) -> ParamKeyType | None:
   try:
-    t = p.get_type(key)
-    if t is None:
-      return None
-    return str(t).split(".")[-1].upper()
+    return p.get_type(key)
   except UnknownKeyName:
     return None
+
+
+def _param_type_name(p: Params, key: str) -> str | None:
+  t = _param_type(p, key)
+  if t is None:
+    return None
+  name = getattr(t, "name", None)
+  if name:
+    return name
+  return _PARAM_TYPE_NAMES.get(t)
 
 
 def _serialize_value(val: Any) -> str:
@@ -72,8 +89,9 @@ def get_param(key: str) -> dict[str, Any]:
 def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, Any]:
   try:
     p = _params()
+    ptype_enum = _param_type(p, key)
     ptype = _param_type_name(p, key)
-    if ptype is None:
+    if ptype_enum is None or ptype is None:
       return {"ok": False, "error": f"unknown param: {key}"}
 
     try:
@@ -82,7 +100,7 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
     except UnknownKeyName:
       pass
 
-    if ptype == "BOOL":
+    if ptype_enum == ParamKeyType.BOOL:
       p.put_bool(key, value in ("1", "true", "True", True), block=True)
     else:
       p.put(key, value, block=True)
