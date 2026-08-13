@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import os
+import re
+import time
 from typing import Any
 
 
 def _cache_size_mb() -> float:
   try:
     from openpilot.sunnypilot.models.runners.constants import CUSTOM_MODEL_PATH
-    import os
     if not os.path.exists(CUSTOM_MODEL_PATH):
       return 0.0
     total = sum(os.path.getsize(os.path.join(CUSTOM_MODEL_PATH, f)) for f in os.listdir(CUSTOM_MODEL_PATH))
@@ -19,53 +19,113 @@ def _cache_size_mb() -> float:
     return 0.0
 
 
+def _default_model_label() -> str:
+  try:
+    from openpilot.sunnypilot.models.model_name import DEFAULT_MODEL
+    return f"{DEFAULT_MODEL} (Default)"
+  except Exception:
+    return "Default (Default)"
+
+
+def _default_tree_root() -> dict[str, Any]:
+  return {
+    "name": "",
+    "ref": "",
+    "bundles": [{"ref": "Default", "name": _default_model_label(), "index": -1, "generation": ""}],
+  }
+
+
+def _bundle_entry(bundle: Any) -> tuple[dict[str, Any], str]:
+  folder = ""
+  generation = ""
+  for ov in bundle.overrides:
+    if ov.key == "folder":
+      folder = ov.value
+    if ov.key == "generation":
+      generation = ov.value
+  return {
+    "ref": bundle.ref,
+    "name": bundle.displayName,
+    "internal": bundle.internalName,
+    "index": bundle.index,
+    "generation": generation,
+  }, folder
+
+
+def _folder_display_name(folder: str, folder_bundles: list[dict[str, Any]]) -> str:
+  if not folder:
+    return "Models"
+  if not folder_bundles:
+    return folder
+  m = re.search(r"\(([^)]*)\)[^(]*$", folder_bundles[0]["name"])
+  if m:
+    return f"{folder} - (Updated: {m.group(1)})"
+  return folder
+
+
+def _build_model_tree(mm: Any, favorites: set[str]) -> list[dict[str, Any]]:
+  """Mirror sunnypilot on-device Models tree (Default root + folders + favorites)."""
+  tree: list[dict[str, Any]] = [_default_tree_root()]
+  folders: dict[str, list[dict[str, Any]]] = {}
+  fav_bundles: list[dict[str, Any]] = []
+
+  for bundle in mm.availableBundles:
+    entry, folder = _bundle_entry(bundle)
+    folders.setdefault(folder, []).append(entry)
+    if bundle.ref in favorites:
+      fav_bundles.append(entry)
+
+  for folder, folder_bundles in sorted(
+    folders.items(),
+    key=lambda item: max((bundle["index"] for bundle in item[1]), default=-1),
+    reverse=True,
+  ):
+    folder_bundles.sort(key=lambda bundle: bundle["index"], reverse=True)
+    tree.append({
+      "name": _folder_display_name(folder, folder_bundles),
+      "ref": folder,
+      "bundles": folder_bundles,
+    })
+
+  if fav_bundles:
+    tree.insert(1, {"name": "Favorites", "ref": "Favorites", "bundles": fav_bundles})
+  return tree
+
+
+def _read_model_manager(timeout_ms: int = 2500) -> Any | None:
+  import openpilot.cereal.messaging as messaging
+
+  sm = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
+  deadline = time.monotonic() + timeout_ms / 1000.0
+  while time.monotonic() < deadline:
+    sm.update(200)
+    if sm.valid.get("modelManagerSP"):
+      return sm["modelManagerSP"]
+  return None
+
+
 def models_status() -> dict[str, Any]:
   if os.environ.get("WEBUI_DEV_PC") == "1":
     return _mock_models()
 
   try:
-    import openpilot.cereal.messaging as messaging
     from openpilot.common.params import Params
 
     p = Params()
-    sm = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
-    sm.update(500)
-
-    tree: list[dict[str, Any]] = [{"name": "Default", "ref": "Default", "bundles": [{"ref": "Default", "name": "Default (Default)", "index": -1, "generation": ""}]}]
+    mm = _read_model_manager()
+    tree = [_default_tree_root()]
     active_ref = "Default"
-    active_name = "Default"
+    active_name = _default_model_label()
     active_generation = ""
     download: dict[str, Any] = {}
     download_index = p.get("ModelManager_DownloadIndex")
     favs_raw = p.get("ModelManager_Favs") or ""
     favorites = {f for f in str(favs_raw).split(";") if f}
+    model_manager_online = mm is not None
 
-    if sm.valid["modelManagerSP"]:
-      mm = sm["modelManagerSP"]
-      folders: dict[str, list] = {}
-      fav_bundles: list[dict[str, Any]] = []
-      for bundle in mm.availableBundles:
-        folder = ""
-        generation = ""
-        for ov in bundle.overrides:
-          if ov.key == "folder":
-            folder = ov.value
-          if ov.key == "generation":
-            generation = ov.value
-        entry = {
-          "ref": bundle.ref,
-          "name": bundle.displayName,
-          "internal": bundle.internalName,
-          "index": bundle.index,
-          "generation": generation,
-        }
-        folders.setdefault(folder, []).append(entry)
-        if bundle.ref in favorites:
-          fav_bundles.append(entry)
-      tree = [{"name": k or "Models", "ref": k, "bundles": v} for k, v in sorted(folders.items(), key=lambda x: x[0])]
-      if fav_bundles:
-        tree.insert(0, {"name": "Favorites", "ref": "Favorites", "bundles": fav_bundles})
-      if mm.activeBundle:
+    if mm is not None:
+      tree = _build_model_tree(mm, favorites)
+      if mm.activeBundle and mm.activeBundle.ref:
         active_ref = mm.activeBundle.ref
         active_name = mm.activeBundle.internalName or mm.activeBundle.displayName
         for ov in mm.activeBundle.overrides:
@@ -90,6 +150,7 @@ def models_status() -> dict[str, Any]:
       "cache_clear_pending": p.get_bool("ModelManager_ClearCache"),
       "cache_size_mb": _cache_size_mb(),
       "custom_model_active": p.get("ModelManager_ActiveBundle") is not None,
+      "model_manager_online": model_manager_online,
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -100,15 +161,11 @@ def models_select(ref: str, index: int | None = None) -> dict[str, Any]:
     from openpilot.common.params import Params
     p = Params()
     prev_gen = ""
-    try:
-      import openpilot.cereal.messaging as messaging
-      sm = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
-      if sm.update(500) and sm.valid.get("modelManagerSP") and sm["modelManagerSP"].activeBundle:
-        for ov in sm["modelManagerSP"].activeBundle.overrides:
-          if ov.key == "generation":
-            prev_gen = ov.value
-    except Exception:
-      pass
+    mm = _read_model_manager()
+    if mm and mm.activeBundle:
+      for ov in mm.activeBundle.overrides:
+        if ov.key == "generation":
+          prev_gen = ov.value
     new_gen = ""
     needs_reset_cal = False
     if ref == "Default":
@@ -116,20 +173,15 @@ def models_select(ref: str, index: int | None = None) -> dict[str, Any]:
       needs_reset_cal = True
     elif index is not None:
       p.put("ModelManager_DownloadIndex", index, block=True)
-      try:
-        import openpilot.cereal.messaging as messaging
-        sm = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
-        if sm.update(500) and sm.valid.get("modelManagerSP"):
-          for bundle in sm["modelManagerSP"].availableBundles:
-            if bundle.index == index:
-              for ov in bundle.overrides:
-                if ov.key == "generation":
-                  new_gen = ov.value
-              break
-          if new_gen and prev_gen and new_gen != prev_gen:
-            needs_reset_cal = True
-      except Exception:
-        pass
+      if mm:
+        for bundle in mm.availableBundles:
+          if bundle.index == index:
+            for ov in bundle.overrides:
+              if ov.key == "generation":
+                new_gen = ov.value
+            break
+        if new_gen and prev_gen and new_gen != prev_gen:
+          needs_reset_cal = True
     return {"ok": True, "ref": ref, "needs_reset_cal": needs_reset_cal}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -157,5 +209,6 @@ def _mock_models() -> dict[str, Any]:
       ],
     },
     "cache_size_mb": 12.5,
+    "model_manager_online": True,
     "dev_pc": True,
   }

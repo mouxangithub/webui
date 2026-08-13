@@ -3,6 +3,7 @@
 const WEBCODECS_PREF_KEY = "opui-webcodecs";
 
 let activeCleanup = null;
+let decodePath = "video";
 
 export function getWebCodecsPreference() {
   const v = localStorage.getItem(WEBCODECS_PREF_KEY) || "auto";
@@ -20,11 +21,34 @@ export function webCodecsCapable() {
     && typeof RTCRtpReceiver !== "undefined";
 }
 
-function shouldTryWebCodecs() {
+export function getStreamDecodePath() {
+  return decodePath;
+}
+
+function h264CodecFromReceiver(receiver) {
+  try {
+    const codecs = receiver?.getParameters?.().codecs || [];
+    for (const c of codecs) {
+      const mime = String(c.mimeType || "").toLowerCase();
+      if (!mime.startsWith("video/")) continue;
+      if (mime !== "video/h264" && mime !== "video/avc") continue;
+      const fmtp = String(c.sdpFmtpLine || "");
+      const m = fmtp.match(/profile-level-id=([0-9a-fA-F]{6})/i);
+      if (m) return `avc1.${m[1].toUpperCase()}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function shouldTryWebCodecs(receiver) {
   const pref = getWebCodecsPreference();
   if (pref === "off") return false;
-  if (pref === "on") return webCodecsCapable();
-  return webCodecsCapable();
+  if (!webCodecsCapable() || !receiver?.createEncodedStreams) return false;
+  if (pref === "on") return true;
+  // auto: only when we know the negotiated H.264 profile (avoids green macroblock glitches).
+  return !!h264CodecFromReceiver(receiver);
 }
 
 function tuneReceiverLatency(receiver) {
@@ -37,7 +61,7 @@ function tuneReceiverLatency(receiver) {
   } catch { /* ignore */ }
 }
 
-async function pumpEncodedFrames(readable, decoder) {
+async function pumpEncodedFrames(readable, decoder, onFatal) {
   const reader = readable.getReader();
   try {
     for (;;) {
@@ -51,28 +75,51 @@ async function pumpEncodedFrames(readable, decoder) {
           data: value.data,
         });
         if (decoder.state === "configured") decoder.decode(chunk);
+      } catch (err) {
+        onFatal?.(err);
+        break;
       } finally {
         if (typeof value.close === "function") value.close();
       }
     }
-  } catch {
-    /* stream ended */
+  } catch (err) {
+    onFatal?.(err);
   } finally {
     reader.releaseLock();
   }
 }
 
-export async function tryAttachWebCodecsDecode(receiver, videoEl) {
+export async function tryAttachWebCodecsDecode(receiver, videoEl, opts = {}) {
+  const { fallback } = opts;
   stopWebCodecsDecode();
-  if (!shouldTryWebCodecs() || !receiver?.createEncodedStreams || !videoEl) return false;
+  if (!shouldTryWebCodecs(receiver) || !videoEl) {
+    decodePath = "video";
+    return false;
+  }
 
+  const codec = h264CodecFromReceiver(receiver) || "avc1.64001F";
   let decoder;
   let generator;
   let writer;
   let aborted = false;
+  let fellBack = false;
+
+  const doFallback = (reason) => {
+    if (fellBack || aborted) return;
+    fellBack = true;
+    aborted = true;
+    decodePath = "video";
+    try { decoder?.close(); } catch { /* ignore */ }
+    try { writer?.close(); } catch { /* ignore */ }
+    try { generator?.stop(); } catch { /* ignore */ }
+    activeCleanup = null;
+    if (reason) console.warn("WebCodecs preview fallback:", reason);
+    fallback?.();
+  };
 
   const cleanup = () => {
     aborted = true;
+    decodePath = "video";
     try { decoder?.close(); } catch { /* ignore */ }
     try { writer?.close(); } catch { /* ignore */ }
     try { generator?.stop(); } catch { /* ignore */ }
@@ -92,35 +139,39 @@ export async function tryAttachWebCodecsDecode(receiver, videoEl) {
         }
         writer.write(frame).catch(() => {}).finally(() => frame.close());
       },
-      error() {
-        cleanup();
+      error(err) {
+        doFallback(err);
       },
     });
 
     decoder.configure({
-      codec: "avc1.42E01E",
+      codec,
       optimizeForLatency: true,
       hardwareAcceleration: "prefer-hardware",
     });
 
-    pumpEncodedFrames(readable, decoder).catch(() => {});
+    pumpEncodedFrames(readable, decoder, doFallback).catch(doFallback);
     videoEl.srcObject = new MediaStream([generator]);
     videoEl.playsInline = true;
     videoEl.muted = true;
     tuneReceiverLatency(receiver);
     await videoEl.play().catch(() => {});
 
+    if (fellBack) return false;
+
+    decodePath = "webcodecs";
     activeCleanup = cleanup;
     return true;
   } catch (err) {
     console.warn("WebCodecs preview path unavailable:", err);
-    cleanup();
+    doFallback(err);
     return false;
   }
 }
 
 export function stopWebCodecsDecode() {
   if (activeCleanup) activeCleanup();
+  decodePath = "video";
 }
 
 export function tuneVideoReceiver(receiver) {

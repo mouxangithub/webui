@@ -93,6 +93,12 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Encoder lag": "Encoder lag",
     "Yes": "Yes",
     "No": "No",
+    "Model list is still loading. Tap Refresh Model List and try again.": (
+      "Model list is still loading. Tap Refresh Model List and try again."
+    ),
+    "Decode path": "Decode path",
+    "WebCodecs (browser HW)": "WebCodecs (browser HW)",
+    "Video element (browser HW)": "Video element (browser HW)",
   },
   "zh-CHS": {
     "Web UI": "Web UI",
@@ -183,6 +189,12 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Encoder lag": "编码延迟",
     "Yes": "是",
     "No": "否",
+    "Model list is still loading. Tap Refresh Model List and try again.": (
+      "模型列表尚未就绪，请先点击「刷新模型列表」后再试。"
+    ),
+    "Decode path": "解码路径",
+    "WebCodecs (browser HW)": "WebCodecs（浏览器硬解）",
+    "Video element (browser HW)": "Video 元素（浏览器硬解）",
   },
   "zh-CHT": {
     "Web UI": "Web UI",
@@ -273,6 +285,12 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Encoder lag": "編碼延遲",
     "Yes": "是",
     "No": "否",
+    "Model list is still loading. Tap Refresh Model List and try again.": (
+      "模型列表尚未就緒，請先點擊「重新整理模型列表」後再試。"
+    ),
+    "Decode path": "解碼路徑",
+    "WebCodecs (browser HW)": "WebCodecs（瀏覽器硬解）",
+    "Video element (browser HW)": "Video 元素（瀏覽器硬解）",
   },
 }
 

@@ -2,7 +2,7 @@ import { apiGet, apiPost, apiPut, toast } from "./api.js";
 import { tr } from "./i18n.js";
 import { getQualityPreference, setQualityPreference, QUALITY_LEVELS } from "./webrtc_stream_adaptive.js";
 import {
-  getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable,
+  getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, getStreamDecodePath,
 } from "./webrtc_webcodecs.js";
 import { renderWebUiUpdateRow, fetchWebUiUpdate, syncWebUiUpdateRow } from "./webui_update.js";
 import { opuiWs } from "./ws.js";
@@ -2282,6 +2282,9 @@ async function renderModelsPanel(container, data) {
       toast(t("Changing model is only allowed while offroad."));
       return;
     }
+    if (m.model_manager_online === false) {
+      toast(t("Model list is still loading. Tap Refresh Model List and try again."));
+    }
     const ref = await showTree({
       title: t("Select a Model"),
       folders: m.tree || [],
@@ -2826,6 +2829,8 @@ function renderStreamDiagnosticsRow() {
       ];
       if (h.cpu_temp != null) lines.push(`${t("CPU temp")}: ${h.cpu_temp}°C`);
       if (h.memory_usage_percent != null) lines.push(`${t("Memory")}: ${h.memory_usage_percent}%`);
+      const decode = getStreamDecodePath();
+      lines.push(`${t("Decode path")}: ${decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)")}`);
       body.textContent = lines.join(" · ");
     } catch {
       body.textContent = t("Update status unavailable");

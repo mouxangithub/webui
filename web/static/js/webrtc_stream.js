@@ -351,17 +351,27 @@ async function createStream(videoEl, initCamera) {
 
     const receiver = ev.receiver;
 
-    const usedWebCodecs = await tryAttachWebCodecsDecode(receiver, videoEl);
+    const stream = ev.streams?.[0];
 
-    if (!usedWebCodecs && ev.streams?.[0]) {
+    const attachStandardVideo = () => {
 
-      videoEl.srcObject = ev.streams[0];
+      stopWebCodecsDecode();
 
-      tuneVideoReceiver(receiver);
+      if (stream) {
 
-      videoEl.play().catch(() => {});
+        videoEl.srcObject = stream;
 
-    }
+        tuneVideoReceiver(receiver);
+
+        videoEl.play().catch(() => {});
+
+      }
+
+    };
+
+    const usedWebCodecs = await tryAttachWebCodecsDecode(receiver, videoEl, { fallback: attachStandardVideo });
+
+    if (!usedWebCodecs) attachStandardVideo();
 
   };
 

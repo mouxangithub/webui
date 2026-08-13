@@ -279,7 +279,9 @@ export function showTree(opts) {
     if (selectBtn) selectBtn.textContent = tr("Select");
     let pick = selectedRef;
     let query = "";
-    const expanded = new Set();
+    const expanded = new Set(
+      folders.filter((f) => f.name != null && f.name !== "").map((f) => f.name),
+    );
 
     const syncSelectBtn = () => {
       if (!selectBtn) return;
