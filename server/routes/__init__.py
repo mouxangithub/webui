@@ -8,7 +8,7 @@ import json
 from aiohttp import web
 
 from webui.server.deps import WEB_DIR, json_response, openpilot_root, read_version
-from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param
+from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param, remove_param
 from webui.server.bridge.state_api import snapshot_ui_state
 from webui.server.bridge.system_api import run_action, software_status
 from webui.server.bridge.network_api import (
@@ -27,9 +27,10 @@ from webui.server.bridge.trips_api import trips_stats
 from webui.server.bridge.models_api import models_select, models_status
 from webui.server.bridge.design_tokens import tokens_payload
 from webui.server.bridge.assets_api import resolve_asset
+from webui.server.bridge.stream_health_api import snapshot_stream_health
 from webui.server.bridge.model_overlay import snapshot_model_overlay
 from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
-from webui.server.bridge.osm_api import osm_download_progress, osm_fetch_regions, osm_map_size_mb, osm_select_region
+from webui.server.bridge.osm_api import osm_download_progress, osm_fetch_regions, osm_map_size_mb, osm_select_region, osm_clear_incomplete_us
 from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select, vehicle_brand_widgets
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
 from webui.server.bridge.firehose_api import firehose_status
@@ -37,6 +38,7 @@ from webui.server.bridge.device_api import device_extras, regulatory_html, set_l
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
+from webui.server.bridge.webui_update_api import apply_webui_update, dismiss_webui_update, snapshot_webui_update
 from webui.server.bridge.developer_api import developer_error_log
 from webui.server.bridge.osm_api import osm_delete_maps
 from webui.server.bridge.ws_handler import ws_opui_handler
@@ -74,6 +76,11 @@ async def api_param_put(request: web.Request) -> web.Response:
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
   return json_response(put_param(key, value, needs_cycle=needs_cycle))
+
+
+async def api_param_delete(request: web.Request) -> web.Response:
+  key = request.match_info.get("key", "")
+  return json_response(remove_param(key))
 
 
 async def api_params_batch(request: web.Request) -> web.Response:
@@ -273,6 +280,10 @@ async def api_osm_select(request: web.Request) -> web.Response:
   ))
 
 
+async def api_osm_clear(_request: web.Request) -> web.Response:
+  return json_response(osm_clear_incomplete_us())
+
+
 async def api_osm_size(_request: web.Request) -> web.Response:
   return json_response(osm_map_size_mb())
 
@@ -319,6 +330,10 @@ async def api_firehose(_request: web.Request) -> web.Response:
   return json_response(firehose_status())
 
 
+async def api_stream_health(_request: web.Request) -> web.Response:
+  return json_response(snapshot_stream_health())
+
+
 async def api_device_extras(_request: web.Request) -> web.Response:
   return json_response(device_extras())
 
@@ -348,6 +363,25 @@ async def api_set_language(request: web.Request) -> web.Response:
   return json_response(set_language(lang))
 
 
+async def api_webui_update(request: web.Request) -> web.Response:
+  fetch = request.rel_url.query.get("fetch", "").lower() in ("1", "true", "yes")
+  return json_response(snapshot_webui_update(fetch=fetch))
+
+
+async def api_webui_update_dismiss(request: web.Request) -> web.Response:
+  commit = ""
+  try:
+    body = await request.json()
+    commit = str(body.get("commit", "") or "")
+  except Exception:
+    pass
+  return json_response(dismiss_webui_update(commit or None))
+
+
+async def api_webui_update_apply(_request: web.Request) -> web.Response:
+  return json_response(apply_webui_update())
+
+
 def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/bootstrap", api_bootstrap)
   app.router.add_get("/api/opui/state", api_state)
@@ -357,6 +391,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/panels/{panel_id}", api_panel_get)
   app.router.add_get("/api/opui/params/{key}", api_param_get)
   app.router.add_put("/api/opui/params/{key}", api_param_put)
+  app.router.add_delete("/api/opui/params/{key}", api_param_delete)
   app.router.add_post("/api/opui/params/batch", api_params_batch)
   app.router.add_post("/api/opui/action/{action}", api_action)
   app.router.add_get("/api/opui/software", api_software)
@@ -380,6 +415,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_post("/api/opui/ssh/remove", api_ssh_remove)
   app.router.add_get("/api/opui/osm/regions", api_osm_regions)
   app.router.add_post("/api/opui/osm/select", api_osm_select)
+  app.router.add_post("/api/opui/osm/clear", api_osm_clear)
   app.router.add_get("/api/opui/osm/size", api_osm_size)
   app.router.add_get("/api/opui/osm/progress", api_osm_progress)
   app.router.add_post("/api/opui/osm/delete", api_osm_delete)
@@ -389,11 +425,15 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/sunnylink/status", api_sunnylink_status)
   app.router.add_get("/api/opui/sunnylink/pair", api_sunnylink_pair)
   app.router.add_get("/api/opui/firehose", api_firehose)
+  app.router.add_get("/api/opui/stream/health", api_stream_health)
   app.router.add_get("/api/opui/device/extras", api_device_extras)
   app.router.add_get("/api/opui/steering/torque-versions", api_torque_versions)
   app.router.add_get("/api/opui/device/regulatory", api_device_regulatory)
   app.router.add_get("/api/opui/developer/error-log", api_developer_error_log)
   app.router.add_post("/api/opui/device/language", api_set_language)
+  app.router.add_get("/api/opui/webui-update", api_webui_update)
+  app.router.add_post("/api/opui/webui-update/dismiss", api_webui_update_dismiss)
+  app.router.add_post("/api/opui/webui-update/apply", api_webui_update_apply)
   app.router.add_get("/api/opui/webrtc/schema", api_webrtc_schema)
   app.router.add_post("/api/opui/webrtc/offer", api_webrtc_offer)
   app.router.add_post("/api/opui/webrtc/notify", api_webrtc_notify)

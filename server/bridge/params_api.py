@@ -3,42 +3,71 @@
 from __future__ import annotations
 
 import os
-from typing import Any
-
-from openpilot.common.params import ParamKeyType, Params, UnknownKeyName
+from typing import TYPE_CHECKING, Any
 
 from webui.server.bridge.panel_catalog import PANELS, get_panel, panel_schema
 
-_PARAM_TYPE_NAMES: dict[ParamKeyType, str] = {
-  ParamKeyType.STRING: "STRING",
-  ParamKeyType.BOOL: "BOOL",
-  ParamKeyType.INT: "INT",
-  ParamKeyType.FLOAT: "FLOAT",
-  ParamKeyType.TIME: "TIME",
-  ParamKeyType.JSON: "JSON",
-  ParamKeyType.BYTES: "BYTES",
+if TYPE_CHECKING:
+  from openpilot.common.params import ParamKeyType, Params, UnknownKeyName
+
+
+def _op_params():
+  import sys
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    mod = sys.modules.get("openpilot.common.params")
+    if mod is not None:
+      return mod.Params, mod.ParamKeyType, mod.UnknownKeyName
+    from webui.dev.mock_runtime import MockParams, ParamKeyType, UnknownKeyName
+    return MockParams, ParamKeyType, UnknownKeyName
+  from openpilot.common.params import ParamKeyType, Params, UnknownKeyName
+  return Params, ParamKeyType, UnknownKeyName
+
+# Custom panels with no widget params still need these keys in panel snapshots.
+_CUSTOM_PANEL_PARAMS: dict[str, list[str]] = {
+  "osm": [
+    "MapdVersion",
+    "OsmLocationName",
+    "OsmLocationTitle",
+    "OsmStateName",
+    "OsmStateTitle",
+    "OsmDownloadedDate",
+  ],
 }
 
+def _param_type_names() -> dict[Any, str]:
+  _, ParamKeyType, _ = _op_params()
+  return {
+    ParamKeyType.STRING: "STRING",
+    ParamKeyType.BOOL: "BOOL",
+    ParamKeyType.INT: "INT",
+    ParamKeyType.FLOAT: "FLOAT",
+    ParamKeyType.TIME: "TIME",
+    ParamKeyType.JSON: "JSON",
+    ParamKeyType.BYTES: "BYTES",
+  }
 
-def _params() -> Params:
+
+def _params():
+  Params, _, _ = _op_params()
   return Params()
 
 
-def _param_type(p: Params, key: str) -> ParamKeyType | None:
+def _param_type(p, key: str):
+  _, _, UnknownKeyName = _op_params()
   try:
     return p.get_type(key)
   except UnknownKeyName:
     return None
 
 
-def _param_type_name(p: Params, key: str) -> str | None:
+def _param_type_name(p, key: str) -> str | None:
   t = _param_type(p, key)
   if t is None:
     return None
   name = getattr(t, "name", None)
   if name:
     return name
-  return _PARAM_TYPE_NAMES.get(t)
+  return _param_type_names().get(t)
 
 
 def _serialize_value(val: Any) -> str:
@@ -54,7 +83,7 @@ def _serialize_value(val: Any) -> str:
   return str(val)
 
 
-def _read_param_value(p: Params, key: str, ptype: str | None) -> str:
+def _read_param_value(p, key: str, ptype: str | None) -> str:
   if ptype == "BOOL":
     try:
       return "1" if p.get_bool(key) else "0"
@@ -73,8 +102,10 @@ def get_param(key: str) -> dict[str, Any]:
     locked = False
     try:
       locked = p.get_bool(key + "Lock")
-    except UnknownKeyName:
-      pass
+    except Exception as exc:
+      _, _, UnknownKeyName = _op_params()
+      if not isinstance(exc, UnknownKeyName):
+        raise
     return {
       "ok": True,
       "key": key,
@@ -86,7 +117,8 @@ def get_param(key: str) -> dict[str, Any]:
     return {"ok": False, "error": str(exc)}
 
 
-def _coerce_write_value(ptype_enum: ParamKeyType, value: str) -> Any:
+def _coerce_write_value(ptype_enum, value: str) -> Any:
+  _, ParamKeyType, _ = _op_params()
   if ptype_enum == ParamKeyType.BOOL:
     return value in ("1", "true", "True", True)
   if ptype_enum == ParamKeyType.INT:
@@ -99,8 +131,18 @@ def _coerce_write_value(ptype_enum: ParamKeyType, value: str) -> Any:
   return value
 
 
+def remove_param(key: str) -> dict[str, Any]:
+  try:
+    p = _params()
+    p.remove(key)
+    return {"ok": True, "key": key}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
 def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, Any]:
   try:
+    _, ParamKeyType, _ = _op_params()
     p = _params()
     ptype_enum = _param_type(p, key)
     ptype = _param_type_name(p, key)
@@ -110,8 +152,10 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
     try:
       if p.get_bool(key + "Lock"):
         return {"ok": False, "error": f"param locked: {key}"}
-    except UnknownKeyName:
-      pass
+    except Exception as exc:
+      _, _, UnknownKeyName = _op_params()
+      if not isinstance(exc, UnknownKeyName):
+        raise
 
     if ptype_enum == ParamKeyType.BOOL:
       p.put_bool(key, _coerce_write_value(ptype_enum, value), block=True)
@@ -148,8 +192,17 @@ def panel_values(panel_id: str) -> dict[str, Any]:
     ptype = _param_type_name(p, key)
     if ptype is not None:
       values[key] = _read_param_value(p, key, ptype)
+      return
+    try:
+      raw = p.get(key)
+      if raw is not None:
+        values[key] = _serialize_value(raw)
+    except Exception:
+      pass
 
   for w in panel.get("widgets", []):
+    if w.get("custom") == "webui_update":
+      continue
     if os.getenv("LITE") is not None and w.get("param") == "RecordAudio":
       continue
     for dep_key in ("visible_if", "advanced_if"):
@@ -195,8 +248,10 @@ def panel_values(panel_id: str) -> dict[str, Any]:
     locked = False
     try:
       locked = p.get_bool(key + "Lock")
-    except UnknownKeyName:
-      pass
+    except Exception as exc:
+      _, _, UnknownKeyName = _op_params()
+      if not isinstance(exc, UnknownKeyName):
+        raise
     widgets_out.append({
       **w,
       "available": True,
@@ -204,6 +259,9 @@ def panel_values(panel_id: str) -> dict[str, Any]:
       "param_type": ptype,
       "locked": locked,
     })
+
+  for key in _CUSTOM_PANEL_PARAMS.get(panel_id, []):
+    _ensure_param(key)
 
   return {
     "ok": True,

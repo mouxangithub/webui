@@ -25,16 +25,14 @@ def _openpilot_root() -> Path:
 
 def ensure_runtime() -> bool:
   """Return True when PC dev mocks are active."""
-  if os.environ.get("WEBUI_DEV_PC") == "1":
-    return True
+  root = str(_openpilot_root())
+  if root not in sys.path:
+    sys.path.insert(0, root)
   try:
     from openpilot.common.params_pyx import Params  # noqa: F401
     return False
   except Exception:
     pass
-  root = str(_openpilot_root())
-  if root not in sys.path:
-    sys.path.insert(0, root)
   from webui.dev.mock_runtime import install_openpilot_mocks
 
   install_openpilot_mocks(root)

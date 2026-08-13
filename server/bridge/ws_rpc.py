@@ -241,6 +241,10 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
     if method == "GET" and clean_path == "/api/opui/device/extras":
       return device_extras()
 
+    if method == "GET" and clean_path == "/api/opui/stream/health":
+      from webui.server.bridge.stream_health_api import snapshot_stream_health
+      return snapshot_stream_health()
+
     if method == "GET" and clean_path == "/api/opui/steering/torque-versions":
       return torque_versions()
 

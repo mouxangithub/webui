@@ -131,10 +131,13 @@ export function showKeyboard(opts = {}) {
     }
     titleEl.textContent = title;
     const cancelBtn = document.getElementById("keyboard-cancel");
+    const confirmBtn = document.getElementById("keyboard-confirm");
     if (cancelBtn) cancelBtn.textContent = tr("Cancel");
+    if (confirmBtn) confirmBtn.textContent = tr("Confirm");
     let buf = value;
     const render = () => {
       display.textContent = password ? "•".repeat(buf.length) : buf;
+      if (confirmBtn) confirmBtn.disabled = buf.length < minLen;
     };
     render();
 
@@ -179,7 +182,11 @@ export function showKeyboard(opts = {}) {
       popModal(root);
       resolve(v);
     };
+    const onConfirm = () => {
+      if (buf.length >= minLen) finish(buf);
+    };
     document.getElementById("keyboard-cancel")?.addEventListener("click", () => finish(null), { once: true });
+    confirmBtn?.addEventListener("click", onConfirm, { once: true });
     pushModal(root, () => finish(null));
   });
 }
@@ -419,7 +426,7 @@ export function bindRowExpand(row, w) {
 
   text.classList.add("opui-sp-row-text--expandable");
   text.addEventListener("click", (e) => {
-    if (e.target.closest("label, button, input, .opui-sp-toggle, .opui-multi-btn-group, .opui-option-bar, .opui-choice-group")) {
+    if (e.target.closest("label, button, input, .opui-sp-toggle, .opui-multi-btn-group, .opui-option-bar, .opui-choice-group, .opui-sp-row-actions")) {
       return;
     }
     let open = false;
@@ -453,7 +460,20 @@ export function createSpToggle(w, panelData, globalState, handlers) {
   const input = row.querySelector("input");
   const label = row.querySelector(".opui-sp-toggle");
   input?.addEventListener("change", async () => {
-    if (w.confirm && input.checked) {
+    const next = input.checked;
+    if (w.onBeforeChange) {
+      const proceed = await w.onBeforeChange(next, input);
+      if (proceed === false) {
+        input.checked = !next;
+        label?.classList.toggle("on", input.checked);
+        return;
+      }
+      if (proceed === "handled") {
+        label?.classList.toggle("on", next);
+        return;
+      }
+    }
+    if (w.confirm && next) {
       const ok = await showConfirm({
         message: tr(w.confirm),
         confirmText: tr("OK"),
@@ -465,7 +485,7 @@ export function createSpToggle(w, panelData, globalState, handlers) {
         return;
       }
     }
-    if (w.confirm_experimental && input.checked) {
+    if (w.confirm_experimental && next) {
       const ok = await showConfirm({
         rich: true,
         message: experimentalE2eHtml(),
@@ -479,8 +499,33 @@ export function createSpToggle(w, panelData, globalState, handlers) {
       }
       await handlers.putParam("ExperimentalModeConfirmed", "1");
     }
-    label?.classList.toggle("on", input.checked);
-    const res = await handlers.putParam(w.param, input.checked ? "1" : "0", !!w.needs_cycle);
+    if (w.confirm_enable && next) {
+      const ok = await showConfirm({
+        message: tr(w.confirm_message || w.desc || w.label),
+        confirmText: tr("Enable"),
+        cancelText: tr("Cancel"),
+      });
+      if (!ok) {
+        input.checked = false;
+        label?.classList.remove("on");
+        return;
+      }
+    }
+    if (w.confirm_rich && next) {
+      const ok = await showConfirm({
+        rich: true,
+        message: tr(w.confirm_message || w.desc || ""),
+        confirmText: tr("Enable"),
+        cancelText: tr("Cancel"),
+      });
+      if (!ok) {
+        input.checked = false;
+        label?.classList.remove("on");
+        return;
+      }
+    }
+    label?.classList.toggle("on", next);
+    const res = await handlers.putParam(w.param, next ? "1" : "0", !!w.needs_cycle);
     if (!res.ok) {
       handlers.toast(res.error || "Save failed");
       input.checked = !input.checked;
@@ -502,9 +547,14 @@ export function createProgressRow(label, pct) {
 export function createDualButton(left, right, onLeft, onRight) {
   const row = document.createElement("div");
   row.className = "opui-dual-row";
+  const btnClass = (opts) => [
+    "opui-dual-btn",
+    opts?.primary ? "primary" : "",
+    opts?.danger ? "danger" : "",
+  ].filter(Boolean).join(" ");
   row.innerHTML = `
-    <button type="button" class="opui-dual-btn${left.danger ? " danger" : ""}" ${left.disabled ? "disabled" : ""}>${escapeHtml(left.label)}</button>
-    <button type="button" class="opui-dual-btn${right.danger ? " danger" : ""}" ${right.disabled ? "disabled" : ""}>${escapeHtml(right.label)}</button>`;
+    <button type="button" class="${btnClass(left)}" ${left.disabled ? "disabled" : ""}>${escapeHtml(left.label)}</button>
+    <button type="button" class="${btnClass(right)}" ${right.disabled ? "disabled" : ""}>${escapeHtml(right.label)}</button>`;
   const [l, r] = row.querySelectorAll("button");
   l?.addEventListener("click", onLeft);
   r?.addEventListener("click", onRight);

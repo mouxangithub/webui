@@ -1,5 +1,7 @@
 /** Developer UI overlay — bottom bar + right column (developer_ui/__init__.py). */
 
+import { tr } from "./i18n.js";
+
 export function updateDevUi(st) {
   const bottom = document.getElementById("dev-ui-bottom");
   const right = document.getElementById("dev-ui-right");
@@ -28,18 +30,20 @@ export function updateDevUi(st) {
 function renderBar(container, items) {
   container.innerHTML = items.map((el) => `
     <span class="opui-dev-ui-item">
-      <span class="opui-dev-ui-label">${escapeHtml(el.label)}</span>
+      <span class="opui-dev-ui-label">${escapeHtml(tr(el.label))}</span>
       <span class="opui-dev-ui-value" style="color:${el.color || "#fff"}">${escapeHtml(el.value)}</span>
-      ${el.unit ? `<span class="opui-dev-ui-unit">${escapeHtml(el.unit)}</span>` : ""}
+      ${el.unit ? `<span class="opui-dev-ui-unit">${escapeHtml(tr(el.unit))}</span>` : ""}
     </span>`).join("");
 }
 
 function renderColumn(container, items) {
   container.innerHTML = items.map((el) => `
     <div class="opui-dev-ui-col">
-      <div class="opui-dev-ui-col-label">${escapeHtml(el.label)}</div>
-      <div class="opui-dev-ui-col-value" style="color:${el.color || "#fff"}">${escapeHtml(el.value)}</div>
-      ${el.unit ? `<div class="opui-dev-ui-col-unit">${escapeHtml(el.unit)}</div>` : ""}
+      <div class="opui-dev-ui-col-label">${escapeHtml(tr(el.label))}</div>
+      <div class="opui-dev-ui-col-row">
+        <span class="opui-dev-ui-col-value" style="color:${el.color || "#fff"}">${escapeHtml(el.value)}</span>
+        ${el.unit ? `<span class="opui-dev-ui-col-unit">${escapeHtml(tr(el.unit))}</span>` : ""}
+      </div>
     </div>`).join("");
 }
 

@@ -124,6 +124,8 @@ def snapshot_i18n() -> dict[str, Any]:
   lang = _current_language()
   strings = _load_strings(lang)
   po_code = PO_LANG.get(lang, PO_LANG.get(lang.removeprefix("main_"), "en"))
+  from webui.server.bridge.webui_i18n import webui_extra_strings
+  strings = {**strings, **webui_extra_strings(po_code)}
   return {
     "ok": True,
     "language": lang,

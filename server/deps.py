@@ -16,6 +16,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = _PKG_ROOT / "web" / "static"
 
 
+def webui_root() -> Path:
+  return _PKG_ROOT.resolve()
+
+
 def openpilot_root() -> Path:
   env = (os.environ.get("OPENPILOT_ROOT") or os.environ.get("OP_ROOT") or "").strip()
   if env:
@@ -32,6 +36,13 @@ def json_response(data: Any, *, status: int = 200) -> web.Response:
 
 
 def read_version() -> str:
+  try:
+    from webui.server.bridge.webui_update_api import current_commit_short
+    short = current_commit_short()
+    if short:
+      return short
+  except Exception:
+    pass
   try:
     return (_PKG_ROOT / "VERSION").read_text(encoding="utf-8").strip()
   except OSError:

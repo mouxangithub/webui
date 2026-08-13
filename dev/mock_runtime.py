@@ -110,6 +110,10 @@ def _seed_params() -> dict[str, bytes | str]:
   return data
 
 
+class UnknownKeyName(Exception):
+  pass
+
+
 class MockParams:
   _store: dict[str, bytes | str] = {}
 

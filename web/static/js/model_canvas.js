@@ -1,11 +1,12 @@
 /** Canvas overlay for modelV2 lanes / path / leads (mirrors ModelRenderer). */
 
+import { tr } from "./i18n.js";
+
 let canvas = null;
 let ctx = null;
 let rainbowHue = 0;
 let lastOverlay = null;
 
-const LANE_GREEN = "rgba(13, 248, 122, 0.55)";
 const PATH_WHITE = "rgba(242, 242, 242, 0.7)";
 const LEAD_FILL = "rgba(255, 196, 0, 0.45)";
 
@@ -60,7 +61,7 @@ function drawPoly(pts, fill, stroke, lineW = 2) {
 function drawLane(lane) {
   const prob = lane.prob ?? 0.5;
   const alpha = Math.max(0.15, Math.min(0.85, prob));
-  const fill = `rgba(13, 248, 122, ${alpha * 0.55})`;
+  const fill = `rgba(255, 255, 255, ${alpha * 0.7})`;
   const poly = asPoints(lane.polygon);
   if (poly.length >= 3) {
     drawPoly(poly, fill, null);
@@ -77,7 +78,73 @@ function drawLane(lane) {
   }
 }
 
-function drawPath(path, experimental, rainbow) {
+function drawRainbowPolygon(pts) {
+  const minY = Math.min(...pts.map((p) => p[1]));
+  const maxY = Math.max(...pts.map((p) => p[1]));
+  const grad = ctx.createLinearGradient(0, maxY, 0, minY);
+  for (let i = 0; i <= 8; i++) {
+    const hue = (rainbowHue + i * 40) % 360;
+    grad.addColorStop(i / 8, `hsla(${hue}, 95%, 55%, ${0.9 - i * 0.07})`);
+  }
+  drawPoly(pts, grad, null);
+}
+
+function buildPathGradient(pts, stops, blend = 1) {
+  const minY = Math.min(...pts.map((p) => p[1]));
+  const maxY = Math.max(...pts.map((p) => p[1]));
+  const grad = ctx.createLinearGradient(0, maxY, 0, minY);
+  const factor = Math.max(0, Math.min(1, Number(blend) || 1));
+  for (const stop of stops) {
+    const rgba = stop.rgba || [];
+    const [r, g, b, a] = rgba;
+    const alpha = ((a ?? 255) / 255) * factor;
+    grad.addColorStop(Math.max(0, Math.min(1, stop.pos ?? 0)), `rgba(${r}, ${g}, ${b}, ${alpha})`);
+  }
+  return grad;
+}
+
+function drawPathRibbon(poly, experimental, rainbow, allowThrottle, pathGradient, pathBlend) {
+  const pts = asPoints(poly);
+  if (pts.length < 4) return false;
+
+  if (rainbow) {
+    drawRainbowPolygon(pts);
+    return true;
+  }
+
+  if (experimental && pathGradient?.length) {
+    drawPoly(pts, buildPathGradient(pts, pathGradient, 1), null);
+    return true;
+  }
+
+  if (experimental) {
+    const minY = Math.min(...pts.map((p) => p[1]));
+    const maxY = Math.max(...pts.map((p) => p[1]));
+    const grad = ctx.createLinearGradient(0, maxY, 0, minY);
+    grad.addColorStop(0, "rgba(13, 248, 122, 0.85)");
+    grad.addColorStop(0.5, "rgba(114, 255, 92, 0.55)");
+    grad.addColorStop(1, "rgba(114, 255, 92, 0)");
+    drawPoly(pts, grad, null);
+    return true;
+  }
+
+  const blend = typeof pathBlend === "number" ? pathBlend : 1;
+  const minY = Math.min(...pts.map((p) => p[1]));
+  const maxY = Math.max(...pts.map((p) => p[1]));
+  const grad = ctx.createLinearGradient(0, maxY, 0, minY);
+  if (allowThrottle === false) {
+    grad.addColorStop(0, `rgba(242, 242, 242, ${0.35 * blend})`);
+    grad.addColorStop(1, "rgba(242, 242, 242, 0)");
+  } else {
+    grad.addColorStop(0, `rgba(13, 248, 122, ${0.55 * blend})`);
+    grad.addColorStop(0.5, `rgba(114, 255, 92, ${0.45 * blend})`);
+    grad.addColorStop(1, "rgba(114, 255, 92, 0)");
+  }
+  drawPoly(pts, grad, null);
+  return true;
+}
+
+function drawPath(path, experimental, rainbow, allowThrottle) {
   const pts = asPoints(path);
   if (pts.length < 2) return;
   ctx.lineCap = "round";
@@ -103,7 +170,9 @@ function drawPath(path, experimental, rainbow) {
     grad.addColorStop(1, "rgba(114, 255, 92, 0)");
     ctx.strokeStyle = grad;
   } else {
-    ctx.strokeStyle = PATH_WHITE;
+    ctx.strokeStyle = allowThrottle === false
+      ? "rgba(242, 242, 242, 0.35)"
+      : PATH_WHITE;
   }
   ctx.beginPath();
   ctx.moveTo(pts[0][0], pts[0][1]);
@@ -111,17 +180,66 @@ function drawPath(path, experimental, rainbow) {
   ctx.stroke();
 }
 
-function drawLead(lead) {
+function drawLead(lead, chevronAlpha) {
   const glow = asPoints(lead.glow);
   const chevron = asPoints(lead.chevron);
   const alpha = (lead.alpha ?? 180) / 255;
   if (glow.length >= 3) drawPoly(glow, `rgba(255, 196, 0, ${alpha * 0.35})`, null);
   if (chevron.length >= 3) drawPoly(chevron, LEAD_FILL, "rgba(255, 220, 80, 0.9)", 2);
+
+  const metrics = lead.metrics || [];
+  if (!metrics.length || !chevron.length || chevronAlpha <= 0) return;
+
+  const apex = chevron[1] || chevron[0];
+  const cx = apex[0];
+  const cy = apex[1];
+  const fontSize = 40;
+  const lineHeight = 50;
+  const margin = 20;
+  const textAlpha = Math.max(0, Math.min(1, chevronAlpha));
+
+  let textY = cy + 55;
+  const totalH = metrics.length * lineHeight;
+  if (textY + totalH > (lastOverlay?.height || 900) - margin) {
+    textY = Math.max(margin, cy - 15 - totalH);
+  }
+
+  ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+
+  metrics.forEach((line, i) => {
+    const y = textY + i * lineHeight;
+    const text = formatMetricLine(line);
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.78 * textAlpha})`;
+    ctx.fillText(text, cx + 2, y + 2);
+    ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`;
+    ctx.fillText(text, cx, y);
+  });
+  ctx.textAlign = "start";
+}
+
+function formatMetricLine(line) {
+  const raw = String(line);
+  const parts = raw.split(/\s+/);
+  if (parts.length < 2) return tr(raw);
+  const unit = tr(parts.pop());
+  return `${parts.join(" ")} ${unit}`;
+}
+
+let overlayDrawEnabled = true;
+
+export function setModelOverlayEnabled(enabled) {
+  overlayDrawEnabled = !!enabled;
+  const host = document.getElementById("model-overlay");
+  if (host && !enabled) {
+    ctx?.clearRect(0, 0, canvas?.width || 0, canvas?.height || 0);
+  }
 }
 
 export function drawModelOverlay(data) {
-  if (!ctx || !canvas || !data?.ok) return;
-  lastOverlay = data;
+  if (!overlayDrawEnabled || !ctx || !canvas || !data?.ok) return;
+  if (!data._animate) lastOverlay = data;
   const host = document.getElementById("model-overlay");
   const w = data.width || host?.clientWidth || 1600;
   const h = data.height || host?.clientHeight || 900;
@@ -133,8 +251,19 @@ export function drawModelOverlay(data) {
     const poly = asPoints(edge.polygon);
     if (poly.length >= 3) drawPoly(poly, "rgba(255, 80, 80, 0.25)", "rgba(255, 120, 120, 0.5)", 2);
   }
-  drawPath(data.path, data.experimental, data.rainbow);
-  for (const lead of data.leads || []) drawLead(lead);
+  const drewRibbon = drawPathRibbon(
+    data.path_polygon,
+    data.experimental,
+    data.rainbow,
+    data.allow_throttle !== false,
+    data.path_gradient,
+    data.path_blend,
+  );
+  if (!drewRibbon) {
+    drawPath(data.path, data.experimental, data.rainbow, data.allow_throttle !== false);
+  }
+  const chevronAlpha = Number(data.chevron_alpha) || 0;
+  for (const lead of data.leads || []) drawLead(lead, chevronAlpha);
 
   if (data.rainbow) {
     rainbowHue = (rainbowHue + 2) % 360;

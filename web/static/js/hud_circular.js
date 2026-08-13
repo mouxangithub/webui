@@ -10,6 +10,7 @@ let e2eTicks = 0;
 let e2eKind = "";
 let standstillElapsed = 0;
 let lastStandstill = false;
+let lastStandstillWall = 0;
 
 export function updateCircularAlert(st) {
   const wrap = document.getElementById("hud-circular-alert");
@@ -21,6 +22,7 @@ export function updateCircularAlert(st) {
     e2eKind = "";
     standstillElapsed = 0;
     lastStandstill = false;
+    lastStandstillWall = 0;
     return;
   }
 
@@ -36,10 +38,15 @@ export function updateCircularAlert(st) {
   }
 
   const standstill = !!st.standstill;
+  const now = performance.now();
   if (!standstill) {
     standstillElapsed = 0;
+    lastStandstillWall = 0;
   } else if (st.standstill_timer_enabled && e2eTicks <= 0) {
-    standstillElapsed += 0.05;
+    if (lastStandstill && lastStandstillWall > 0) {
+      standstillElapsed += (now - lastStandstillWall) / 1000;
+    }
+    lastStandstillWall = now;
   }
   lastStandstill = standstill;
 
@@ -57,7 +64,7 @@ export function updateCircularAlert(st) {
   wrap.hidden = false;
   wrap.classList.toggle("is-e2e", showE2e);
   wrap.classList.toggle("is-standstill", showStandstill);
-  wrap.classList.toggle("is-pulse", showE2e && (Math.floor(performance.now() / 400) % 2 === 0));
+  wrap.classList.toggle("is-pulse", showE2e && (Math.floor(now / 400) % 2 === 0));
 
   const img = document.getElementById("hud-circular-img");
   const text = document.getElementById("hud-circular-text");
@@ -99,4 +106,5 @@ export function clearCircularAlert() {
   e2eTicks = 0;
   e2eKind = "";
   standstillElapsed = 0;
+  lastStandstillWall = 0;
 }

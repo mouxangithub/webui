@@ -129,15 +129,53 @@ def osm_select_region(country: str, country_title: str, state: str = "", state_t
   try:
     from openpilot.common.params import Params
     p = Params()
-    p.put("OsmLocationName", country, block=True)
-    p.put("OsmLocationTitle", country_title, block=True)
+    if country:
+      p.put("OsmLocationName", country, block=True)
+      p.put("OsmLocationTitle", country_title, block=True)
+      p.put_bool("OsmLocal", True, block=True)
     if state:
       p.put("OsmStateName", state, block=True)
       p.put("OsmStateTitle", state_title, block=True)
     else:
       p.remove("OsmStateName")
       p.remove("OsmStateTitle")
-    return {"ok": True}
+    return {"ok": True, "values": _osm_param_values(p)}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def _osm_param_values(p) -> dict[str, str]:
+  keys = (
+    "MapdVersion",
+    "OsmLocationName",
+    "OsmLocationTitle",
+    "OsmStateName",
+    "OsmStateTitle",
+    "OsmDownloadedDate",
+  )
+  out: dict[str, str] = {}
+  for key in keys:
+    try:
+      raw = p.get(key)
+      out[key] = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else (raw or "")
+    except Exception:
+      out[key] = ""
+  return out
+
+
+def osm_clear_incomplete_us() -> dict[str, Any]:
+  """Rollback country when US state picker is cancelled without a selection."""
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    if p.get("OsmLocationName") != "US" or p.get("OsmStateName"):
+      return {"ok": True, "skipped": True, "values": _osm_param_values(p)}
+    for key in ("OsmDownloadedDate", "OsmLocal", "OsmLocationName", "OsmLocationTitle", "OsmStateName", "OsmStateTitle"):
+      try:
+        p.remove(key)
+      except Exception:
+        pass
+    return {"ok": True, "values": _osm_param_values(p)}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
 
@@ -187,7 +225,12 @@ def osm_map_size_mb(*, refresh: bool = False) -> dict[str, Any]:
 def osm_panel_custom() -> dict[str, Any]:
   prog = osm_download_progress()
   size = osm_map_size_mb(refresh=bool(prog.get("downloading")))
-  return {"ok": True, "size": size, "progress": prog}
+  try:
+    from openpilot.common.params import Params
+    values = _osm_param_values(Params())
+  except Exception:
+    values = {}
+  return {"ok": True, "size": size, "progress": prog, "values": values}
 
 
 def osm_delete_maps() -> dict[str, Any]:

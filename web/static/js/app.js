@@ -3,13 +3,14 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc } from "./onroad.js";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, getOverlayFpsHint } from "./onroad.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
-import { initModelCanvas, showModelOverlay, drawModelOverlay } from "./model_canvas.js";
-import { loadI18n, translatePanelTitle, syncStaticUiStrings } from "./i18n.js";
+import { initModelCanvas, showModelOverlay, drawModelOverlay, setModelOverlayEnabled } from "./model_canvas.js";
+import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
+import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
 import { opuiWs } from "./ws.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -88,11 +89,13 @@ function fitOpuiScale() {
   const w = parseFloat(cs.getPropertyValue("--opui-w")) || 2160;
   const h = parseFloat(cs.getPropertyValue("--opui-h")) || 1080;
   const pad = 24;
-  const scale = Math.min(
-    (window.innerWidth - pad) / w,
-    (window.innerHeight - pad) / h,
-    1,
-  );
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const portrait = vh > vw;
+  root.classList.toggle("opui-portrait-host", portrait);
+  const scale = portrait
+    ? Math.min((vh - pad) / w, (vw - pad) / h, 1)
+    : Math.min((vw - pad) / w, (vh - pad) / h, 1);
   root.style.setProperty("--opui-scale", String(scale));
 }
 
@@ -118,14 +121,54 @@ function applySidebarAssets() {
 }
 
 function syncModelOverlayWatch() {
-  if (app.dataset.screen !== "onroad" || !opuiWs.connected) {
+  if (app.dataset.screen !== "onroad") {
     opuiWs.unwatchModelOverlay();
+    stopModelOverlayPoll();
     return;
   }
+  if (!isCameraPlaying() || !isOverlayAllowed()) {
+    opuiWs.unwatchModelOverlay();
+    stopModelOverlayPoll();
+    setModelOverlayEnabled(false);
+    return;
+  }
+  setModelOverlayEnabled(true);
   const wrap = document.getElementById("camera-wrap");
   const w = wrap?.clientWidth || 1600;
   const h = wrap?.clientHeight || 900;
-  opuiWs.watchModelOverlay(w, h);
+  const fps = getOverlayFpsHint();
+  if (opuiWs.connected) {
+    opuiWs.watchModelOverlay(w, h, fps);
+    stopModelOverlayPoll();
+    return;
+  }
+  startModelOverlayPoll(w, h);
+}
+
+let modelOverlayPollTimer = null;
+
+function stopModelOverlayPoll() {
+  if (modelOverlayPollTimer) {
+    clearInterval(modelOverlayPollTimer);
+    modelOverlayPollTimer = null;
+  }
+}
+
+function startModelOverlayPoll(w, h) {
+  stopModelOverlayPoll();
+  if (opuiWs.connected) return;
+  const poll = async () => {
+    if (app.dataset.screen !== "onroad" || !isCameraPlaying() || !isOverlayAllowed()) return;
+    const wrap = document.getElementById("camera-wrap");
+    const width = wrap?.clientWidth || w;
+    const height = wrap?.clientHeight || h;
+    try {
+      const data = await apiGet(`/api/opui/model/overlay?w=${width}&h=${height}`);
+      if (data?.ok) drawModelOverlay(data);
+    } catch (_) { /* WS may already deliver frames */ }
+  };
+  modelOverlayPollTimer = setInterval(poll, Math.max(200, Math.round(1000 / getOverlayFpsHint())));
+  poll();
 }
 
 function updateCameraPreviewUi() {
@@ -151,6 +194,7 @@ function setScreen(name) {
     app.classList.remove("opui--onroad-sidebar-hidden");
     notifyPanelWatch(null);
     opuiWs.unwatchModelOverlay();
+    stopModelOverlayPoll();
     if (opuiWs.lastHome?.data) {
       updateHomeScreen(opuiWs.lastHome.data);
     } else if (opuiWs.bootstrap?.home) {
@@ -171,6 +215,7 @@ function setScreen(name) {
     app.classList.remove("opui--onroad-sidebar-hidden");
     notifyPanelWatch(currentPanel);
     opuiWs.unwatchModelOverlay();
+    stopModelOverlayPoll();
   }
 
   showModelOverlay(name === "onroad");
@@ -251,7 +296,7 @@ function renderNav() {
 
 async function loadCurrentPanel() {
   if (panelContent) {
-    panelContent.innerHTML = '<p class="opui-muted" style="padding:48px;text-align:center">加载中…</p>';
+    panelContent.innerHTML = `<p class="opui-muted" style="padding:48px;text-align:center">${tr("Loading...")}</p>`;
   }
   await renderPanel(currentPanel, panelContent, panelTitle);
 }
@@ -288,16 +333,16 @@ async function bootstrap() {
       updateHomeScreen(home);
       setHomeState(home);
     } else if (home?.error) {
-      showBootstrapBanner(`首页数据加载失败: ${home.error}`);
+      showBootstrapBanner(`${tr("Home data failed to load")}: ${home.error}`);
       refreshHomeScreen();
     }
     const st = bootstrapData.state;
     if (st?.ok) handleState(st);
     if (devPc) {
       document.getElementById("camera-wrap")?.classList.add("is-dev-pc");
-      showBootstrapBanner("PC 预览模式 — 部分数据为模拟，与 J3 车机可能不一致", "info");
+      showBootstrapBanner(tr("PC preview — some data is mocked and may differ from the device"), "info");
     } else if (st?.ok === false) {
-      showBootstrapBanner(`行车状态不可用: ${st.error || "未知错误"}`, "warn");
+      showBootstrapBanner(`${tr("Driving state unavailable")}: ${st.error || tr("Unknown error")}`, "warn");
     }
   } else {
     try {
@@ -310,18 +355,18 @@ async function bootstrap() {
         updateHomeScreen(fallback.home);
         setHomeState(fallback.home);
       } else {
-        showBootstrapBanner(`无法连接 WebSocket，HTTP 引导也失败: ${fallback.home?.error || "无响应"}`);
+        showBootstrapBanner(`${tr("WebSocket and HTTP bootstrap failed")}: ${fallback.home?.error || tr("No response")}`);
         refreshHomeScreen();
       }
       if (fallback.state?.ok) handleState(fallback.state);
     } catch (_) {
-      showBootstrapBanner("WebUI 服务未就绪，请用 py -3 webui/dev/run_pc.py 启动本地预览");
+      showBootstrapBanner(tr("WebUI not ready — run py -3 webui/dev/run_pc.py for local preview"));
       refreshHomeScreen();
     }
   }
 
   if (!bootstrapData) {
-    showBootstrapBanner("WebSocket 未连接 — 请确认 webui 服务已启动");
+    showBootstrapBanner(tr("WebSocket disconnected — confirm the webui service is running"));
   }
 
   const panelListPromise = bootstrapData?.panels_schema?.ok
@@ -352,6 +397,8 @@ function handleState(st) {
   updateSidebarRecording(st);
 
   if (!st.ok) return;
+
+  updateStreamDeviceState(st);
 
   if (st.started && (st.personality || st.personality_index != null)) {
     syncDrivingPersonality(st.personality, st.personality_index);
@@ -405,13 +452,14 @@ function setupWebSocket() {
     applyPanelCustom(msg.panel, msg.data);
   });
   opuiWs.on("model_overlay", (msg) => {
-    if (app.dataset.screen === "onroad" && msg?.data) drawModelOverlay(msg.data);
+    if (app.dataset.screen === "onroad" && msg?.data && isOverlayAllowed()) drawModelOverlay(msg.data);
   });
   opuiWs.on("i18n", async (msg) => {
     if (msg?.data?.ok) {
       const { applyI18nPayload } = await import("./i18n.js");
       if (applyI18nPayload(msg.data, true)) {
         renderNav();
+        refreshWebUiUpdateI18n();
         if (app.dataset.screen === "settings") loadCurrentPanel();
       }
     }
@@ -428,11 +476,37 @@ setSubpanelNavigator((panelId) => {
   loadCurrentPanel();
 });
 
+window.addEventListener("opui:camera-ready", (ev) => {
+  if (!ev.detail?.ready) return;
+  if (app.dataset.screen === "onroad") {
+    syncModelOverlayWatch();
+    if (lastUiState?.ok) updateOnroadHud(lastUiState);
+  }
+});
+
+window.addEventListener("opui:overlay-policy", () => {
+  syncModelOverlayWatch();
+});
+
+window.addEventListener("opui:stream-quality-applied", () => {
+  syncModelOverlayWatch();
+});
+
+document.addEventListener("visibilitychange", () => {
+  const onroad = app.dataset.screen === "onroad";
+  if (onroad && (lastStarted || cameraPreview)) {
+    onDocumentVisibilityChange(isRoadStreaming()).catch(() => {});
+  }
+  syncModelOverlayWatch();
+});
+
 window.addEventListener("opui:open-settings", (ev) => {
   openSettings(ev.detail?.panel || "device");
 });
 
 window.addEventListener("opui:language-changed", () => {
+  syncStaticUiStrings();
+  refreshWebUiUpdateI18n();
   renderNav();
   if (lastUiState?.ok) updateSidebarMetrics(lastUiState);
 });
@@ -489,10 +563,14 @@ setupWebSocket();
 
 bootstrap().then(() => {
   initDevPanel();
+  initWebUiUpdate();
+  refreshWebUiUpdateI18n();
   fitOpuiScale();
   prewarmWebrtc();
-  window.addEventListener("resize", () => {
+  const refit = () => {
     fitOpuiScale();
     syncModelOverlayWatch();
-  });
+  };
+  window.addEventListener("resize", refit);
+  window.addEventListener("orientationchange", refit);
 });

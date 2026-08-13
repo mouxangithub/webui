@@ -27,6 +27,7 @@ PANEL_INTERVAL = 0.4
 HOME_INTERVAL = 1.5
 CUSTOM_INTERVAL = 1.0
 MODEL_INTERVAL = 0.1
+MODEL_INTERVAL_LOW = 0.2
 _last_i18n_lang: str | None = None
 I18N_INTERVAL = 0.5
 
@@ -129,7 +130,9 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
   if mtype == "watch_model_overlay":
     w = int(msg.get("w") or 1600)
     h = int(msg.get("h") or 900)
-    meta["model_overlay"] = {"w": w, "h": h}
+    fps = int(msg.get("fps") or 10)
+    fps = max(3, min(20, fps))
+    meta["model_overlay"] = {"w": w, "h": h, "fps": fps}
     meta["last_model_hash"] = ""
     frame = snapshot_model_overlay(w, h)
     meta["last_model_hash"] = _data_hash(frame)
@@ -308,8 +311,15 @@ async def ws_broadcast_loop() -> None:
           ov = meta.get("model_overlay")
           if not ov:
             continue
+          fps = int(ov.get("fps") or 10)
+          interval = max(MODEL_INTERVAL_LOW, 1.0 / max(3, min(20, fps)))
+          if now - meta.get("last_model_push_at", 0) < interval:
+            continue
+          meta["last_model_push_at"] = now
           try:
             frame = snapshot_model_overlay(int(ov["w"]), int(ov["h"]))
+            if frame.get("skipped"):
+              continue
             fh = _data_hash(frame)
             if fh == meta.get("last_model_hash"):
               continue

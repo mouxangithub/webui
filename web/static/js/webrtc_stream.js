@@ -3,8 +3,20 @@
 
 
 import { apiGet, apiPost } from "./api.js";
-
 import { tr } from "./i18n.js";
+import {
+  applyStreamQuality,
+  getQualityPreference,
+  getEffectiveQuality,
+  getOverlayFpsHint,
+  initStreamAdaptive,
+  isOverlayAllowed,
+  onDocumentVisibilityChange,
+  registerWebrtcNotify,
+  setQualityPreference,
+  updateStreamDeviceState,
+} from "./webrtc_stream_adaptive.js";
+import { tryAttachWebCodecsDecode, stopWebCodecsDecode, tuneVideoReceiver } from "./webrtc_webcodecs.js";
 
 
 
@@ -72,6 +84,17 @@ function setCameraStatus(msg) {
 
 
 
+export function isCameraPlaying() {
+  const wrap = document.getElementById("camera-wrap");
+  if (!wrap) return false;
+  if (wrap.classList.contains("is-dev-pc")) return true;
+  return wrap.classList.contains("is-playing");
+}
+
+function notifyCameraReady(ready) {
+  window.dispatchEvent(new CustomEvent("opui:camera-ready", { detail: { ready: !!ready } }));
+}
+
 function bindRoadVideoPlayback(video, wrap) {
 
   if (!video || !wrap || roadVideoBound) return;
@@ -79,45 +102,33 @@ function bindRoadVideoPlayback(video, wrap) {
   roadVideoBound = true;
 
   const onPlaying = () => {
-
     wrap.classList.add("is-playing");
-
     setCameraStatus("");
-
+    notifyCameraReady(true);
   };
-
   const onWaiting = () => {
-
     if (roadStreaming && !driverViewActive) {
-
       wrap.classList.remove("is-playing");
-
       setCameraStatus(tr("Buffering camera…"));
-
+      notifyCameraReady(false);
     }
-
   };
-
   video.addEventListener("playing", onPlaying);
-
   video.addEventListener("waiting", onWaiting);
-
-  video.addEventListener("emptied", () => wrap.classList.remove("is-playing"));
-
+  video.addEventListener("emptied", () => {
+    wrap.classList.remove("is-playing");
+    notifyCameraReady(false);
+  });
 }
 
 
 
 function setDriverLoading(msg) {
-
   const loading = document.getElementById("driver-cam-loading");
-
+  const text = document.getElementById("driver-cam-loading-text");
   if (!loading) return;
-
   loading.hidden = false;
-
-  loading.textContent = msg || tr("camera starting");
-
+  if (text) text.textContent = msg || tr("camera starting");
 }
 
 
@@ -324,6 +335,8 @@ async function createStream(videoEl, initCamera) {
 
   }
 
+  stopWebCodecsDecode();
+
   roadStreaming = false;
 
 
@@ -332,11 +345,19 @@ async function createStream(videoEl, initCamera) {
 
   pc.addTransceiver("video", { direction: "recvonly" });
 
-  pc.ontrack = (ev) => {
+  pc.ontrack = async (ev) => {
 
-    if (ev.streams?.[0] && videoEl) {
+    if (!videoEl) return;
+
+    const receiver = ev.receiver;
+
+    const usedWebCodecs = await tryAttachWebCodecsDecode(receiver, videoEl);
+
+    if (!usedWebCodecs && ev.streams?.[0]) {
 
       videoEl.srcObject = ev.streams[0];
+
+      tuneVideoReceiver(receiver);
 
       videoEl.play().catch(() => {});
 
@@ -416,6 +437,24 @@ async function createStream(videoEl, initCamera) {
 
 
 
+async function tuneStreamForBrowser() {
+  await applyStreamQuality(getQualityPreference(), { silent: true });
+}
+
+export {
+  applyStreamQuality,
+  getQualityPreference,
+  getEffectiveQuality,
+  getOverlayFpsHint,
+  initStreamAdaptive,
+  isOverlayAllowed,
+  onDocumentVisibilityChange,
+  setQualityPreference,
+  updateStreamDeviceState,
+};
+
+
+
 export function isRoadStreaming() {
 
   return roadStreaming;
@@ -480,6 +519,11 @@ export async function startRoadStream(videoEl, wrapEl) {
 
   wrap?.classList.add("streaming");
 
+  video.playsInline = true;
+  video.disablePictureInPicture = true;
+  video.disableRemotePlayback = true;
+  await tuneStreamForBrowser();
+
   try { await video.play(); } catch { /* ignore */ }
 
 }
@@ -502,6 +546,8 @@ export async function stopRoadStream(videoEl, wrapEl) {
 
   }
 
+  stopWebCodecsDecode();
+
   roadStreaming = false;
 
   roadCamera = CAM.ROAD;
@@ -515,6 +561,8 @@ export async function stopRoadStream(videoEl, wrapEl) {
   if (video) video.srcObject = null;
 
   wrap?.classList.remove("streaming", "is-onroad", "is-playing");
+
+  notifyCameraReady(false);
 
   setCameraStatus("");
 
@@ -608,6 +656,8 @@ export async function startDriverView(driverVideoEl, st) {
 
   roadCamera = CAM.DRIVER;
 
+  await tuneStreamForBrowser();
+
   await apiPost("/api/opui/action/driver_view_enable");
 
 }
@@ -650,6 +700,8 @@ export async function stopDriverView() {
 
   }
 
+  stopWebCodecsDecode();
+
   roadStreaming = false;
 
   roadCamera = CAM.ROAD;
@@ -665,13 +717,9 @@ export async function stopDriverView() {
 
 
 export async function openDriverCamera(st) {
-
   const video = document.getElementById("driver-video");
-
   const loading = document.getElementById("driver-cam-loading");
-
   if (!video) return;
-
   setDriverLoading(tr("camera starting"));
 
   const onPlaying = () => {
@@ -716,3 +764,5 @@ export async function closeDriverCamera() {
 
 }
 
+registerWebrtcNotify((payload) => notifyWebrtc(payload));
+initStreamAdaptive();

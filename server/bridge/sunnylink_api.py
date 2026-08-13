@@ -6,6 +6,22 @@ import os
 from typing import Any
 
 
+def _consent_version() -> str:
+  try:
+    from openpilot.common.version import sunnylink_consent_version
+    return sunnylink_consent_version
+  except Exception:
+    return "1.0"
+
+
+def _consent_declined() -> str:
+  try:
+    from openpilot.common.version import sunnylink_consent_declined
+    return sunnylink_consent_declined
+  except Exception:
+    return "-1"
+
+
 def sunnylink_status() -> dict[str, Any]:
   if os.environ.get("WEBUI_DEV_PC") == "1":
     return {
@@ -19,6 +35,8 @@ def sunnylink_status() -> dict[str, Any]:
       "description": "sunnylink connected — uploads enabled",
       "backup": {"status": "idle", "progress": 0},
       "dev_pc": True,
+      "required_consent_version": "1.0",
+      "consent_declined_value": "-1",
     }
   try:
     import openpilot.cereal.messaging as messaging
@@ -66,6 +84,8 @@ def sunnylink_status() -> dict[str, Any]:
       "description": desc,
       "backup": backup,
       "consent_version": p.get("CompletedSunnylinkConsentVersion") or "",
+      "required_consent_version": _consent_version(),
+      "consent_declined_value": _consent_declined(),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}

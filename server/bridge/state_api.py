@@ -18,6 +18,14 @@ NETWORK_TYPES = {
 }
 
 
+def _livestream_encoder_lagging() -> bool:
+  try:
+    from openpilot.common.params import Params
+    return Params().get_bool("LivestreamEncoderLagging")
+  except Exception:
+    return False
+
+
 def _cpu_temp_c(ds) -> int | None:
   if not hasattr(ds, "cpuTempC"):
     return None
@@ -264,6 +272,18 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   pcm_cruise = False
   torque_control_allowed = True
   lateral_jerk_torque = False
+  mads_limited = False
+  enable_bsm = False
+  sla_available = False
+  is_sp_release = False
+  disable_updates = False
+  is_release_branch = False
+  is_development_branch = False
+  custom_model_active = False
+  live_lateral_delay = None
+  steer_actuator_delay = None
+  tesla_has_vehicle_bus = False
+  subaru_sng_available = True
   cp_loaded = False
   standstill = bool(getattr(cs, "standstill", False))
   standstill_timer_enabled = ui_params["standstill_timer"]
@@ -281,6 +301,55 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       except Exception:
         torque_control_allowed = True
     lateral_jerk_torque = bool(ui_state.params.get_bool("LateralJerkTorqueController"))
+    disable_updates = bool(ui_state.params.get_bool("DisableUpdates"))
+    is_release_branch = bool(ui_state.params.get_bool("IsReleaseSpBranch"))
+    is_development_branch = bool(ui_state.params.get_bool("IsTestedBranch") or ui_state.params.get_bool("IsDevelopmentBranch"))
+    is_sp_release = bool(getattr(ui_state, "is_sp_release", False)) or is_release_branch
+    custom_model_active = ui_state.params.get("ModelManager_ActiveBundle") is not None
+    if ui_state.CP is not None:
+      enable_bsm = bool(getattr(ui_state.CP, "enableBsm", False))
+      steer_actuator_delay = float(getattr(ui_state.CP, "steerActuatorDelay", 0) or 0)
+    brand = ""
+    if ui_state.is_offroad():
+      bundle = ui_state.params.get("CarPlatformBundle")
+      if isinstance(bundle, dict):
+        brand = bundle.get("brand", "") or ""
+    if not brand and ui_state.CP is not None:
+      brand = ui_state.CP.brand or ""
+    if brand == "rivian":
+      mads_limited = True
+    elif brand == "tesla":
+      try:
+        from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP
+        if ui_state.CP_SP is None or not (ui_state.CP_SP.flags & TeslaFlagsSP.HAS_VEHICLE_BUS):
+          mads_limited = True
+        else:
+          tesla_has_vehicle_bus = True
+          screen_button = int(ui_state.params.get("TeslaMadsScreenButton", return_default=True))
+          mads_limited = screen_button == MadsScreenButtonType.OFF
+      except Exception:
+        pass
+    elif brand == "subaru":
+      try:
+        from opendbc.car.subaru.values import CAR, SubaruFlags
+        platform = ""
+        bundle = ui_state.params.get("CarPlatformBundle")
+        if isinstance(bundle, dict):
+          platform = bundle.get("platform", "") or ""
+        if not platform and ui_state.CP is not None:
+          platform = ui_state.CP.carFingerprint or ""
+        if platform and platform in CAR:
+          flags = CAR[platform].flags
+          subaru_sng_available = bool(flags & (SubaruFlags.STOP_AND_GO | SubaruFlags.HYBRID))
+      except Exception:
+        pass
+    sla_disallow_in_release = brand == "tesla" and is_sp_release
+    sla_always_disallow = brand == "rivian"
+    sla_available = (has_longitudinal or has_icbm) and not sla_disallow_in_release and not sla_always_disallow
+    if ui_state.CP is None or ui_state.CP_SP is None:
+      sla_available = False
+    if sm.valid.get("liveDelay"):
+      live_lateral_delay = float(getattr(sm["liveDelay"], "lateralDelay", 0) or 0)
   except Exception:
     pass
 
@@ -416,6 +485,18 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "cp_loaded": cp_loaded,
     "torque_control_allowed": torque_control_allowed,
     "lateral_jerk_torque": lateral_jerk_torque,
+    "mads_limited": mads_limited,
+    "enable_bsm": enable_bsm,
+    "sla_available": sla_available,
+    "is_sp_release": is_sp_release,
+    "disable_updates": disable_updates,
+    "is_release_branch": is_release_branch,
+    "is_development_branch": is_development_branch,
+    "custom_model_active": custom_model_active,
+    "live_lateral_delay": live_lateral_delay,
+    "steer_actuator_delay": steer_actuator_delay,
+    "tesla_has_vehicle_bus": tesla_has_vehicle_bus,
+    "subaru_sng_available": subaru_sng_available,
     "standstill": standstill,
     "standstill_timer_enabled": standstill_timer_enabled,
     "alert": {
@@ -432,6 +513,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       "thermal": thermal,
       "cpu_temp": _cpu_temp_c(ds),
       "memory_usage_percent": int(ds.memoryUsagePercent) if hasattr(ds, "memoryUsagePercent") else None,
+      "livestream_encoder_lagging": _livestream_encoder_lagging(),
       "free_space_percent": int(ds.freeSpacePercent) if hasattr(ds, "freeSpacePercent") else None,
       "athena_status": _athena_connection_status(ds),
       "panda_unknown": panda_unknown,

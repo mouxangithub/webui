@@ -36,7 +36,7 @@ function drawThickArc(ctx, cx, cy, radius, thickness, a0Deg, a1Deg, color) {
   ctx.stroke();
 }
 
-export function updateTorqueBar(st) {
+export function updateTorqueBar(st, devUi = 0) {
   const canvas = document.getElementById("torque-bar-canvas");
   if (!canvas) return;
 
@@ -44,8 +44,12 @@ export function updateTorqueBar(st) {
   if (!show) {
     canvas.hidden = true;
     filtered = 0;
+    canvas.classList.remove("is-dev-bottom");
     return;
   }
+
+  const devBottom = devUi === 1 || devUi === 3;
+  canvas.classList.toggle("is-dev-bottom", devBottom);
 
   const wrap = document.getElementById("camera-wrap");
   const w = wrap?.clientWidth || canvas.clientWidth || 1860;

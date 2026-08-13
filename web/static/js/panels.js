@@ -1,5 +1,10 @@
 import { apiGet, apiPost, apiPut, toast } from "./api.js";
 import { tr } from "./i18n.js";
+import { getQualityPreference, setQualityPreference, QUALITY_LEVELS } from "./webrtc_stream_adaptive.js";
+import {
+  getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable,
+} from "./webrtc_webcodecs.js";
+import { renderWebUiUpdateRow, fetchWebUiUpdate, syncWebUiUpdateRow } from "./webui_update.js";
 import { opuiWs } from "./ws.js";
 import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption,
@@ -42,6 +47,32 @@ function formatLastChecked(ts) {
   return t("Last checked {}").replace("{}", formatTimeAgo(ts));
 }
 
+function formatSoftwareDownloadStatus(sw) {
+  if (!sw) return "--";
+  if (sw.download_status) {
+    if (sw.download_status === "busy") {
+      const state = sw.download_state || sw.updater_state || "";
+      const known = {
+        "checking...": "checking...",
+        "downloading...": "downloading...",
+        "finalizing update...": "finalizing update...",
+      };
+      return t(known[state] || state);
+    }
+    if (sw.download_status === "failed") return t("failed to check for update");
+    if (sw.download_status === "fetch_available") return t("update available");
+    if (!sw.last_update_epoch) return t("up to date, last checked never");
+    return t("up to date, last checked {}").replace("{}", formatTimeAgo(sw.last_update_epoch));
+  }
+  return t(sw.download_value || sw.updater_state || "--");
+}
+
+const MADS_STEERING_MODE_DESCS = [
+  "Remain Active: ALC will remain active when the brake pedal is pressed.",
+  "Pause: ALC will pause when the brake pedal is pressed.",
+  "Disengage: ALC will disengage when the brake pedal is pressed.",
+];
+
 function platformDisplayText(value) {
   if (value == null || value === "") return "";
   if (typeof value === "string") return value;
@@ -78,6 +109,7 @@ function widgetVisible(w, panelData) {
     if (String(adv) !== String(w.advanced_if.eq)) return false;
   }
   if (!w.visible_if) return true;
+  if (w.visible_if.state) return !!globalState[w.visible_if.state];
   const dep = panelData.values?.[w.visible_if.param];
   if (w.visible_if.ne != null) return String(dep) !== String(w.visible_if.ne);
   return String(dep) === String(w.visible_if.eq);
@@ -133,7 +165,11 @@ function formatOptionLabel(w, rawVal, panelData = panelDataRef) {
   if (fmt === "screensaver_timeout") return `${Math.floor(val / 60)} m`;
   if (fmt === "lagd_delay") return `${(val / 100).toFixed(2)}s`;
   if (fmt === "camera_offset") return `${(val / 100).toFixed(2)} m`;
-  if (fmt === "lane_turn_speed") return `${Math.round(val / 100)}`;
+  if (fmt === "lane_turn_speed") {
+    const mph = val / 100;
+    const shown = globalState.is_metric ? Math.round(mph * 1.60934) : Math.round(mph);
+    return `${shown} ${globalState.is_metric ? t("km/h") : t("mph")}`;
+  }
   if (fmt === "torque_lat_accel") return `${(val / 100).toFixed(2)} m/s²`;
   if (fmt === "torque_friction") return `${(val / 100).toFixed(2)}`;
   if (fmt === "blinker_min_speed") {
@@ -164,16 +200,63 @@ let homeState = { paired: false };
 let onNavigateSubpanel = null;
 let deviceExtrasCache = null;
 
-async function putParam(key, value, needsCycle = false) {
+async function putParam(key, value, needsCycle = false, skipEffects = false) {
+  let res;
   try {
     if (opuiWs.connected) {
-      const res = await opuiWs.putParam(key, value, needsCycle);
-      return res || { ok: false, error: "ws failed" };
+      res = await opuiWs.putParam(key, value, needsCycle);
+      res = res || { ok: false, error: "ws failed" };
+    } else {
+      res = await apiPut(`/api/opui/params/${encodeURIComponent(key)}`, {
+        value, needs_cycle: !!needsCycle,
+      });
     }
-  } catch (_) { /* fall through */ }
-  return apiPut(`/api/opui/params/${encodeURIComponent(key)}`, {
-    value, needs_cycle: !!needsCycle,
-  });
+  } catch (err) {
+    res = { ok: false, error: String(err) };
+  }
+  if (res?.ok && !skipEffects) await applyParamSideEffects(key, value);
+  return res;
+}
+
+async function removeParam(key) {
+  try {
+    const r = await fetch(`/api/opui/params/${encodeURIComponent(key)}`, { method: "DELETE" });
+    return await r.json();
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function applyParamSideEffects(key, value) {
+  const off = (k, v, cycle = false) => putParam(k, v, cycle, true);
+  if (key === "JoystickDebugMode" && value === "1") {
+    await off("LongitudinalManeuverMode", "0");
+    await off("LateralManeuverMode", "0");
+  } else if (key === "LongitudinalManeuverMode" && value === "1") {
+    await off("JoystickDebugMode", "0");
+    await off("LateralManeuverMode", "0");
+  } else if (key === "LateralManeuverMode" && value === "1") {
+    await off("JoystickDebugMode", "0");
+    await off("LongitudinalManeuverMode", "0");
+    await off("ExperimentalMode", "0");
+  } else if (key === "ToyotaEnforceStockLongitudinal" && value === "1") {
+    await off("AlphaLongitudinalEnabled", "0");
+    await off("ToyotaStopAndGoHack", "0");
+    await off("OnroadCycleRequested", "1", true);
+  } else if (key === "ToyotaEnforceStockLongitudinal" && value === "0") {
+    await off("OnroadCycleRequested", "1", true);
+  } else if (key === "ToyotaStopAndGoHack") {
+    await off("OnroadCycleRequested", "1", true);
+  } else if (key === "LiveTorqueParamsToggle" && value === "0") {
+    await removeParam("LiveTorqueParamsRelaxedToggle");
+  } else if (key === "ShowAdvancedControls") {
+    updateDeveloperCapabilities(globalState);
+  } else if (key === "EnforceTorqueControl" && value === "1") {
+    await off("NeuralNetworkLateralControl", "0");
+  } else if (key === "NeuralNetworkLateralControl" && value === "1") {
+    await off("EnforceTorqueControl", "0");
+  }
+  requestPanelRefresh();
 }
 
 const paramHandlers = {
@@ -188,6 +271,16 @@ export function setGlobalState(st) {
   updateCruiseCapabilities(st);
   updateVisualsCapabilities(st);
   updateSteeringCapabilities(st);
+  updateMadsSubpanel(st);
+  updateLaneChangeSubpanel(st);
+  updateSoftwareExtras(st);
+  updateSlaCapabilities(st);
+  updateModelsCapabilities(st);
+  updateDeveloperCapabilities(st);
+  updateModelsDynamicDesc(st);
+  updateTorqueSubpanel(st);
+  updateVehicleBrandCapabilities(st);
+  syncMadsLimitedParams(st);
   updateSubpanelStates();
 }
 
@@ -213,10 +306,6 @@ function updateToggleCapabilities(st) {
     const disable = !hasLong;
     expInput.disabled = disable || (globalState.engaged && expRow?.dataset.needsCycle === "1");
     expRow?.querySelector(".opui-sp-toggle")?.classList.toggle("disabled", disable);
-    const expIcon = expRow?.querySelector(".opui-sp-row-icon");
-    if (expIcon) {
-      expIcon.src = `/api/opui/assets/selfdrive/assets/icons/${expInput?.checked ? "experimental.png" : "experimental_white.png"}`;
-    }
     if (disable && expInput.checked) {
       expInput.checked = false;
       expRow?.querySelector(".opui-sp-toggle")?.classList.remove("on");
@@ -264,6 +353,86 @@ function setPanelRowDesc(row, text) {
   descEl.innerHTML = escapeHtml(t(text)).replace(/\n/g, "<br>");
 }
 
+function setPanelRowDescHtml(row, html) {
+  if (!row || !html) return;
+  let descEl = row.querySelector(".opui-sp-row-desc:not(.opui-sp-row-desc--hint):not(.opui-sp-row-desc--experimental)");
+  if (!descEl) {
+    descEl = document.createElement("div");
+    descEl.className = "opui-sp-row-desc opui-sp-row-desc--expandable";
+    row.querySelector(".opui-sp-row-text")?.appendChild(descEl);
+    row.querySelector(".opui-sp-row-text")?.classList.add("opui-sp-row-text--expandable");
+  }
+  descEl.innerHTML = html;
+  descEl.hidden = false;
+  row.classList.add("opui-sp-row--desc-open");
+}
+
+function buildMadsSteeringDescHtml(selectedIdx, limited) {
+  if (limited) {
+    return `<b>${escapeHtml(t("This platform only supports Disengage mode due to vehicle limitations."))}</b>`;
+  }
+  let html = `${escapeHtml(t("Choose how Automatic Lane Centering (ALC) behaves after the brake pedal is manually pressed in sunnypilot."))}<br><br>`;
+  MADS_STEERING_MODE_DESCS.forEach((key, i) => {
+    const text = escapeHtml(t(key));
+    html += i === selectedIdx ? `<b>${text}</b><br>` : `${text}<br>`;
+  });
+  return html;
+}
+
+function updateMadsSteeringModeDesc(selectedIdx, limited) {
+  const row = document.querySelector('[data-param="MadsSteeringMode"]');
+  if (!row) return;
+  setPanelRowDescHtml(row, buildMadsSteeringDescHtml(selectedIdx, limited));
+  row.querySelectorAll(".opui-multi-btn-group button").forEach((btn, i) => {
+    if (limited) btn.disabled = i !== 2;
+  });
+}
+
+function updateMadsSubpanel(st) {
+  if (!st) return;
+  const limited = !!st.mads_limited;
+  const mainDesc = limited
+    ? `${t("This feature defaults to OFF, and does not allow selection due to vehicle limitations.")}\n${t("Note: For vehicles without LFA/LKAS button, disabling this will prevent lateral control engagement.")}`
+    : t("Note: For vehicles without LFA/LKAS button, disabling this will prevent lateral control engagement.");
+  setToggleRowState("MadsMainCruiseAllowed", { disabled: limited, desc: mainDesc });
+
+  const uemBase = `${t("Engage lateral and longitudinal control with cruise control engagement.")}\n${t("Note: Once lateral control is engaged via UEM, it will remain engaged until it is manually disabled via the MADS button or car shut off.")}`;
+  const uemDesc = limited
+    ? `${t("This feature defaults to ON, and does not allow selection due to vehicle limitations.")}\n${uemBase}`
+    : uemBase;
+  setToggleRowState("MadsUnifiedEngagementMode", { disabled: limited, desc: uemDesc });
+
+  const modeIdx = limited ? 2 : parseInt(panelDataRef?.values?.MadsSteeringMode ?? "0", 10);
+  updateMadsSteeringModeDesc(modeIdx, limited);
+}
+
+function updateLaneChangeSubpanel(st) {
+  if (!st) return;
+  const enableBsm = !!st.enable_bsm;
+  const timer = parseInt(panelDataRef?.values?.AutoLaneChangeTimer ?? "0", 10);
+  const bsmDisabled = !enableBsm || timer <= 0;
+  const row = document.querySelector('[data-param="AutoLaneChangeBsmDelay"]');
+  if (!row) return;
+  const input = row.querySelector("input[type=checkbox]");
+  const label = row.querySelector(".opui-sp-toggle");
+  if (input) input.disabled = bsmDisabled;
+  label?.classList.toggle("disabled", bsmDisabled);
+}
+
+function updateSoftwareExtras(st) {
+  const row = document.querySelector('[data-param="DisableUpdates"]');
+  if (!row) return;
+  const offroad = st?.is_offroad !== false;
+  const html = offroad
+    ? `${escapeHtml(t("When enabled, automatic software updates will be off."))}<br><b>${escapeHtml(t("This requires a reboot to take effect."))}</b>`
+    : escapeHtml(t('Please enable "Always Offroad" mode or turn off the vehicle to adjust these toggles.'));
+  setPanelRowDescHtml(row, html);
+  const input = row.querySelector("input[type=checkbox]");
+  const label = row.querySelector(".opui-sp-toggle");
+  if (input) input.disabled = !offroad;
+  label?.classList.toggle("disabled", !offroad);
+}
+
 function setToggleRowState(param, { disabled, desc }) {
   const row = document.querySelector(`[data-param="${CSS.escape(param)}"]`);
   if (!row) return;
@@ -274,6 +443,210 @@ function setToggleRowState(param, { disabled, desc }) {
     label?.classList.toggle("disabled", !!disabled);
   }
   if (desc) setPanelRowDesc(row, desc);
+}
+
+function updateSlaCapabilities(st) {
+  if (!st) return;
+  const row = document.querySelector('[data-param="SpeedLimitMode"]');
+  if (!row) return;
+  const slaOk = !!st.sla_available;
+  row.querySelectorAll(".opui-multi-btn-group button").forEach((btn, i) => {
+    if (i === 3) btn.disabled = !slaOk;
+  });
+}
+
+function updateModelsCapabilities(st) {
+  const btn = document.querySelector("[data-models-select] button");
+  if (btn) btn.disabled = !st?.is_offroad;
+  const camRow = document.querySelector('[data-param="CameraOffset"]');
+  if (camRow) camRow.hidden = !st?.custom_model_active;
+}
+
+function updateModelsDynamicDesc(st) {
+  if (!st) return;
+  const lagdRow = document.querySelector('[data-param="LagdToggle"]');
+  if (!lagdRow) return;
+  const lagdOn = paramIsOn(panelDataRef?.values?.LagdToggle);
+  let desc = t("Enable this for the car to learn and adapt its steering response time. Disable to use a fixed steering response time. Keeping this on provides the stock openpilot experience.");
+  if (lagdOn && st.live_lateral_delay != null) {
+    desc += `\n${t("Live Steer Delay:")} ${Number(st.live_lateral_delay).toFixed(3)} s`;
+  } else if (st.steer_actuator_delay != null) {
+    const sw = parseFloat(panelDataRef?.values?.LagdToggleDelay ?? "20") / 100;
+    const cp = Number(st.steer_actuator_delay);
+    desc += `\n${t("Actuator Delay:")} ${cp.toFixed(2)} s + ${t("Software Delay:")} ${sw.toFixed(2)} s = ${t("Total Delay:")} ${(cp + sw).toFixed(2)} s`;
+  }
+  setPanelRowDesc(lagdRow, desc);
+  const delayRow = document.querySelector('[data-param="LagdToggleDelay"]');
+  if (delayRow) delayRow.hidden = lagdOn;
+}
+
+function updateDeveloperCapabilities(st) {
+  if (!st) return;
+  const spRelease = !!st.is_release_branch;
+  const devBranch = !!st.is_development_branch;
+  const advanced = paramIsOn(panelDataRef?.values?.ShowAdvancedControls);
+
+  const adbRow = document.querySelector('[data-param="AdbEnabled"]');
+  if (adbRow) {
+    const disabled = !globalState.is_offroad;
+    const input = adbRow.querySelector("input");
+    const label = adbRow.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+  }
+
+  const joyRow = document.querySelector('[data-param="JoystickDebugMode"]');
+  if (joyRow) {
+    const disabled = !globalState.is_offroad;
+    const input = joyRow.querySelector("input");
+    const label = joyRow.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+  }
+
+  const alphaRow = document.querySelector('[data-param="AlphaLongitudinalEnabled"]');
+  if (alphaRow) {
+    const hideAlpha = !st.cp_loaded || st.alpha_longitudinal_available === false;
+    alphaRow.hidden = hideAlpha;
+    const input = alphaRow.querySelector("input");
+    const label = alphaRow.querySelector(".opui-sp-toggle");
+    const disabled = !!globalState.engaged;
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+  }
+
+  const errRow = document.querySelector('[data-action="developer_error_log"]');
+  if (errRow) errRow.hidden = spRelease;
+
+  const ghRow = document.querySelector('[data-param="EnableGithubRunner"]');
+  if (ghRow) ghRow.hidden = !advanced || spRelease;
+
+  const cpRow = document.querySelector('[data-param="EnableCopyparty"]');
+  if (cpRow) cpRow.hidden = !advanced;
+
+  const qbRow = document.querySelector('[data-param="QuickBootToggle"]');
+  if (qbRow) {
+    qbRow.hidden = !advanced || spRelease || devBranch;
+    const input = qbRow.querySelector("input");
+    const label = qbRow.querySelector(".opui-sp-toggle");
+    const disabled = !st.disable_updates;
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+    const desc = disabled
+      ? t("Quickboot mode requires updates to be disabled. Enable 'Disable Updates' in the Software panel first.")
+      : t("When toggled on, this creates a prebuilt file to allow accelerated boot times. When toggled off, it removes the prebuilt file so compilation of locally edited cpp files can be made.");
+    setPanelRowDesc(qbRow, desc);
+  }
+
+  const longMan = document.querySelector('[data-param="LongitudinalManeuverMode"]');
+  if (longMan) {
+    const disabled = !globalState.is_offroad || !st.has_longitudinal_control;
+    const input = longMan.querySelector("input");
+    const label = longMan.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled || !!globalState.engaged;
+    label?.classList.toggle("disabled", disabled || !!globalState.engaged);
+  }
+
+  const latMan = document.querySelector('[data-param="LateralManeuverMode"]');
+  if (latMan) {
+    const disabled = !globalState.is_offroad;
+    const input = latMan.querySelector("input");
+    const label = latMan.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled || !!globalState.engaged;
+    label?.classList.toggle("disabled", disabled || !!globalState.engaged);
+  }
+}
+
+function updateTorqueSubpanel(st) {
+  if (!st) return;
+  const selfTune = paramIsOn(panelDataRef?.values?.LiveTorqueParamsToggle);
+  const relaxedRow = document.querySelector('[data-param="LiveTorqueParamsRelaxedToggle"]');
+  if (relaxedRow) relaxedRow.hidden = !selfTune;
+  const rtTune = paramIsOn(panelDataRef?.values?.TorqueParamsOverrideEnabled);
+  const latRow = document.querySelector('[data-param="TorqueParamsOverrideLatAccelFactor"]');
+  const fricRow = document.querySelector('[data-param="TorqueParamsOverrideFriction"]');
+  const suffix = rtTune ? t("(Real-Time & Offline)") : t("(Offline Only)");
+  [latRow, fricRow].forEach((row) => {
+    if (!row) return;
+    const title = row.querySelector(".opui-sp-row-title");
+    if (!title) return;
+    const base = row.dataset.baseTitle || title.textContent.replace(/\s*\([^)]*\)\s*$/, "");
+    row.dataset.baseTitle = base;
+    title.textContent = `${base} ${suffix}`;
+  });
+  const jerkRow = document.querySelector('[data-param="LateralJerkTorqueController"]');
+  if (jerkRow) {
+    const nnlc = paramIsOn(panelDataRef?.values?.NeuralNetworkLateralControl);
+    const input = jerkRow.querySelector("input");
+    const label = jerkRow.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = nnlc || !globalState.is_offroad;
+    label?.classList.toggle("disabled", nnlc || !globalState.is_offroad);
+  }
+}
+
+function updateVehicleBrandCapabilities(st) {
+  if (!st) return;
+  const teslaBtn = document.querySelector('[data-param="TeslaMadsScreenButton"]');
+  if (teslaBtn) teslaBtn.hidden = !st.tesla_has_vehicle_bus;
+  const subaruSng = document.querySelector('[data-param="SubaruStopAndGo"]');
+  const subaruPb = document.querySelector('[data-param="SubaruStopAndGoManualParkingBrake"]');
+  [subaruSng, subaruPb].forEach((row) => {
+    if (!row) return;
+    const disabled = !st.subaru_sng_available || !globalState.is_offroad;
+    const input = row.querySelector("input");
+    const label = row.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+  });
+  const toyotaSng = document.querySelector('[data-param="ToyotaStopAndGoHack"]');
+  if (toyotaSng) {
+    const hasLong = st.has_longitudinal_control !== false;
+    const enforce = paramIsOn(panelDataRef?.values?.ToyotaEnforceStockLongitudinal);
+    const disabled = !st.cp_loaded || !hasLong || enforce || !!globalState.engaged;
+    const input = toyotaSng.querySelector("input");
+    const label = toyotaSng.querySelector(".opui-sp-toggle");
+    if (input) input.disabled = disabled;
+    label?.classList.toggle("disabled", disabled);
+    let desc = t("sunnypilot will allow some Toyota/Lexus cars to auto resume during stop and go traffic.");
+    if (!st.cp_loaded) desc = `${t("Start the vehicle to check vehicle compatibility.")}\n\n${desc}`;
+    else if (!hasLong || enforce) desc = `${t("sunnypilot Longitudinal Control must be available and enabled for your vehicle to use this feature.")}\n\n${desc}`;
+    setPanelRowDesc(toyotaSng, desc);
+  }
+  const hyundaiTune = document.querySelector('[data-param="HyundaiLongitudinalTuning"]');
+  if (hyundaiTune) {
+    hyundaiTune.hidden = !st.alpha_longitudinal_available;
+    const idx = parseInt(panelDataRef?.values?.HyundaiLongitudinalTuning ?? "0", 10);
+    const descs = [
+      t("Your vehicle will use the Default longitudinal tuning."),
+      t("Your vehicle will use the Dynamic longitudinal tuning."),
+      t("Your vehicle will use the Predictive longitudinal tuning."),
+    ];
+    let desc = descs[idx] || descs[0];
+    const longEnabled = st.has_longitudinal_control !== false;
+    let disabled = !globalState.is_offroad || !longEnabled;
+    if (!globalState.is_offroad) {
+      desc = t("This feature is unavailable while the car is onroad.");
+      disabled = true;
+    } else if (!longEnabled) {
+      desc = t("This feature is unavailable because sunnypilot Longitudinal Control (Alpha) is not enabled.");
+      disabled = true;
+    }
+    setPanelRowDesc(hyundaiTune, desc);
+    hyundaiTune.querySelectorAll(".opui-multi-btn-group button").forEach((b) => { b.disabled = disabled; });
+  }
+}
+
+let madsLimitedSynced = false;
+async function syncMadsLimitedParams(st) {
+  if (!st?.mads_limited) {
+    madsLimitedSynced = false;
+    return;
+  }
+  if (madsLimitedSynced) return;
+  madsLimitedSynced = true;
+  await removeParam("MadsMainCruiseAllowed");
+  await putParam("MadsUnifiedEngagementMode", "1", false, true);
+  await putParam("MadsSteeringMode", "2", false, true);
 }
 
 function updateCruiseCapabilities(st) {
@@ -333,6 +706,9 @@ function updateVisualsCapabilities(st) {
       : "This feature requires sunnypilot longitudinal control to be available.";
     setPanelRowDesc(chevronRow, desc);
     chevronRow.querySelectorAll("button").forEach((b) => { b.disabled = !hasLong; });
+    if (!hasLong && paramIsOn(panelDataRef?.values?.ChevronInfo)) {
+      putParam("ChevronInfo", "0", false, true);
+    }
   }
 }
 
@@ -352,6 +728,10 @@ function updateSteeringCapabilities(st) {
   };
 
   setToggleDisabled("Mads", !offroad);
+  const madsRow = document.querySelector('[data-param="Mads"]');
+  if (madsRow && !st.cp_loaded) {
+    setPanelRowDesc(madsRow, t("Start the vehicle to check vehicle compatibility."));
+  }
   setToggleDisabled("EnforceTorqueControl", !offroad || !torqueAllowed);
   setToggleDisabled("NeuralNetworkLateralControl", !offroad || !torqueAllowed || jerk);
 
@@ -382,7 +762,7 @@ function applySoftwareCustom(sw) {
 
   const dlVal = document.getElementById("software-download-value");
   const dlBtn = document.getElementById("software-download-btn");
-  if (dlVal) dlVal.textContent = t(sw.download_value || sw.updater_state || "--");
+  if (dlVal) dlVal.textContent = formatSoftwareDownloadStatus(sw);
   if (dlBtn) {
     dlBtn.textContent = t(sw.download_label || "CHECK");
     dlBtn.disabled = sw.download_enabled === false;
@@ -405,7 +785,7 @@ function applySoftwareCustom(sw) {
       curNotes.textContent = html;
       curNotes.classList.remove("opui-html-block");
     }
-    curNotes.hidden = !html;
+    curNotes.hidden = !html || curNotes.dataset.expanded !== "1";
   }
 
   if (installNotes) {
@@ -421,15 +801,21 @@ function applySoftwareCustom(sw) {
   }
 }
 
+function firehoseStatusText(active) {
+  return active ? t("ACTIVE") : t("INACTIVE: connect to an unmetered network");
+}
+
 export function applyPanelCustom(panelId, data) {
   if (!data?.ok) return;
   if (panelId === "software") {
     applySoftwareCustom(data);
+    updateSoftwareExtras(globalState);
   }
   if (panelId === "firehose") {
     const el = document.getElementById("firehose-status-text");
     if (el) {
-      el.textContent = data.active ? "Active" : "Inactive";
+      el.textContent = firehoseStatusText(data.active);
+      el.style.color = data.active ? "#2ecc71" : "#e74c3c";
     }
   }
   if (panelId === "osm") {
@@ -510,7 +896,11 @@ export function applyPanelSync(data) {
     updateCruiseCapabilities(globalState);
     updateVisualsCapabilities(globalState);
     updateSteeringCapabilities(globalState);
+    updateMadsSubpanel(globalState);
+    updateLaneChangeSubpanel(globalState);
+    updateSoftwareExtras(globalState);
     updateDisplayDependencies(data);
+    updateDeveloperCapabilities(globalState);
     if (data.custom === "osm") {
       updateOsmLabels(document.getElementById("osm-custom-root"), data);
       const ver = document.getElementById("osm-mapd-version");
@@ -534,7 +924,11 @@ export function applyPanelSync(data) {
   updateCruiseCapabilities(globalState);
   updateVisualsCapabilities(globalState);
   updateSteeringCapabilities(globalState);
+  updateMadsSubpanel(globalState);
+  updateLaneChangeSubpanel(globalState);
+  updateSoftwareExtras(globalState);
   updateDisplayDependencies(data);
+  updateDeveloperCapabilities(globalState);
   if (data.custom === "osm") {
     updateOsmLabels(document.getElementById("osm-custom-root"), data);
     const ver = document.getElementById("osm-mapd-version");
@@ -663,11 +1057,11 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
   currentPanelRef = panelId;
   notifyPanelWatch(panelId);
   if (container && !container.querySelector(".opui-panel-loading")) {
-    container.innerHTML = '<p class="opui-muted opui-panel-loading" style="padding:48px;text-align:center">加载中…</p>';
+    container.innerHTML = '<p class="opui-muted opui-panel-loading" style="padding:48px;text-align:center">' + escapeHtml(t("Loading...")) + '</p>';
   }
   const data = await apiGet(`/api/opui/panels/${encodeURIComponent(panelId)}`);
   if (!data.ok) {
-    container.innerHTML = `<p class="opui-muted" style="padding:48px">加载失败: ${data.error}</p>`;
+    container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(t("Load failed"))}: ${escapeHtml(data.error)}</p>`;
     return;
   }
   if (titleEl) {
@@ -727,6 +1121,9 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
 
   renderGenericPanel(container, data);
   updateDisplayDependencies(data);
+  if (panelId === "steering__mads") updateMadsSubpanel(globalState);
+  if (panelId === "steering__lane_change") updateLaneChangeSubpanel(globalState);
+  if (data.custom === "software") updateSoftwareExtras(globalState);
   lastPanelVisibilityHash = panelVisibilityHash(data);
 }
 
@@ -779,6 +1176,7 @@ function renderAlwaysOffroadRow(active) {
 function prunePanelWidgets(widgets, panelData) {
   const kept = [];
   for (const w of widgets || []) {
+    if (w.custom === "webui_update") continue;
     if (w.type === "separator") {
       if (!kept.length) continue;
       if (kept[kept.length - 1].type === "separator") continue;
@@ -822,7 +1220,6 @@ function prependSubpanelNav(container, data) {
 
 function renderGenericPanel(container, data) {
   container.innerHTML = "";
-  prependSubpanelNav(container, data);
   appendPanelWidgets(container, data);
 }
 
@@ -877,12 +1274,16 @@ function renderWidget(w, panelData) {
   if (kind === "custom") {
     if (w.custom === "ssh_keys") return renderSshKeysBlock();
     if (w.custom === "device_language") return renderLanguageRow();
+    if (w.custom === "stream_preview_quality") return renderStreamPreviewQualityRow(w);
+    if (w.custom === "stream_webcodecs") return renderStreamWebcodecsRow();
+    if (w.custom === "stream_diagnostics") return renderStreamDiagnosticsRow();
     if (w.custom === "driver_camera") return renderDriverCameraRow();
     if (w.custom === "always_offroad") {
       const active = !!deviceExtrasCache?.offroad_mode;
       return renderAlwaysOffroadRow(active);
     }
     if (w.custom === "device_calibration") return null;
+    if (w.custom === "webui_update") return null;
     return null;
   }
 
@@ -923,8 +1324,36 @@ function renderReadonlyRow(w) {
 
 function renderBoolRow(w) {
   const stacked = widgetUsesStacked(w);
+  const { icon: _icon, icon_active: _iconActive, ...toggleDef } = w;
+  if (w.param === "DisableUpdates") {
+    toggleDef.onBeforeChange = async (checked) => {
+      const ok = await showConfirm({
+        message: t("System reboot required for changes to take effect. Reboot now?"),
+        confirmText: t("Reboot"),
+        cancelText: t("Cancel"),
+      });
+      if (!ok) return false;
+      const res = await putParam("DisableUpdates", checked ? "1" : "0");
+      if (res.ok) await apiPost("/api/opui/action/reboot");
+      else toast(res.error || t("Save failed"));
+      return "handled";
+    };
+  }
+  if (w.param === "AlphaLongitudinalEnabled") {
+    toggleDef.confirm_rich = true;
+    toggleDef.confirm_message = w.desc || "";
+  }
+  if (w.confirm_enable) {
+    toggleDef.confirm_enable = true;
+    toggleDef.confirm_message = w.desc || w.label;
+  }
+  if (w.confirm_enable_rich) {
+    toggleDef.confirm_rich = true;
+    toggleDef.confirm_message = `<h1>${escapeHtml(t(w.label))}</h1><br><p>${escapeHtml(t(w.desc || ""))}</p>`;
+  }
+  if (w.locked) toggleDef.locked = true;
   const row = createSpToggle({
-    ...w,
+    ...toggleDef,
     label: stacked ? "" : t(w.label),
     desc: w.desc ? t(w.desc) : "",
     confirm_experimental: w.confirm_experimental,
@@ -951,7 +1380,7 @@ function renderMultipleButtonRow(w, panelData) {
   const stacked = w.layout === "stacked" || !inline;
   const row = document.createElement("div");
   row.className = "opui-sp-row"
-    + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked");
+    + (inline ? " opui-sp-row--control-inline" : " opui-sp-row--stacked opui-sp-row--segmented");
   row.dataset.param = w.param;
   row.dataset.widget = "multiple_button";
   const buttons = (w.buttons || []).map((b) => t(b));
@@ -973,6 +1402,10 @@ function renderMultipleButtonRow(w, panelData) {
     const disabled = (w.offroad_only && !globalState.is_offroad) || w.locked;
     if (disabled) btn.disabled = true;
     btn.addEventListener("click", async () => {
+      if (w.param === "SpeedLimitMode" && i === 3 && globalState.sla_available === false) {
+        toast(t("Speed Limit Assist is not available on this platform."));
+        return;
+      }
       const res = await putParam(w.param, String(i), !!w.needs_cycle);
       if (!res.ok) {
         toast(res.error || t("Save failed"));
@@ -981,6 +1414,9 @@ function renderMultipleButtonRow(w, panelData) {
       w.value = String(i);
       if (panelData.values) panelData.values[w.param] = String(i);
       group.querySelectorAll("button").forEach((b, j) => b.classList.toggle("selected", j === i));
+      if (w.param === "MadsSteeringMode") {
+        updateMadsSteeringModeDesc(i, !!globalState.mads_limited);
+      }
     });
     group.appendChild(btn);
   });
@@ -1000,7 +1436,7 @@ function requestPanelRefresh() {
 
 function renderChoiceRow(w) {
   const row = document.createElement("div");
-  row.className = "opui-sp-row opui-sp-row--stacked";
+  row.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--segmented";
   row.dataset.param = w.param;
   row.dataset.widget = "choice";
   const opts = (w.options || []).map((o) => t(o));
@@ -1067,7 +1503,7 @@ function renderIntRow(w) {
     const store = hasMap ? (valueMap[String(v)] ?? v) : v;
     span.textContent = String(hasMap ? (valueMap[String(v)] ?? v) : v);
     const res = await putParam(w.param, String(store));
-    if (!res.ok) toast(res.error || "保存失败");
+    if (!res.ok) toast(res.error || t("Save failed"));
   };
 
   minus.addEventListener("click", () => { val = Math.max(min, val - step); save(val); });
@@ -1217,6 +1653,20 @@ async function runDualSideAction(side) {
     return;
   }
   if (side.action) {
+    if (side.action === "reboot") {
+      if (globalState.engaged) {
+        toast(t("Disengage to Reboot"));
+        return;
+      }
+      if (!(await showConfirm({ message: t("Are you sure you want to reboot?"), confirmText: t("Reboot") }))) return;
+    }
+    if (side.action === "shutdown") {
+      if (globalState.engaged) {
+        toast(t("Disengage to Power Off"));
+        return;
+      }
+      if (!(await showConfirm({ message: t("Are you sure you want to power off?"), confirmText: t("Power Off") }))) return;
+    }
     if (side.confirm && !(await showConfirm({ message: t(side.confirm), confirmText: t("Yes") }))) return;
     const res = await apiPost(`/api/opui/action/${encodeURIComponent(side.action)}`);
     if (res.ok) toast(t(side.label));
@@ -1288,43 +1738,78 @@ function renderDualButtonRow(w) {
 }
 
 function renderSshKeysBlock() {
-  const block = document.createElement("div");
-  block.className = "opui-ssh-block";
-  block.innerHTML = `
-    <div class="opui-row opui-row--section">GitHub SSH Keys</div>
-    <div class="opui-row">
-      <input type="text" class="opui-input" id="ssh-username" placeholder="GitHub username" />
-      <button type="button" class="opui-btn" id="ssh-fetch">FETCH</button>
-      <button type="button" class="opui-btn" id="ssh-remove">REMOVE</button>
+  const sshDesc = tr(
+    "Warning: This grants SSH access to all public keys in your GitHub settings. Never enter a GitHub username other than your own. A comma employee will NEVER ask you to add their GitHub username.",
+  );
+  const row = document.createElement("div");
+  row.className = "opui-sp-row";
+  row.id = "ssh-keys-row";
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(tr("SSH Keys"))}</div>
     </div>
-    <pre class="opui-ssh-keys" id="ssh-keys-preview">加载中…</pre>`;
+    <div class="opui-sp-row-actions">
+      <span class="opui-sp-row-value" id="ssh-username-display"></span>
+      <button type="button" class="opui-btn opui-btn--action" id="ssh-action-btn">${escapeHtml(t("ADD"))}</button>
+    </div>`;
 
   const refresh = async () => {
     const st = await apiGet("/api/opui/ssh/status");
-    const pre = block.querySelector("#ssh-keys-preview");
-    const input = block.querySelector("#ssh-username");
+    const userEl = row.querySelector("#ssh-username-display");
+    const btn = row.querySelector("#ssh-action-btn");
     if (!st.ok) {
-      if (pre) pre.textContent = st.error || "SSH 不可用";
+      if (userEl) userEl.textContent = "";
+      if (btn) {
+        btn.textContent = t("ADD");
+        btn.disabled = true;
+      }
       return;
     }
-    if (input && st.username) input.value = st.username;
-    if (pre) pre.textContent = st.keys || "(no keys)";
+    if (userEl) userEl.textContent = st.keys ? (st.username || "") : "";
+    if (btn) {
+      btn.textContent = st.keys ? t("REMOVE") : t("ADD");
+      btn.disabled = false;
+    }
   };
 
-  block.querySelector("#ssh-fetch")?.addEventListener("click", async () => {
-    const username = block.querySelector("#ssh-username")?.value || "";
+  row.querySelector("#ssh-action-btn")?.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const btn = row.querySelector("#ssh-action-btn");
+    const st = await apiGet("/api/opui/ssh/status");
+    if (!st.ok) {
+      toast(st.error || t("Failed"));
+      return;
+    }
+    if (st.keys) {
+      const res = await apiPost("/api/opui/ssh/remove");
+      if (res.ok) toast(t("SSH keys removed"));
+      else toast(res.error || t("Failed"));
+      refresh();
+      return;
+    }
+    if (btn) btn.disabled = true;
+    const username = await showKeyboard({
+      title: t("Enter your GitHub username"),
+      value: st.username || "",
+      minLen: 1,
+      maxLen: 39,
+    });
+    if (!username) {
+      if (btn) btn.disabled = false;
+      return;
+    }
+    if (btn) btn.textContent = t("LOADING");
     const res = await apiPost("/api/opui/ssh/fetch", { username });
-    if (res.ok) toast("SSH keys 已更新");
-    else toast(res.error || "获取失败");
+    if (res.ok) toast(t("SSH keys updated"));
+    else toast(res.error || t("Failed"));
+    if (btn) btn.disabled = false;
     refresh();
   });
-  block.querySelector("#ssh-remove")?.addEventListener("click", async () => {
-    const res = await apiPost("/api/opui/ssh/remove");
-    if (res.ok) toast("SSH keys 已删除");
-    refresh();
-  });
+
+  row.querySelector(".opui-sp-row-actions")?.addEventListener("click", (e) => e.stopPropagation());
+  bindRowExpand(row, { desc: sshDesc });
   refresh();
-  return block;
+  return row;
 }
 
 function renderActionRow(w) {
@@ -1354,7 +1839,10 @@ function renderActionRow(w) {
       toast(t("Disengage to Reset Calibration"));
       return;
     }
-    if (w.confirm && !(await showConfirm({ message: t(w.confirm), confirmText: t("Yes") }))) return;
+    if (w.confirm && !(await showConfirm({
+      message: t(w.confirm),
+      confirmText: t(w.confirm_button || (w.action === "reset_calibration" ? "Reset" : "Yes")),
+    }))) return;
     if (w.action === "pair_device") {
       window.open("https://connect.comma.ai/", "_blank");
       return;
@@ -1520,9 +2008,28 @@ async function renderNetworkPanel(container, data) {
           }) || "";
           if (!password) return;
         }
+        const prevText = ssidBtn.textContent;
+        ssidBtn.disabled = true;
+        ssidBtn.textContent = t("Connecting...");
         const res = await apiPost("/api/opui/wifi/connect", { ssid: n.ssid, password });
-        if (res.ok) toast(`${t("Connecting")} ${n.ssid}`);
-        else toast(res.error || t("Connect failed"));
+        if (res.ok) {
+          toast(`${t("Connecting")} ${n.ssid}`);
+          for (let i = 0; i < 24; i++) {
+            await new Promise((r) => setTimeout(r, 500));
+            const latest = await fetchScan(false);
+            if (panelRenderStale(gen)) return;
+            const hit = (latest.networks || []).find((x) => x.ssid === n.ssid && x.connected);
+            if (hit) {
+              toast(`${t("Connected")} ${n.ssid}`);
+              break;
+            }
+          }
+          await runScan(false);
+        } else {
+          toast(res.error || t("Connect failed"));
+        }
+        ssidBtn.disabled = false;
+        ssidBtn.textContent = prevText;
       });
       list.appendChild(item);
     }
@@ -1759,14 +2266,22 @@ async function renderModelsPanel(container, data) {
 
   const pickRow = document.createElement("div");
   pickRow.className = "opui-sp-row";
+  pickRow.dataset.modelsSelect = "1";
   const modelName = m.active_name || formatBundleDisplay(data.values?.ModelManager_ActiveBundle) || "—";
+  const modelDesc = !globalState.is_offroad
+    ? t("Only available when vehicle is off, or always offroad mode is on")
+    : modelName;
   pickRow.innerHTML = `
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Current Model"))}</div>
-      <div class="opui-sp-row-desc">${escapeHtml(modelName)}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(modelDesc)}</div>
     </div>
-    <button type="button" class="opui-btn">${escapeHtml(t("SELECT"))}</button>`;
+    <button type="button" class="opui-btn" ${globalState.is_offroad ? "" : "disabled"}>${escapeHtml(t("SELECT"))}</button>`;
   pickRow.querySelector("button")?.addEventListener("click", async () => {
+    if (!globalState.is_offroad) {
+      toast(t("Changing model is only allowed while offroad."));
+      return;
+    }
     const ref = await showTree({
       title: t("Select a Model"),
       folders: m.tree || [],
@@ -1777,13 +2292,25 @@ async function renderModelsPanel(container, data) {
     const bundle = (m.tree || []).flatMap((f) => f.bundles || []).find((b) => b.ref === ref);
     const res = await apiPost("/api/opui/models/select", { ref, index: bundle?.index });
     if (res.ok) {
+      if (res.needs_reset_cal) {
+        const reset = await showConfirm({
+          message: t("Model download has started in the background. We suggest resetting calibration. Would you like to do that now?"),
+          confirmText: t("Reset Calibration"),
+          cancelText: t("Cancel"),
+        });
+        if (reset) {
+          const cal = await apiPost("/api/opui/action/reset_calibration");
+          if (cal.ok) toast(t("Reset Calibration"));
+          else toast(cal.error || t("Failed"));
+        }
+      }
       toast(t("Model selected"));
       await renderModelsPanel(container, data);
     } else toast(res.error || t("Failed"));
   });
   container.appendChild(pickRow);
 
-  if (m.download?.name) {
+  if (m.download?.name && m.download_index != null && m.download_index !== "") {
     const types = {
       supercombo: t("Driving Model"),
       vision: t("Vision Model"),
@@ -1822,40 +2349,82 @@ async function renderModelsPanel(container, data) {
   }
 }
 
+function applyOsmPanelValues(patch) {
+  if (!patch || typeof patch !== "object") return;
+  if (!panelDataRef) panelDataRef = { ok: true, values: {} };
+  if (!panelDataRef.values) panelDataRef.values = {};
+  Object.assign(panelDataRef.values, patch);
+  const block = document.getElementById("osm-custom-root");
+  if (block) updateOsmLabels(block, panelDataRef);
+  const ver = document.getElementById("osm-mapd-version");
+  if (ver && panelDataRef.values.MapdVersion) {
+    ver.textContent = panelDataRef.values.MapdVersion;
+  }
+}
+
+async function syncOsmPanelAfterSelect(values) {
+  applyOsmPanelValues(values);
+  const block = document.getElementById("osm-custom-root");
+  if (!block) return;
+  try {
+    const [size, prog] = await Promise.all([
+      apiGet("/api/opui/osm/size"),
+      apiGet("/api/opui/osm/progress"),
+    ]);
+    updateOsmCustomDom(block, { ok: true, size, progress: prog });
+  } catch (_) {
+    /* keep selected labels */
+  }
+  updateOsmLabels(block, panelDataRef);
+}
+
+async function promptOsmDatabaseDownload() {
+  if (!(await showConfirm({
+    message: t("This will start the download process and it might take a while to complete."),
+    confirmText: t("Start Download"),
+  }))) return;
+  const res = await apiPost("/api/opui/action/osm_check_updates");
+  if (res.ok) toast(t("Start Download"));
+  else toast(res.error || t("Failed"));
+}
+
 function ensureOsmCustomBlock(container, data) {
   let block = container.querySelector("#osm-custom-root");
-  if (block) return block;
+  if (block) {
+    updateOsmLabels(block, data);
+    return block;
+  }
   block = document.createElement("div");
   block.id = "osm-custom-root";
-  block.className = "opui-osm-tree";
+  block.className = "opui-osm-block";
   block.innerHTML = `
     <div class="opui-sp-row" id="osm-size-row">
       <div class="opui-sp-row-text">
         <div class="opui-sp-row-title">${escapeHtml(t("Downloaded Maps"))}</div>
-        <div class="opui-sp-row-desc" id="osm-size-text">${escapeHtml(t("Calculating…"))}</div>
       </div>
+      <span class="opui-sp-row-value" id="osm-size-text">${escapeHtml(t("Calculating..."))}</span>
       <button type="button" class="opui-btn opui-btn--action danger" id="osm-delete-btn">${escapeHtml(t("DELETE"))}</button>
     </div>
     <div id="osm-progress-slot"></div>
     <div class="opui-sp-row" id="osm-update-row">
       <div class="opui-sp-row-text">
         <div class="opui-sp-row-title">${escapeHtml(t("Database Update"))}</div>
-        <div class="opui-sp-row-desc" id="osm-update-text"></div>
       </div>
+      <span class="opui-sp-row-value" id="osm-update-text"></span>
       <button type="button" class="opui-btn opui-btn--action" id="osm-check-btn">${escapeHtml(t("CHECK"))}</button>
     </div>
     <div class="opui-sp-row" id="osm-country-row">
       <div class="opui-sp-row-text">
         <div class="opui-sp-row-title">${escapeHtml(t("Country"))}</div>
-        <div class="opui-sp-row-desc" id="osm-country-text"></div>
       </div>
+      <span class="opui-sp-row-value" id="osm-country-text"></span>
       <button type="button" class="opui-btn opui-btn--action" id="osm-country-btn">${escapeHtml(t("SELECT"))}</button>
     </div>
     <div class="opui-sp-row" id="osm-state-row" hidden>
       <div class="opui-sp-row-text">
         <div class="opui-sp-row-title">${escapeHtml(t("State"))}</div>
-        <div class="opui-sp-row-desc" id="osm-state-text"></div>
       </div>
+      <span class="opui-sp-row-value" id="osm-state-text"></span>
       <button type="button" class="opui-btn opui-btn--action" id="osm-state-btn">${escapeHtml(t("SELECT"))}</button>
     </div>`;
   container.appendChild(block);
@@ -1865,9 +2434,18 @@ function ensureOsmCustomBlock(container, data) {
       message: t("This will delete ALL downloaded maps\n\nAre you sure you want to delete all maps?"),
       confirmText: t("Yes, delete all maps"),
     }))) return;
+    const btn = block.querySelector("#osm-delete-btn");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = t("DELETING...");
+    }
     const res = await apiPost("/api/opui/osm/delete");
     if (res.ok) toast(t("Delete requested"));
     else toast(res.error || t("Failed"));
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = t("DELETE");
+    }
   });
 
   block.querySelector("#osm-check-btn")?.addEventListener("click", async () => {
@@ -1894,8 +2472,8 @@ function updateOsmLabels(block, data) {
   const updateText = block.querySelector("#osm-update-text");
   const stateRow = block.querySelector("#osm-state-row");
   const updateRow = block.querySelector("#osm-update-row");
-  if (countryText) countryText.textContent = values.OsmLocationTitle || "";
-  if (stateText) stateText.textContent = values.OsmStateTitle || "";
+  if (countryText) countryText.textContent = values.OsmLocationTitle || t("Not selected");
+  if (stateText) stateText.textContent = values.OsmStateTitle || t("Not selected");
   if (updateText) updateText.textContent = formatLastChecked(values.OsmDownloadedDate);
   if (stateRow) stateRow.hidden = String(values.OsmLocationName || "") !== "US";
   if (updateRow) updateRow.hidden = !values.OsmLocationName;
@@ -1904,8 +2482,15 @@ function updateOsmLabels(block, data) {
 function applyOsmCustom(data) {
   const block = document.getElementById("osm-custom-root");
   if (!block || !data?.ok) return;
+  if (data.values) {
+    if (!panelDataRef) panelDataRef = { ok: true, values: {} };
+    panelDataRef.values = { ...(panelDataRef.values || {}), ...data.values };
+  }
   updateOsmCustomDom(block, data);
-  updateOsmLabels(block, panelDataRef);
+  updateOsmLabels(block, panelDataRef || { values: data.values || {} });
+  const ver = document.getElementById("osm-mapd-version");
+  const mapd = panelDataRef?.values?.MapdVersion || data.values?.MapdVersion;
+  if (ver && mapd) ver.textContent = mapd;
 }
 
 function updateOsmCustomDom(block, data) {
@@ -1913,15 +2498,51 @@ function updateOsmCustomDom(block, data) {
   const prog = data.progress || {};
   const sizeEl = block.querySelector("#osm-size-text");
   if (sizeEl) {
-    if (size.pending) sizeEl.textContent = t("Calculating…");
-    else if (size.ok) sizeEl.textContent = `${Number(size.size_mb || 0).toFixed(2)} ${t("MB")}`;
+    if (size.pending) sizeEl.textContent = t("Calculating...");
+    else if (size.ok) {
+      const mb = Number(size.size_mb || 0);
+      sizeEl.textContent = mb >= 1024
+        ? `${(mb / 1024).toFixed(2)} ${t("GB")}`
+        : `${mb.toFixed(2)} ${t("MB")}`;
+    }
   }
 
   const slot = block.querySelector("#osm-progress-slot");
   if (slot) {
     slot.innerHTML = "";
     if (prog.ok && prog.active) {
-      slot.appendChild(createProgressRow(t("Downloading Map"), prog.progress || 0));
+      const pct = prog.progress || 0;
+      const done = prog.done || 0;
+      const total = prog.total || 0;
+      let label = t("Downloading Map");
+      if (total > 0 && prog.downloading) {
+        label = `${Math.round(pct)}% - ${t("Downloading Maps")} (${done}/${total})`;
+      }
+      slot.appendChild(createProgressRow(label, pct));
+    }
+  }
+
+  const checkBtn = block.querySelector("#osm-check-btn");
+  const updateText = block.querySelector("#osm-update-text");
+  if (checkBtn && prog.ok && prog.active) {
+    const done = prog.done || 0;
+    const total = prog.total || 0;
+    if (total > 0 && prog.downloading) {
+      const pct = Math.round(prog.progress || 0);
+      checkBtn.textContent = `${done}/${total} (${pct}%)`;
+      checkBtn.disabled = true;
+    } else if (!prog.downloading && total > 0 && done < total) {
+      checkBtn.textContent = t("Error: Invalid download. Retry.");
+      checkBtn.disabled = false;
+    } else {
+      checkBtn.textContent = t("Downloading Maps...");
+      checkBtn.disabled = true;
+    }
+  } else if (checkBtn) {
+    checkBtn.textContent = t("CHECK");
+    checkBtn.disabled = false;
+    if (updateText && !prog.active) {
+      updateText.textContent = formatLastChecked(panelDataRef?.values?.OsmDownloadedDate);
     }
   }
 
@@ -1950,45 +2571,65 @@ async function pickOsmRegion(regionType) {
   }
 
   if (regionType === "Country") {
-    const folders = (regions.countries || []).map((c) => ({
-      name: c.title,
-      bundles: [{ ref: c.name, name: c.title }],
-    }));
+    const folders = [{
+      name: "",
+      bundles: (regions.countries || []).map((c) => ({ ref: c.name, name: c.title })),
+    }];
     const ref = await showTree({ title: t("Country"), folders, searchable: true });
     if (!ref) return;
     const c = regions.countries.find((x) => x.name === ref);
     if (!c) return;
-    await apiPost("/api/opui/osm/select", { country: c.name, country_title: c.title });
-    toast(c.title);
+    const res = await apiPost("/api/opui/osm/select", { country: c.name, country_title: c.title });
+    if (!res.ok) {
+      toast(res.error || t("Failed"));
+      return;
+    }
+    await syncOsmPanelAfterSelect(res.values);
     if (c.name === "US") {
       const stateRow = document.getElementById("osm-state-row");
       if (stateRow) stateRow.hidden = false;
       await pickOsmRegion("State");
+    } else {
+      await promptOsmDatabaseDownload();
     }
-    window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
     return;
   }
 
-  const countryTitle = panelDataRef?.values?.OsmLocationTitle || "US";
+  const countryTitle = panelDataRef?.values?.OsmLocationTitle || "";
+  const country = panelDataRef?.values?.OsmLocationName || "";
+  if (!country) {
+    toast(t("Select a country first"));
+    return;
+  }
   const folders = [{
-    name: countryTitle,
+    name: "",
     bundles: (regions.states || []).map((s) => ({ ref: s.name, name: s.title })),
   }];
   const ref = await showTree({ title: t("State"), folders, searchable: true });
-  if (!ref) return;
-  const country = panelDataRef?.values?.OsmLocationName || "US";
+  if (!ref) {
+    if (country === "US" && !panelDataRef?.values?.OsmStateName) {
+      const clear = await apiPost("/api/opui/osm/clear");
+      if (clear.ok) await syncOsmPanelAfterSelect(clear.values);
+    }
+    return;
+  }
   const st = regions.states.find((s) => s.name === ref);
-  await apiPost("/api/opui/osm/select", {
+  const res = await apiPost("/api/opui/osm/select", {
     country,
     country_title: countryTitle,
     state: ref,
     state_title: st?.title || ref,
   });
-  toast(st?.title || ref);
-  window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+  if (!res.ok) {
+    toast(res.error || t("Failed"));
+    return;
+  }
+  await syncOsmPanelAfterSelect(res.values);
+  await promptOsmDatabaseDownload();
 }
 
 async function renderOsmPanel(container, data) {
+  panelDataRef = data;
   const gen = beginPanelRender();
   container.innerHTML = "";
   const versionRow = document.createElement("div");
@@ -1997,7 +2638,7 @@ async function renderOsmPanel(container, data) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Mapd Version"))}</div>
     </div>
-    <div class="opui-row-value" id="osm-mapd-version">${escapeHtml(data.values?.MapdVersion || t("Loading..."))}</div>`;
+    <span class="opui-sp-row-value" id="osm-mapd-version">${escapeHtml(data.values?.MapdVersion || t("Loading..."))}</span>`;
   container.appendChild(versionRow);
 
   const block = ensureOsmCustomBlock(container, data);
@@ -2078,10 +2719,121 @@ async function renderVehiclePanel(container, data) {
   if (bw.ok && bw.widgets?.length) {
     const brandData = { values: { ...data.values, ...bw.values } };
     for (const w of bw.widgets) {
+      if (w.capability === "hyundai_long_tuning" && !bw.hyundai_long_tuning_available) continue;
       const el = renderWidget(w, brandData);
       if (el) container.appendChild(el);
     }
   }
+}
+
+const STREAM_QUALITY_LABELS = {
+  auto: "Auto",
+  low: "Smooth",
+  med: "Standard",
+  high: "HD",
+};
+
+function renderStreamPreviewQualityRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-block";
+  const cur = getQualityPreference();
+  row.innerHTML = `
+    <div class="opui-sp-row-text" style="margin-bottom:16px">
+      <div class="opui-sp-row-title">${escapeHtml(t("Preview quality"))}</div>
+      ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc))}</div>` : ""}
+    </div>
+    <div class="opui-multi-grid" role="group" aria-label="${escapeHtml(t("Preview quality"))}"></div>`;
+  const grid = row.querySelector(".opui-multi-grid");
+  for (const level of QUALITY_LEVELS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `opui-multi-opt${level === cur ? " selected" : ""}`;
+    btn.textContent = t(STREAM_QUALITY_LABELS[level] || level);
+    btn.addEventListener("click", async () => {
+      setQualityPreference(level);
+      grid.querySelectorAll(".opui-multi-opt").forEach((el) => el.classList.remove("selected"));
+      btn.classList.add("selected");
+      toast(t("Preview quality updated"));
+      const { applyStreamQuality, isRoadStreaming } = await import("./webrtc_stream.js?v=52");
+      if (isRoadStreaming()) await applyStreamQuality(level, { user: true });
+    });
+    grid.appendChild(btn);
+  }
+  return row;
+}
+
+const WEBCODECS_LABELS = { auto: "Auto", on: "On", off: "Off" };
+
+function renderStreamWebcodecsRow() {
+  const row = document.createElement("div");
+  row.className = "opui-sp-block";
+  const cur = getWebCodecsPreference();
+  const capable = webCodecsCapable();
+  row.innerHTML = `
+    <div class="opui-sp-row-text" style="margin-bottom:16px">
+      <div class="opui-sp-row-title">${escapeHtml(t("Hardware decode"))}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(capable ? t("Use WebCodecs for lower preview latency when supported.") : t("WebCodecs is not available in this browser."))}</div>
+    </div>
+    <div class="opui-multi-grid" role="group"></div>`;
+  const grid = row.querySelector(".opui-multi-grid");
+  for (const mode of ["auto", "on", "off"]) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `opui-multi-opt${mode === cur ? " selected" : ""}`;
+    btn.disabled = !capable && mode !== "off";
+    btn.textContent = t(WEBCODECS_LABELS[mode] || mode);
+    btn.addEventListener("click", () => {
+      setWebCodecsPreference(mode);
+      grid.querySelectorAll(".opui-multi-opt").forEach((el) => el.classList.remove("selected"));
+      btn.classList.add("selected");
+      toast(t("Hardware decode setting updated"));
+    });
+    grid.appendChild(btn);
+  }
+  return row;
+}
+
+function formatBitrate(bps) {
+  if (bps == null) return "—";
+  const mbps = bps / 1_000_000;
+  if (mbps >= 1) return `${mbps.toFixed(1)} Mbps`;
+  return `${Math.round(bps / 1000)} kbps`;
+}
+
+function renderStreamDiagnosticsRow() {
+  const row = document.createElement("div");
+  row.className = "opui-sp-block";
+  row.innerHTML = `
+    <div class="opui-sp-row-text" style="margin-bottom:12px">
+      <div class="opui-sp-row-title">${escapeHtml(t("Livestream diagnostics"))}</div>
+      <div class="opui-sp-row-desc" id="stream-diag-body">${escapeHtml(t("Loading..."))}</div>
+    </div>`;
+  const body = row.querySelector("#stream-diag-body");
+  const refresh = async () => {
+    try {
+      const h = await apiGet("/api/opui/stream/health");
+      if (!h?.ok) {
+        body.textContent = h?.error || t("Update status unavailable");
+        return;
+      }
+      const lines = [
+        `${t("Livestream")}: ${h.livestreaming ? t("On") : t("Off")}`,
+        `${t("webrtcd")}: ${h.webrtcd_listening ? t("On") : t("Off")}`,
+        `${t("Bitrate")}: ${formatBitrate(h.encoder_bitrate)}`,
+        `${t("Camera")}: ${h.active_camera || "—"}`,
+        `${t("Thermal")}: ${h.thermal || "—"}`,
+        `${t("Encoder lag")}: ${h.encoder_lagging ? t("Yes") : t("No")}`,
+      ];
+      if (h.cpu_temp != null) lines.push(`${t("CPU temp")}: ${h.cpu_temp}°C`);
+      if (h.memory_usage_percent != null) lines.push(`${t("Memory")}: ${h.memory_usage_percent}%`);
+      body.textContent = lines.join(" · ");
+    } catch {
+      body.textContent = t("Update status unavailable");
+    }
+  };
+  refresh();
+  row._streamDiagTimer = setInterval(refresh, 3000);
+  return row;
 }
 
 function renderLanguageRow() {
@@ -2139,77 +2891,164 @@ function renderDriverCameraRow() {
   return row;
 }
 
+function appendSpSeparator(container) {
+  const sep = document.createElement("div");
+  sep.className = "opui-sp-separator";
+  sep.setAttribute("aria-hidden", "true");
+  container.appendChild(sep);
+}
+
+function createSunnylinkActionRow({ title, desc, buttonText, valueText, valueColor, disabled, onClick }) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--sunnylink-action";
+  if (disabled) row.classList.add("opui-sp-row--disabled");
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t(title))}</div>
+      ${desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(desc))}</div>` : ""}
+    </div>
+    <div class="opui-row-actions">
+      ${valueText ? `<span class="opui-row-value" style="${valueColor ? `color:${valueColor}` : ""}">${escapeHtml(valueText)}</span>` : ""}
+      <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(buttonText)}</button>
+    </div>`;
+  if (!disabled) row.querySelector("button")?.addEventListener("click", onClick);
+  return row;
+}
+
+async function sunnylinkConsentFlow() {
+  while (true) {
+    const enable = await showConfirm({
+      message: t("sunnylink enables secured remote access to your comma device from anywhere, including settings management, remote monitoring, real-time dashboard, etc."),
+      confirmText: t("Enable"),
+      cancelText: t("Disable"),
+    });
+    if (enable) return true;
+    const back = await showConfirm({
+      message: t("sunnylink is designed to be enabled as part of sunnypilot's core functionality. If sunnylink is disabled, features such as settings management, remote monitoring, real-time dashboards will be unavailable."),
+      confirmText: t("Back"),
+      cancelText: t("Disable"),
+    });
+    if (back) continue;
+    await putParam("CompletedSunnylinkConsentVersion", slStatus?.consent_declined_value || "-1");
+    return false;
+  }
+}
+
+function createSunnylinkToggleRow(w, rightValue, disabled, slStatus) {
+  const extra = {};
+  if (w.param === "SunnylinkEnabled") {
+    extra.onBeforeChange = async (checked) => {
+      if (!checked) return true;
+      const ok = await sunnylinkConsentFlow();
+      if (!ok) return false;
+      const version = slStatus?.required_consent_version || "1.0";
+      await putParam("CompletedSunnylinkConsentVersion", version);
+      return true;
+    };
+  }
+  const row = createSpToggle({
+    ...w,
+    ...extra,
+    label: t(w.label),
+    desc: w.desc ? t(w.desc) : "",
+    stacked: false,
+    locked: disabled,
+    offroad_only: w.offroad_only,
+  }, {}, globalState, paramHandlers);
+  row.classList.add("opui-sp-row--sunnylink-toggle");
+  row.dataset.param = w.param;
+  if (rightValue) {
+    const dongle = document.createElement("div");
+    dongle.className = "opui-row-value opui-sunnylink-dongle";
+    dongle.textContent = rightValue;
+    row.appendChild(dongle);
+  }
+  return row;
+}
+
 async function renderSunnylinkPanel(container, data) {
   const gen = beginPanelRender();
   container.innerHTML = "";
   const sl = await apiGet("/api/opui/sunnylink/status");
   if (panelRenderStale(gen)) return;
   const values = data.values || {};
+  const slEnabled = String(values.SunnylinkEnabled) === "1" || values.SunnylinkEnabled === true;
+  const offroad = globalState.is_offroad;
+  const dongleId = sl.ok && sl.dongle_id ? sl.dongle_id : t("N/A");
+  const tierName = sl.tier || t("Not Sponsor");
+  const sponsorBtn = sl.is_sponsor ? t("THANKS ♥") : t("SPONSOR");
+  const pairBtn = sl.is_paired ? t("Paired") : t("Not Paired");
+  const childDisabled = !slEnabled;
 
   const hdr = document.createElement("div");
   hdr.className = "opui-sunnylink-header";
   hdr.innerHTML = `
     <div class="opui-sunnylink-title">${escapeHtml(t("🚀 sunnylink 🚀"))}</div>
     <div class="opui-sunnylink-desc opui-sunnylink-desc--green">${escapeHtml(t("For secure backup, restore, and remote configuration"))}</div>
-    <div class="opui-sunnylink-desc opui-sunnylink-desc--orange">${escapeHtml(t("Sponsorship isn't required for basic backup/restore"))}<br>${escapeHtml(t("Click the Sponsor button for more details"))}</div>
-    ${sl.ok && sl.dongle_id ? `<div class="opui-sunnylink-id">${escapeHtml(t("Device ID"))}: ${escapeHtml(sl.dongle_id)}</div>` : ""}`;
+    <div class="opui-sunnylink-desc opui-sunnylink-desc--orange">${escapeHtml(t("Sponsorship isn't required for basic backup/restore"))}<br>${escapeHtml(t("Click the Sponsor button for more details"))}</div>`;
   container.appendChild(hdr);
 
-  const widgets = [
-    {
-      type: "bool", param: "SunnylinkEnabled", label: "Enable sunnylink",
-      value: values.SunnylinkEnabled, desc: "This is the master switch, it will allow you to cutoff any sunnylink requests should you want to do that.",
+  appendSpSeparator(container);
+
+  container.appendChild(createSunnylinkToggleRow({
+    param: "SunnylinkEnabled",
+    label: "Enable sunnylink",
+    desc: "This is the master switch, it will allow you to cutoff any sunnylink requests should you want to do that.",
+    value: values.SunnylinkEnabled,
+    offroad_only: true,
+  }, `${t("Dongle ID")}: ${dongleId}`, !offroad, sl));
+
+  appendSpSeparator(container);
+
+  container.appendChild(createSunnylinkActionRow({
+    title: "Sponsor Status",
+    desc: "Become a sponsor of sunnypilot to get early access to sunnylink features when they become available.",
+    buttonText: sponsorBtn,
+    valueText: tierName,
+    valueColor: sl.tier_color || "#808080",
+    disabled: childDisabled,
+    onClick: async () => {
+      const res = await apiGet("/api/opui/sunnylink/pair?mode=sponsor");
+      if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
+      else toast(res.error || t("Failed"));
     },
-    {
-      type: "bool", param: "EnableSunnylinkUploader", label: "Enable sunnylink uploader (infrastructure test)",
-      value: values.EnableSunnylinkUploader,
-      desc: "Enable sunnylink uploader to allow sunnypilot to upload your driving data to sunnypilot servers. (Only for highest tiers, and does NOT bring ANY benefit to you yet. We are just testing data volume.)",
+  }));
+
+  appendSpSeparator(container);
+
+  container.appendChild(createSunnylinkActionRow({
+    title: "Pair GitHub Account",
+    desc: "Pair your GitHub account to grant your device sponsor benefits, including API access on sunnylink.",
+    buttonText: pairBtn,
+    disabled: childDisabled,
+    onClick: async () => {
+      const res = await apiGet("/api/opui/sunnylink/pair?mode=pair");
+      if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
+      else toast(res.error || t("Failed"));
     },
-  ];
-  for (const w of widgets) {
-    const el = renderWidget({ ...w, type: "bool" }, data);
-    if (el) container.appendChild(el);
-  }
+  }));
 
-  const sponsorRow = document.createElement("div");
-  sponsorRow.className = "opui-sp-row";
-  sponsorRow.innerHTML = `
-    <div class="opui-sp-row-text">
-      <div class="opui-sp-row-label">${escapeHtml(t("Sponsor Status"))}</div>
-      <div class="opui-sp-row-desc">${escapeHtml(t("Become a sponsor of sunnypilot to get early access to sunnylink features when they become available."))}</div>
-    </div>
-    <button type="button" class="opui-btn">${escapeHtml(sl.is_sponsor ? (sl.tier || t("SPONSOR")) : t("SPONSOR"))}</button>`;
-  sponsorRow.querySelector("button")?.addEventListener("click", async () => {
-    const res = await apiGet("/api/opui/sunnylink/pair?mode=sponsor");
-    if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
-    else toast(res.error || t("Failed"));
-  });
-  container.appendChild(sponsorRow);
+  appendSpSeparator(container);
 
-  const pairRow = document.createElement("div");
-  pairRow.className = "opui-sp-row";
-  pairRow.innerHTML = `
-    <div class="opui-sp-row-text">
-      <div class="opui-sp-row-label">${escapeHtml(t("Pair GitHub Account"))}</div>
-      <div class="opui-sp-row-desc">${escapeHtml(t("Pair your GitHub account to grant your device sponsor benefits, including API access on sunnylink."))}</div>
-    </div>
-    <button type="button" class="opui-btn">${escapeHtml(sl.is_paired ? t("Paired") : t("Not Paired"))}</button>`;
-  pairRow.querySelector("button")?.addEventListener("click", async () => {
-    const res = await apiGet("/api/opui/sunnylink/pair?mode=pair");
-    if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
-    else toast(res.error || t("Failed"));
-  });
-  container.appendChild(pairRow);
+  container.appendChild(createSunnylinkToggleRow({
+    param: "EnableSunnylinkUploader",
+    label: "Enable sunnylink uploader (infrastructure test)",
+    desc: "Enable sunnylink uploader to allow sunnypilot to upload your driving data to sunnypilot servers. (Only for highest tiers, and does NOT bring ANY benefit to you yet. We are just testing data volume.)",
+    value: values.EnableSunnylinkUploader,
+    offroad_only: false,
+  }, "", childDisabled, sl));
 
-  if (!sl.ok) return;
+  appendSpSeparator(container);
 
-  if (sl.backup?.status && sl.backup.status !== "idle") {
+  if (sl.ok && sl.backup?.status && sl.backup.status !== "idle") {
     container.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
+    appendSpSeparator(container);
   }
 
+  const dualDisabled = childDisabled || !offroad;
   const dual = createDualButton(
-    { label: t("Backup Settings") },
-    { label: t("Restore Settings") },
+    { label: t("Backup Settings"), disabled: dualDisabled },
+    { label: t("Restore Settings"), primary: true, disabled: dualDisabled },
     async () => {
       if (!(await showConfirm({
         message: t("Are you sure you want to backup your current sunnypilot settings?"),
@@ -2266,7 +3105,7 @@ async function renderFirehosePanel(container) {
   status.id = "firehose-status-text";
   status.className = "opui-firehose-status";
   status.style.color = statusColor;
-  status.textContent = fh.active ? t("ACTIVE") : t("INACTIVE");
+  status.textContent = firehoseStatusText(fh.active);
   wrap.appendChild(status);
 
   if (fh.segments > 0) {
@@ -2323,11 +3162,19 @@ async function renderSoftwarePanel(container, data) {
   const version = document.createElement("div");
   version.className = "opui-sp-row opui-sp-row--stacked";
   version.innerHTML = `
-    <div class="opui-sp-row-text">
+    <div class="opui-sp-row-text opui-sp-row-text--expandable">
       <div class="opui-sp-row-title">${escapeHtml(t("Current Version"))}</div>
       <div class="opui-sp-row-desc" id="software-current-desc">${escapeHtml(sw.current || t("N/A"))}</div>
       <div class="opui-release-notes" id="software-current-notes" hidden></div>
     </div>`;
+  version.querySelector(".opui-sp-row-text")?.addEventListener("click", (e) => {
+    const notes = document.getElementById("software-current-notes");
+    if (!notes || !notes.innerHTML.trim()) return;
+    const expanded = notes.dataset.expanded === "1";
+    notes.dataset.expanded = expanded ? "0" : "1";
+    notes.hidden = expanded;
+    version.classList.toggle("opui-sp-row--desc-open", !expanded);
+  });
   container.appendChild(version);
 
   const download = document.createElement("div");
@@ -2397,7 +3244,14 @@ async function renderSoftwarePanel(container, data) {
 
   appendPanelWidgets(container, data);
 
+  const sep = document.createElement("div");
+  sep.className = "opui-sp-separator";
+  container.appendChild(sep);
+  container.appendChild(renderWebUiUpdateRow());
+  syncWebUiUpdateRow();
+
   applySoftwareCustom(sw);
+  updateSoftwareExtras(globalState);
 }
 
 function formatBundleDisplay(raw) {

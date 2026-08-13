@@ -11,11 +11,11 @@ def firehose_status() -> dict[str, Any]:
   if os.environ.get("WEBUI_DEV_PC") == "1":
     return {
       "ok": True,
-      "active": False,
-      "segments": 0,
+      "active": True,
+      "segments": 3,
       "network_type": "Wi-Fi",
       "metered": False,
-      "stats_raw": '{"status":"inactive","segments":0}',
+      "stats_raw": '{"firehose":3}',
       "dev_pc": True,
     }
   try:
@@ -33,11 +33,13 @@ def firehose_status() -> dict[str, Any]:
       stats = json.loads(raw) if isinstance(raw, str) else raw
     except json.JSONDecodeError:
       stats = {}
-    active = str(stats.get("status", "")).lower() in ("active", "uploading")
+    net_connected = net != 0
+    metered = bool(getattr(ds, "networkMetered", False))
+    active = net_connected and not metered
     return {
       "ok": True,
       "active": active,
-      "segments": int(stats.get("segments", 0) or 0),
+      "segments": int(stats.get("firehose", 0) or 0),
       "network_type": net_names.get(net, "--"),
       "metered": bool(getattr(ds, "networkMetered", False)),
       "stats_raw": raw if isinstance(raw, str) else json.dumps(stats),

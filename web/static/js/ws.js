@@ -148,9 +148,9 @@ class OpuiSocket {
     }
   }
 
-  watchModelOverlay(w, h) {
+  watchModelOverlay(w, h, fps = 10) {
     if (!this._connected) return;
-    this._send({ type: "watch_model_overlay", w, h });
+    this._send({ type: "watch_model_overlay", w, h, fps });
   }
 
   unwatchModelOverlay() {

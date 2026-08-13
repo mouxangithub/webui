@@ -15,21 +15,53 @@ const STATIC_UI_KEYS = {
   "modal-confirm-cancel": "Cancel",
   "modal-confirm-ok": "Confirm",
   "keyboard-cancel": "Cancel",
+  "keyboard-confirm": "Confirm",
   "tree-cancel": "Cancel",
   "tree-select": "Select",
   "multi-cancel": "Cancel",
   "multi-select": "Select",
   "html-ok": "OK",
-  "driver-cam-close": "Close",
+  "driver-cam-title": "Driver Camera Preview",
+  "driver-cam-loading-text": "camera starting",
   "confirm-cancel": "Cancel",
   "confirm-ok": "Confirm",
+  "webui-update-later": "Close",
+  "webui-update-check": "Check again",
+  "webui-update-apply": "Update now",
+  "camera-status-text": "Loading camera...",
 };
+
+const STATIC_UI_TITLES = {
+  "btn-sidebar-settings": "Settings",
+  "sidebar-mic": "Recording",
+};
+
+const STATIC_ARIA_LABELS = {
+  "driver-cam-close": "Close",
+  "btn-close-settings": "Close",
+};
+
+export function syncDriverCamUi() {
+  const title = document.getElementById("driver-cam-title");
+  if (title) title.textContent = tr("Driver Camera Preview");
+  const close = document.getElementById("driver-cam-close");
+  if (close) close.setAttribute("aria-label", tr("Close"));
+}
 
 export function syncStaticUiStrings() {
   for (const [id, key] of Object.entries(STATIC_UI_KEYS)) {
     const el = document.getElementById(id);
     if (el) el.textContent = tr(key);
   }
+  for (const [id, key] of Object.entries(STATIC_UI_TITLES)) {
+    const el = document.getElementById(id);
+    if (el) el.title = tr(key);
+  }
+  for (const [id, key] of Object.entries(STATIC_ARIA_LABELS)) {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute("aria-label", tr(key));
+  }
+  syncDriverCamUi();
   const treeSearch = document.getElementById("tree-search");
   if (treeSearch) treeSearch.placeholder = tr("Search");
 }

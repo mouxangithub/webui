@@ -12,7 +12,9 @@ py -3 webui/dev/run_pc.py --port 5080
 py -3 -m webui.webuid --host 127.0.0.1 --port 5080
 ```
 
-浏览器打开 `http://127.0.0.1:5080/`，强刷缓存（`?v=33`）。
+浏览器打开 `http://127.0.0.1:5080/`，强刷缓存（`?v=55`）。
+
+**Web UI 自更新（PC 模拟）**：在 `mock_runtime.SIM` 中设置 `webui_update_available: True` 可测试 **软件** 面板底部 Web UI 行与弹窗。
 
 **GUI 对齐清单**（与原生 BIG UI 逐项对照）：[`docs/GUI_ALIGNMENT.md`](../docs/GUI_ALIGNMENT.md)
 

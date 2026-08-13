@@ -19,7 +19,8 @@ BRAND_WIDGETS: dict[str, list[dict[str, Any]]] = {
      "buttons": ["Off", "3-Finger", "4-Finger", "5-Finger"], "offroad_only": True},
   ],
   "hyundai": [
-    {"type": "bool", "param": "HyundaiLongitudinalTuning", "label": "Hyundai Longitudinal Tuning"},
+    {"type": "multiple_button", "param": "HyundaiLongitudinalTuning", "label": "Custom Longitudinal Tuning",
+     "buttons": ["Off", "Dynamic", "Predictive"], "layout": "stacked"},
   ],
   "subaru": [
     {"type": "bool", "param": "SubaruStopAndGo", "label": "Stop and Go (Beta)", "needs_cycle": True},

@@ -1,5 +1,24 @@
 import { apiGet, apiPost } from "./api.js";
 import { opuiWs } from "./ws.js";
+import { tr } from "./i18n.js";
+
+function syncDevPanelI18n() {
+  const title = document.getElementById("dev-panel-title");
+  if (title) title.textContent = tr("PC Dev simulation");
+  const overrideBtn = document.getElementById("dev-preset-override");
+  if (overrideBtn) overrideBtn.textContent = tr("Override");
+  const map = {
+    "dev-label-started": "On road",
+    "dev-label-engaged": "Engaged",
+    "dev-label-experimental": "Experimental",
+    "dev-label-recording": "Recording microphone",
+    "dev-label-speed": "Speed",
+  };
+  for (const [id, key] of Object.entries(map)) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = tr(key);
+  }
+}
 
 function dispatchDevState(st) {
   if (!st?.ok) return;
@@ -43,6 +62,8 @@ export async function initDevPanel() {
   const panel = document.getElementById("dev-panel");
   if (!panel) return;
   panel.hidden = false;
+  syncDevPanelI18n();
+  window.addEventListener("opui:language-changed", syncDevPanelI18n);
 
   const started = document.getElementById("dev-started");
   const engaged = document.getElementById("dev-engaged");
