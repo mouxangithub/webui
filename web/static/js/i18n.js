@@ -37,11 +37,31 @@ const STATIC_UI_KEYS = {
   "webui-update-apply": "Update now",
   "camera-status-text": "Loading camera...",
   "btn-home-camera-preview-label": "Driving preview",
+  "sunnylink": "sunnylink",
+  "Decline": "Decline",
+  "Agree": "Agree",
+  "Driver camera preview enabled": "Driver camera preview enabled",
+  "Driver camera preview disabled": "Driver camera preview disabled",
+  "Driver camera preview": "Driver camera preview",
+  "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.",
+  "Bookmark route": "Bookmark route",
+  "Route bookmarked": "Route bookmarked",
+  "Home": "Home",
+  "Starting live stream service (~4s)…": "Starting live stream service (~4s)…",
+  "Starting live stream service ({s}s)…": "Starting live stream service ({s}s)…",
+  "Cannot start driving": "Cannot start driving",
+  "Manager failed to start": "Manager failed to start",
+  "No built-in display — use this Web UI as your primary interface. USB: https://10.255.128.121:5080/ or your device IP.": "No built-in display — use this Web UI as your primary interface. USB: https://10.255.128.121:5080/ or your device IP.",
+  "Only available while offroad": "Only available while offroad",
+  "Upload driver camera data to improve driver monitoring? You can change this later in Toggles.": "Upload driver camera data to improve driver monitoring? You can change this later in Toggles.",
+  "Enable": "Enable",
+  "Not now": "Not now",
 };
 
 const STATIC_UI_TITLES = {
   "btn-sidebar-settings": "Settings",
   "sidebar-mic": "Recording",
+  "btn-sidebar-bottom": "Home",
 };
 
 const STATIC_ARIA_LABELS = {

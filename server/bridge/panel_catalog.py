@@ -412,11 +412,48 @@ def get_panel(panel_id: str) -> dict[str, Any] | None:
 
 def panel_schema() -> dict[str, Any]:
   from webui.server.bridge.design_tokens import PANEL_ICONS, tokens_payload
+  from webui.server.bridge.headless_util import is_headless_mode
+
+  headless = is_headless_mode()
+  headless_hide_params = {
+    "OnroadScreenOffBrightness", "OnroadScreenOffTimer",
+    "InteractivityTimeout", "ScreenSaverEnabled", "ScreenSaverTimeout",
+  }
+
+  def _filter_widgets(widgets: list[dict]) -> list[dict]:
+    if not headless:
+      return widgets
+    out = []
+    for w in widgets:
+      if w.get("param") in headless_hide_params:
+        continue
+      if w.get("type") == "separator" and out and out[-1].get("type") == "separator":
+        continue
+      out.append(w)
+    return out
+
   panels_out = []
   for p in PANELS:
-        entry = {**p, "icon": PANEL_ICONS.get(p["id"], "")}
-        panels_out.append(entry)
-  return {"ok": True, "panels": panels_out, "subpanels": list(SUBPANELS.keys()), **tokens_payload()}
+    entry = {**p, "icon": PANEL_ICONS.get(p["id"], "")}
+    if headless and p.get("id") == "display":
+      entry["title"] = "Web Stream"
+      entry["headless_note"] = "Built-in display settings are hidden on headless devices."
+      widgets = _filter_widgets(list(entry.get("widgets") or []))
+      if headless:
+        widgets.insert(0, {
+          "type": "html",
+          "html": "<p class=\"opui-muted\">No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.</p>",
+        })
+        widgets.insert(1, {"type": "separator"})
+      entry["widgets"] = widgets
+    panels_out.append(entry)
+  return {
+    "ok": True,
+    "panels": panels_out,
+    "subpanels": list(SUBPANELS.keys()),
+    "headless": headless,
+    **tokens_payload(),
+  }
 
 
 def panel_param_keys(panel_id: str) -> list[str]:

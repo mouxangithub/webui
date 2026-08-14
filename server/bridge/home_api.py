@@ -38,10 +38,11 @@ def snapshot_home() -> dict[str, Any]:
   try:
     from openpilot.common.params import Params
     from webui.server.bridge.system_api import software_status
+    from webui.server.bridge.webui_bg_services import prime_status_from_cache
+    from webui.server.bridge.headless_util import is_headless_mode
 
     p = Params()
     dongle = p.get("DongleId") or ""
-    paired = bool(dongle) and dongle not in ("", "UnregisteredDevice", "ffffffffffffffff")
     version = p.get("UpdaterCurrentDescription") or p.get("GitBranch") or ""
     update_available = p.get_bool("UpdateAvailable")
     fetch_available = p.get_bool("UpdaterFetchAvailable")
@@ -55,13 +56,12 @@ def snapshot_home() -> dict[str, Any]:
       new_description = sw.get("new_description") or ""
       release_notes = sw.get("new_release_notes") or ""
 
-    prime = False
-    try:
-      from openpilot.selfdrive.ui.ui_state import ui_state
-      prime = ui_state.prime_state.is_prime()
-      paired = ui_state.prime_state.is_paired()
-    except Exception:
-      prime = paired and bool(p.get("PrimeType"))
+    prime_info = prime_status_from_cache()
+    paired = prime_info["paired"]
+    prime = prime_info["prime"]
+
+    from webui.server.bridge.startup_blockers import startup_blockers_snapshot
+    gate = startup_blockers_snapshot()
 
     return {
       "ok": True,
@@ -77,6 +77,10 @@ def snapshot_home() -> dict[str, Any]:
       "alert_count": len(offroad_alerts),
       "offroad_alerts": offroad_alerts,
       "dongle_id": dongle,
+      "headless": is_headless_mode(),
+      "startup_blockers": gate.get("blockers") or [],
+      "ignition": bool(gate.get("ignition")),
+      "can_start": bool(gate.get("can_start", True)),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -102,4 +106,5 @@ def _mock_home() -> dict[str, Any]:
     "alert_count": len(alerts),
     "offroad_alerts": alerts,
     "dongle_id": "dev-preview-0000",
+    "headless": False,
   }

@@ -40,7 +40,7 @@ from webui.server.bridge.params_api import batch_get, get_param, panel_schema, p
 from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
 from webui.server.bridge.state_hub import get_home, get_state
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
-from webui.server.bridge.system_api import run_action, software_status
+from webui.server.bridge.system_api import manager_last_error, run_action, software_status
 from webui.server.bridge.trips_api import trips_stats
 from webui.server.bridge.vehicle_api import vehicle_brand_widgets, vehicle_platforms, vehicle_select
 from webui.server.bridge.webrtc_api import webrtc_notify, webrtc_offer, webrtc_schema
@@ -53,12 +53,15 @@ _DEV_PRESET = re.compile(r"^/api/opui/dev/preset/([^/]+)$")
 
 
 def bootstrap_payload() -> dict[str, Any]:
+  from webui.server.bridge.headless_util import is_headless_mode
+
   payload = {
     "ok": True,
     "name": "op-webui",
     "version": read_version(),
     "openpilot_root": str(openpilot_root()),
     "dev_pc": os.environ.get("WEBUI_DEV_PC") == "1",
+    "headless": is_headless_mode(),
     "design": {"width": 2160, "height": 1080, "variant": "BIG"},
     "webrtc": {"port": 5001},
     "home": get_home(),
@@ -142,6 +145,8 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "GET" and clean_path == "/api/opui/software":
       return software_status()
+    if method == "GET" and clean_path == "/api/opui/system/manager_error":
+      return manager_last_error()
 
     if method == "GET" and clean_path == "/api/opui/wifi/status":
       return wifi_status()

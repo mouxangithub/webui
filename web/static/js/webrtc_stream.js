@@ -177,9 +177,20 @@ function waitIceComplete(pc) {
 
 async function wakeWebrtcd() {
 
+  const wakeMsg = tr("Starting live stream service (~4s)…");
+  setDriverLoading(wakeMsg);
+  setCameraStatus(wakeMsg);
+
   await apiPost("/api/opui/action/webrtc_enable");
 
-  await sleep(4000);
+  for (let i = 3; i >= 0; i--) {
+    if (i > 0) {
+      const tick = tr("Starting live stream service ({s}s)…").replace("{s}", String(i));
+      setDriverLoading(tick);
+      setCameraStatus(tick);
+    }
+    await sleep(1000);
+  }
 
 }
 
@@ -234,6 +245,8 @@ async function ensureWebrtcd() {
 /** Background warm-up after page load — avoids ~30s first SDP on user click. */
 
 export function prewarmWebrtc() {
+
+  if (!window.__OPUI_HEADLESS) return null;
 
   if (prewarmPromise || roadStreaming) return prewarmPromise;
 

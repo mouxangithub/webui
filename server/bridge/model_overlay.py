@@ -1,11 +1,26 @@
-"""Project modelV2 lane/path overlay for web canvas (uses device ModelRenderer when available)."""
+"""Project modelV2 lane/path overlay for web canvas (numpy ModelProjector; no pyray/EGL)."""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
-_overlay_arv = None
+from openpilot.selfdrive.ui.onroad.model_projection import ModelProjector
+
+_projector: ModelProjector | None = None
+_overlay_sm = None
+
+_OVERLAY_SERVICES = [
+  "modelV2",
+  "liveCalibration",
+  "radarState",
+  "deviceState",
+  "roadCameraState",
+  "selfdriveState",
+  "longitudinalPlan",
+  "carParams",
+  "carState",
+]
 
 
 def _empty(w: int, h: int) -> dict[str, Any]:
@@ -27,85 +42,83 @@ def _empty(w: int, h: int) -> dict[str, Any]:
   }
 
 
-def _get_augmented_road_view():
-  global _overlay_arv
-  if _overlay_arv is not None:
-    return _overlay_arv
-  import pyray as rl
-  from msgq.visionipc import VisionStreamType
-  from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView, ROAD_CAM
-
-  _overlay_arv = AugmentedRoadView(ROAD_CAM)
-  return _overlay_arv
+def _get_projector(width: int, height: int) -> ModelProjector:
+  global _projector
+  if _projector is None:
+    _projector = ModelProjector(width, height)
+  else:
+    _projector.set_viewport(width, height)
+  return _projector
 
 
-def _apply_calibration(arv) -> None:
-  """Apply live calibration whenever valid (not only on sm.updated)."""
-  from openpilot.cereal import log
-  from openpilot.selfdrive.ui.ui_state import ui_state
-  from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_from_device_frame
-  from openpilot.common.transformations.orientation import rot_from_euler
-
-  sm = ui_state.sm
-  if not arv.device_camera and sm.seen.get("roadCameraState") and sm.seen.get("deviceState"):
-    try:
-      arv.device_camera = DEVICE_CAMERAS[(str(sm["deviceState"].deviceType), str(sm["roadCameraState"].sensor))]
-    except Exception:
-      pass
-
-  if not sm.valid.get("liveCalibration"):
-    return
-
-  calib = sm["liveCalibration"]
-  if len(calib.rpyCalib) != 3 or calib.calStatus != log.LiveCalibrationData.Status.calibrated:
-    return
-
-  device_from_calib = rot_from_euler(calib.rpyCalib)
-  arv.view_from_calib = view_frame_from_device_frame @ device_from_calib
-
-  if hasattr(calib, "wideFromDeviceEuler") and len(calib.wideFromDeviceEuler) == 3:
-    wide_from_device = rot_from_euler(calib.wideFromDeviceEuler)
-    arv.view_from_wide_calib = view_frame_from_device_frame @ wide_from_device @ device_from_calib
+def _get_overlay_sm():
+  global _overlay_sm
+  if _overlay_sm is None:
+    import openpilot.cereal.messaging as messaging
+    _overlay_sm = messaging.SubMaster(_OVERLAY_SERVICES, poll="modelV2")
+  return _overlay_sm
 
 
-def _flat_poly(pts) -> list[list[float]]:
-  import numpy as np
+def _longitudinal_control(sm) -> bool:
+  if sm.valid.get("carParams"):
+    return bool(sm["carParams"].openpilotLongitudinalControl)
+  try:
+    from openpilot.cereal import messaging
+    from opendbc.car.structs import car
+    from openpilot.common.params import Params
 
-  if pts is None:
-    return []
-  arr = np.asarray(pts)
-  if arr.size == 0:
-    return []
-  if arr.ndim == 1:
-    arr = arr.reshape(-1, 2)
-  return [[float(x), float(y)] for x, y in arr]
+    if car_params := Params().get("CarParams"):
+      cp = messaging.log_from_bytes(car_params, car.CarParams)
+      return cp.openpilotLongitudinalControl
+  except Exception:
+    pass
+  return False
 
 
-def _project_path_center(mr, max_idx: int) -> list[list[float]]:
-  points = mr._path.raw_points
-  if points is None or len(points) == 0:
-    return []
-  out: list[list[float]] = []
-  end = min(max_idx + 1, len(points))
-  for i in range(end):
-    p = points[i]
-    if p[0] < 0:
-      continue
-    screen = mr._map_to_screen(float(p[0]), float(p[1]), float(p[2]) + mr._path_offset_z)
-    if screen:
-      out.append([screen[0], screen[1]])
-  return out
+def _camera_offset() -> float:
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    if p.get("ModelManager_ActiveBundle"):
+      return float(p.get("CameraOffset", return_default=True))
+  except Exception:
+    pass
+  return 0.0
 
 
 def _lead_metrics(lead_data, v_ego: float) -> list[str]:
   try:
-    from openpilot.selfdrive.ui.sunnypilot.onroad.chevron_metrics import ChevronMetrics, ChevronOptions
-    from openpilot.selfdrive.ui.ui_state import ui_state
+    from openpilot.common.constants import CV
+    from openpilot.common.params import Params
+    from openpilot.selfdrive.ui.sunnypilot.onroad.chevron_metrics import ChevronOptions
 
-    opt = int(ui_state.chevron_metrics or 0)
+    p = Params()
+    opt = int(p.get("ChevronInfo") or 0)
     if opt == ChevronOptions.OFF:
       return []
-    return ChevronMetrics._build_text_lines(lead_data.dRel, lead_data.vRel, v_ego)
+
+    is_metric = p.get_bool("IsMetric")
+    d_rel, v_rel = lead_data.dRel, lead_data.vRel
+    lines: list[str] = []
+
+    if opt in (ChevronOptions.DISTANCE_ONLY, ChevronOptions.ALL):
+      val = max(0.0, d_rel)
+      unit = "m" if is_metric else "ft"
+      if not is_metric:
+        val *= 3.28084
+      lines.append(f"{val:.0f} {unit}")
+
+    if opt in (ChevronOptions.SPEED_ONLY, ChevronOptions.ALL):
+      multiplier = CV.MS_TO_KPH if is_metric else CV.MS_TO_MPH
+      val = max(0.0, (v_rel + v_ego) * multiplier)
+      unit = "km/h" if is_metric else "mph"
+      lines.append(f"{val:.0f} {unit}")
+
+    if opt in (ChevronOptions.TTC_ONLY, ChevronOptions.ALL):
+      val = (d_rel / v_ego) if (d_rel > 0 and v_ego > 0) else 0.0
+      lines.append(f"{val:.1f} s" if (0 < val < 200) else "---")
+
+    return lines
   except Exception:
     return []
 
@@ -123,147 +136,67 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900) -> dict[str, An
     pass
 
   try:
-    import pyray as rl
-    import numpy as np
-    from openpilot.selfdrive.ui.ui_state import ui_state
+    sm = _get_overlay_sm()
+    sm.update(100)
 
-    ui_state.update()
-    try:
-      ui_state.update_params()
-    except Exception:
-      pass
-
-    started = ui_state.started
-    if not started:
-      try:
-        sm0 = ui_state.sm
-        if sm0.valid.get("deviceState"):
-          started = bool(sm0["deviceState"].started)
-      except Exception:
-        pass
+    started = False
+    if sm.valid.get("deviceState"):
+      started = bool(sm["deviceState"].started)
     if not started:
       return _empty(width, height)
 
-    sm = ui_state.sm
     if not sm.valid.get("modelV2"):
       return _empty(width, height)
 
-    arv = _get_augmented_road_view()
-    rect = rl.Rectangle(0, 0, float(width), float(height))
-    arv._content_rect = rect
-    _apply_calibration(arv)
-    arv._calc_frame_matrix(rect)
-
-    mr = arv.model_renderer
-    mr._rect = rect
-    mr._clip_region = rl.Rectangle(-500, -500, width + 1000, height + 1000)
-    mr._transform_dirty = True
-
-    model = sm["modelV2"]
-    mr._update_raw_points(model)
-    path_x = mr._path.raw_points[:, 0]
-    if path_x.size == 0:
+    projector = _get_projector(width, height)
+    if not projector.update_transform(sm):
       return _empty(width, height)
 
-    radar_state = sm["radarState"] if sm.valid.get("radarState") else None
-    lead = radar_state.leadOne if radar_state else None
-    mr._update_model(lead, path_x)
-
-    render_leads = mr._longitudinal_control and radar_state is not None
-    if render_leads:
-      mr._update_leads(radar_state, path_x)
-
-    max_distance = float(np.clip(path_x[-1], 10.0, 100.0))
-    max_idx = mr._get_path_length_idx(mr._lane_lines[0].raw_points[:, 0], max_distance)
-
-    lanes = []
-    for i, ll in enumerate(mr._lane_lines):
-      lanes.append({
-        "prob": float(mr._lane_line_probs[i]),
-        "polygon": _flat_poly(ll.projected_points),
-      })
-
-    edges = []
-    for i, re in enumerate(mr._road_edges):
-      edges.append({
-        "std": float(mr._road_edge_stds[i]),
-        "polygon": _flat_poly(re.projected_points),
-      })
-
-    leads = []
-    chevron_alpha = 0.0
-    v_ego = float(sm["carState"].vEgo) if sm.valid.get("carState") else 0.0
-    if render_leads and radar_state:
-      try:
-        mr.chevron_metrics.update_alpha(bool(radar_state.leadOne.present) or bool(radar_state.leadTwo.present))
-        chevron_alpha = float(mr.chevron_metrics._lead_status_alpha)
-      except Exception:
-        pass
-
-      lead_pairs = [
-        (radar_state.leadOne, mr._lead_vehicles[0]),
-        (radar_state.leadTwo, mr._lead_vehicles[1]),
-      ]
-      for lead_data, lv in lead_pairs:
-        if not lead_data or not lead_data.present or not lv.glow or not lv.chevron:
-          continue
-        leads.append({
-          "glow": [[float(x), float(y)] for x, y in lv.glow],
-          "chevron": [[float(x), float(y)] for x, y in lv.chevron],
-          "alpha": lv.fill_alpha,
-          "d_rel": float(lead_data.dRel),
-          "metrics": _lead_metrics(lead_data, v_ego),
-        })
+    long_ctrl = _longitudinal_control(sm)
+    projector.set_longitudinal_control(long_ctrl)
+    projector.set_camera_offset(_camera_offset())
 
     allow_throttle = True
     try:
       if sm.valid.get("longitudinalPlan"):
-        allow_throttle = bool(sm["longitudinalPlan"].allowThrottle or not mr._longitudinal_control)
+        allow_throttle = bool(sm["longitudinalPlan"].allowThrottle or not long_ctrl)
     except Exception:
       pass
 
-    rainbow = bool(getattr(ui_state, "rainbow_path", False))
+    rainbow = False
     try:
       from openpilot.common.params import Params
-      rainbow = rainbow or Params().get_bool("RainbowMode")
+      rainbow = Params().get_bool("RainbowMode")
     except Exception:
       pass
 
-    mr._experimental_mode = bool(sm["selfdriveState"].experimentalMode) if sm.valid.get("selfdriveState") else False
+    experimental_mode = bool(sm["selfdriveState"].experimentalMode) if sm.valid.get("selfdriveState") else False
 
-    path_gradient: list[dict[str, Any]] = []
-    path_blend = 1.0
-    if mr._experimental_mode:
-      mr._update_experimental_gradient()
-      exp_grad = getattr(mr, "_exp_gradient", None)
-      if exp_grad and getattr(exp_grad, "colors", None):
-        for stop, color in zip(exp_grad.stops, exp_grad.colors):
-          path_gradient.append({
-            "pos": float(stop),
-            "rgba": [int(color.r), int(color.g), int(color.b), int(color.a)],
-          })
-    else:
-      try:
-        mr._blend_filter.update(int(allow_throttle))
-        path_blend = round(float(mr._blend_filter.x) * 100) / 100
-      except Exception:
-        pass
+    overlay = projector.build_overlay(
+      sm,
+      experimental_mode=experimental_mode,
+      allow_throttle=allow_throttle,
+      rainbow=rainbow,
+      lead_metrics_fn=_lead_metrics,
+    )
+    if overlay.get("empty"):
+      return _empty(width, height)
 
     return {
       "ok": True,
       "width": width,
       "height": height,
-      "lanes": lanes,
-      "edges": edges,
-      "path": _project_path_center(mr, max_idx),
-      "path_polygon": _flat_poly(mr._path.projected_points),
-      "leads": leads,
-      "experimental": mr._experimental_mode,
-      "rainbow": rainbow,
-      "allow_throttle": allow_throttle,
-      "path_blend": path_blend,
-      "path_gradient": path_gradient,
-      "chevron_alpha": chevron_alpha,
+      "lanes": overlay["lanes"],
+      "edges": overlay["edges"],
+      "path": overlay["path"],
+      "path_polygon": overlay["path_polygon"],
+      "leads": overlay["leads"],
+      "experimental": overlay["experimental"],
+      "rainbow": overlay["rainbow"],
+      "allow_throttle": overlay["allow_throttle"],
+      "path_blend": overlay["path_blend"],
+      "path_gradient": overlay["path_gradient"],
+      "chevron_alpha": overlay["chevron_alpha"],
     }
   except Exception as exc:
     out = _empty(width, height)

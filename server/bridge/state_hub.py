@@ -10,6 +10,7 @@ from typing import Any
 
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.state_api import build_state_from_sm
+from webui.server.bridge.car_context import refresh_car_context
 
 _lock = threading.Lock()
 _state: dict[str, Any] | None = None
@@ -24,6 +25,13 @@ def start_state_hub() -> None:
   global _running, _thread
   if _running:
     return
+  try:
+    from webui.server.bridge.headless_util import is_headless_mode
+    if is_headless_mode():
+      from webui.server.bridge.webui_bg_services import start_webui_bg_services
+      start_webui_bg_services()
+  except Exception:
+    pass
   try:
     _set_home(snapshot_home())
   except Exception:
@@ -103,6 +111,8 @@ def _cold_state_snapshot() -> dict[str, Any]:
       pass
     sm = messaging.SubMaster(services, poll="deviceState")
     sm.update(300)
+    started = bool(sm.valid.get("deviceState") and sm["deviceState"].started)
+    refresh_car_context(sm, started)
     return build_state_from_sm(sm)
   except Exception as exc:
     return {
@@ -153,6 +163,8 @@ def _device_loop() -> None:
   while _running:
     try:
       sm.update(100)
+      started = bool(sm.valid.get("deviceState") and sm["deviceState"].started)
+      refresh_car_context(sm, started)
       _set_state(build_state_from_sm(sm))
     except Exception as exc:
       _set_state({

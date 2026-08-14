@@ -10,7 +10,7 @@ from aiohttp import web
 from webui.server.deps import WEB_DIR, json_response, openpilot_root, read_version
 from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param, remove_param
 from webui.server.bridge.state_api import snapshot_ui_state
-from webui.server.bridge.system_api import run_action, software_status
+from webui.server.bridge.system_api import manager_last_error, run_action, software_status
 from webui.server.bridge.network_api import (
   network_advanced_status,
   wifi_connect,
@@ -34,10 +34,10 @@ from webui.server.bridge.osm_api import osm_download_progress, osm_fetch_regions
 from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select, vehicle_brand_widgets
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
 from webui.server.bridge.firehose_api import firehose_status
-from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
+from webui.server.bridge.device_api import device_extras, driver_view_status, regulatory_html, set_driver_view, set_language
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.home_api import snapshot_home
-from webui.server.bridge.onboarding_api import accept_terms, complete_training, onboarding_status
+from webui.server.bridge.onboarding_api import accept_sunnylink_consent, accept_terms, complete_training, onboarding_status
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.webui_update_api import apply_webui_update, dismiss_webui_update, snapshot_webui_update
 from webui.server.bridge.developer_api import developer_error_log
@@ -106,6 +106,10 @@ async def api_action(request: web.Request) -> web.Response:
 
 async def api_software(_request: web.Request) -> web.Response:
   return json_response(software_status())
+
+
+async def api_manager_error(_request: web.Request) -> web.Response:
+  return json_response(manager_last_error())
 
 
 async def api_wifi_status(_request: web.Request) -> web.Response:
@@ -363,6 +367,28 @@ async def api_onboarding_complete(_request: web.Request) -> web.Response:
   return json_response(complete_training())
 
 
+async def api_onboarding_sunnylink(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    accept = bool(body.get("accept", True))
+  except Exception:
+    accept = True
+  return json_response(accept_sunnylink_consent(accept))
+
+
+async def api_driver_view_status(_request: web.Request) -> web.Response:
+  return json_response(driver_view_status())
+
+
+async def api_driver_view_set(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    enabled = bool(body.get("enabled", False))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(set_driver_view(enabled))
+
+
 async def api_i18n(_request: web.Request) -> web.Response:
   return json_response(snapshot_i18n())
 
@@ -401,6 +427,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/home", api_home)
   app.router.add_get("/api/opui/onboarding", api_onboarding)
   app.router.add_put("/api/opui/onboarding/accept_terms", api_onboarding_accept)
+  app.router.add_put("/api/opui/onboarding/sunnylink", api_onboarding_sunnylink)
   app.router.add_put("/api/opui/onboarding/complete", api_onboarding_complete)
   app.router.add_get("/api/opui/i18n", api_i18n)
   app.router.add_get("/api/opui/panels", api_panels_schema)
@@ -411,6 +438,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_post("/api/opui/params/batch", api_params_batch)
   app.router.add_post("/api/opui/action/{action}", api_action)
   app.router.add_get("/api/opui/software", api_software)
+  app.router.add_get("/api/opui/system/manager_error", api_manager_error)
   app.router.add_get("/api/opui/wifi/status", api_wifi_status)
   app.router.add_get("/api/opui/wifi/scan", api_wifi_scan)
   app.router.add_post("/api/opui/wifi/connect", api_wifi_connect)
@@ -443,6 +471,8 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/firehose", api_firehose)
   app.router.add_get("/api/opui/stream/health", api_stream_health)
   app.router.add_get("/api/opui/device/extras", api_device_extras)
+  app.router.add_get("/api/opui/device/driver_view", api_driver_view_status)
+  app.router.add_post("/api/opui/device/driver_view", api_driver_view_set)
   app.router.add_get("/api/opui/steering/torque-versions", api_torque_versions)
   app.router.add_get("/api/opui/device/regulatory", api_device_regulatory)
   app.router.add_get("/api/opui/developer/error-log", api_developer_error_log)

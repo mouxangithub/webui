@@ -110,12 +110,12 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       p.put_bool("IsLiveStreaming", False, block=True)
       return {"ok": True, "action": action}
 
-    if action == "driver_view_enable":
-      p.put_bool("IsDriverViewEnabled", True, block=True)
-      return {"ok": True, "action": action}
-
-    if action == "driver_view_disable":
-      p.put_bool("IsDriverViewEnabled", False, block=True)
+    if action in ("driver_view_enable", "driver_view_disable"):
+      from webui.server.bridge.offroad_guard import require_offroad
+      blocked = require_offroad()
+      if blocked:
+        return blocked
+      p.put_bool("IsDriverViewEnabled", action == "driver_view_enable", block=True)
       return {"ok": True, "action": action}
 
     if action == "bookmark":
@@ -166,9 +166,12 @@ def software_status() -> dict[str, Any]:
     is_onroad = False
     is_offroad = True
     try:
-      from openpilot.selfdrive.ui.ui_state import ui_state
-      is_onroad = ui_state.is_onroad()
-      is_offroad = ui_state.is_offroad()
+      import openpilot.cereal.messaging as messaging
+      sm = messaging.SubMaster(["deviceState"], poll="deviceState")
+      sm.update(300)
+      if sm.valid.get("deviceState"):
+        is_onroad = bool(sm["deviceState"].started)
+        is_offroad = not is_onroad
     except Exception:
       pass
 
@@ -230,3 +233,15 @@ def software_status() -> dict[str, Any]:
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
+
+
+def manager_last_error() -> dict[str, Any]:
+  path = "/tmp/manager_last_error.txt"
+  try:
+    if os.path.isfile(path):
+      with open(path, encoding="utf-8", errors="replace") as f:
+        text = f.read(12000)
+      return {"ok": True, "text": text, "has_error": bool(text.strip())}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+  return {"ok": True, "text": "", "has_error": False}

@@ -4,7 +4,7 @@ import {
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
 } from "./panels.js";
 import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, getOverlayFpsHint } from "./onroad.js";
-import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader } from "./home.js";
+import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
@@ -308,6 +308,14 @@ async function loadCurrentPanel() {
   await renderPanel(currentPanel, panelContent, panelTitle);
 }
 
+function showHeadlessBanner() {
+  if (devPc || !window.__OPUI_HEADLESS) return;
+  showBootstrapBanner(
+    tr("No built-in display — use this Web UI as your primary interface. USB: https://10.255.128.121:5080/ or your device IP."),
+    "info",
+  );
+}
+
 function showBootstrapBanner(message, tone = "warn") {
   const el = document.getElementById("bootstrap-banner");
   if (!el) return;
@@ -334,6 +342,7 @@ async function bootstrap() {
   if (bootstrapData) {
     devPc = !!bootstrapData.dev_pc;
     window.__OPUI_DEV_PC = devPc;
+    window.__OPUI_HEADLESS = !!(bootstrapData.headless || bootstrapData.state?.headless);
     applyDesignTokens(bootstrapData);
     const home = bootstrapData.home;
     if (home?.ok) {
@@ -350,6 +359,8 @@ async function bootstrap() {
       showBootstrapBanner(tr("PC preview — some data is mocked and may differ from the device"), "info");
     } else if (st?.ok === false) {
       showBootstrapBanner(`${tr("Driving state unavailable")}: ${st.error || tr("Unknown error")}`, "warn");
+    } else {
+      showHeadlessBanner();
     }
   } else {
     try {
@@ -357,6 +368,7 @@ async function bootstrap() {
       bootstrapData = fallback;
       devPc = !!fallback.dev_pc;
       window.__OPUI_DEV_PC = devPc;
+      window.__OPUI_HEADLESS = !!(fallback.headless || fallback.state?.headless);
       applyDesignTokens(fallback);
       if (fallback.home?.ok) {
         updateHomeScreen(fallback.home);
@@ -436,6 +448,10 @@ function handleState(st) {
   lastStarted = !!st.started;
   if (st.started) cameraPreview = false;
   updateCameraPreviewUi();
+
+  if (!st.started) {
+    applyLiveStartupBlockers(st);
+  }
 }
 
 function setupWebSocket() {
@@ -543,7 +559,14 @@ $("#btn-sidebar-bottom").addEventListener("click", async () => {
     return;
   }
   if (lastStarted) {
-    await apiPost("/api/opui/action/bookmark");
+    const res = await apiPost("/api/opui/action/bookmark");
+    const bottomBtn = document.getElementById("btn-sidebar-bottom");
+    if (res?.ok && bottomBtn) {
+      const saved = tr("Route bookmarked");
+      bottomBtn.title = saved;
+      bottomBtn.setAttribute("aria-label", saved);
+      window.setTimeout(() => updateSidebarMode(true), 2000);
+    }
   }
 });
 

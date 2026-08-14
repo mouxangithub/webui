@@ -39,6 +39,7 @@ export function updateHomeScreen(home) {
   if (descEl) descEl.textContent = home.version_text || "";
 
   renderHomePills(home);
+  renderStartupBlockers(home);
   renderHomeView(home);
 
   const expBanner = document.getElementById("home-exp-banner");
@@ -72,8 +73,56 @@ export async function refreshHomeScreen() {
   showHomeLoading();
   try {
     const home = await apiGet("/api/opui/home");
+    if (home?.headless) {
+      try {
+        const err = await apiGet("/api/opui/system/manager_error");
+        if (err?.ok && err.has_error) {
+          home.manager_error = err.text;
+        }
+      } catch (_) { /* ignore */ }
+    }
     updateHomeScreen(home);
   } catch (_) { /* keep skeleton */ }
+}
+
+function renderStartupBlockers(home) {
+  let el = document.getElementById("home-startup-blockers");
+  const leftCol = document.querySelector(".opui-home-col--left");
+  if (!el && leftCol) {
+    el = document.createElement("div");
+    el.id = "home-startup-blockers";
+    el.className = "opui-home-blockers";
+    leftCol.insertBefore(el, leftCol.firstChild);
+  }
+  if (!el) return;
+
+  const blockers = home.startup_blockers || [];
+  const mgrErr = home.manager_error;
+  if (!blockers.length && !mgrErr) {
+    el.hidden = true;
+    el.innerHTML = "";
+    return;
+  }
+
+  el.hidden = false;
+  let html = "";
+  if (mgrErr) {
+    html += `
+      <div class="opui-setup-card opui-setup-card--danger">
+        <h3 class="opui-setup-title">${escapeHtml(tr("Manager failed to start"))}</h3>
+        <pre class="opui-manager-error">${escapeHtml(mgrErr)}</pre>
+      </div>`;
+  }
+  if (blockers.length) {
+    html += `
+      <div class="opui-setup-card opui-setup-card--warn">
+        <h3 class="opui-setup-title">${escapeHtml(tr("Cannot start driving"))}</h3>
+        <ul class="opui-blocker-list">
+          ${blockers.map((b) => `<li>${escapeHtml(tr(b.message) || b.message)}</li>`).join("")}
+        </ul>
+      </div>`;
+  }
+  el.innerHTML = html;
 }
 
 function renderHomePills(home) {
@@ -188,6 +237,16 @@ export function bindHomeHeader() {
   });
   document.getElementById("home-pill-alerts")?.addEventListener("click", () => {
     setHomeView(homeView === "alerts" ? "home" : "alerts");
+  });
+}
+
+export function applyLiveStartupBlockers(st) {
+  if (!lastHome || !st || st.started) return;
+  updateHomeScreen({
+    ...lastHome,
+    startup_blockers: st.startup_blockers || [],
+    ignition: st.ignition,
+    can_start: st.can_start,
   });
 }
 

@@ -81,8 +81,14 @@ async def ws_opui_handler(request: web.Request) -> web.WebSocketResponse:
       elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.ERROR):
         break
   finally:
+    meta = _meta.pop(ws, None)
+    if meta and meta.get("watch_panel") == "sunnylink":
+      try:
+        from webui.server.bridge.webui_bg_services import sunnylink_panel_watch
+        sunnylink_panel_watch(-1)
+      except Exception:
+        pass
     _connections.discard(ws)
-    _meta.pop(ws, None)
   return ws
 
 
@@ -110,7 +116,18 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
 
   if mtype == "watch_panel":
     panel_id = str(msg.get("panel") or "")
+    old_panel = meta.get("watch_panel")
     meta["watch_panel"] = panel_id or None
+    try:
+      from webui.server.bridge.webui_bg_services import sunnylink_panel_watch
+      if old_panel == "sunnylink" and panel_id != "sunnylink":
+        sunnylink_panel_watch(-1)
+      if panel_id == "sunnylink" and old_panel != "sunnylink":
+        sunnylink_panel_watch(1)
+        from webui.server.bridge.webui_bg_services import maybe_refresh_sunnylink_cache
+        maybe_refresh_sunnylink_cache(force=True)
+    except Exception:
+      pass
     meta["last_panel_hash"] = ""
     meta["last_custom_hash"] = ""
     if panel_id:
@@ -284,6 +301,12 @@ async def ws_broadcast_loop() -> None:
         last_custom_push = now
         watched = {m.get("watch_panel") for m in _meta.values() if m.get("watch_panel")}
         for panel_id in watched:
+          if panel_id == "sunnylink":
+            try:
+              from webui.server.bridge.webui_bg_services import maybe_refresh_sunnylink_cache
+              maybe_refresh_sunnylink_cache()
+            except Exception:
+              pass
           custom = custom_panel_data(panel_id)
           if not custom:
             continue

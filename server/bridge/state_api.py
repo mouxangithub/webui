@@ -113,16 +113,13 @@ def _derive_ui_status(ss, cs, mads_enabled: bool) -> str:
   if not ss.active:
     return "disengaged"
   if mads_enabled:
-    try:
-      from openpilot.selfdrive.ui.sunnypilot.ui_state import MadsSteeringModeOnBrake
-      lat_active = cs.latActive if hasattr(cs, "latActive") else True
-      long_active = cs.cruiseState.enabled if hasattr(cs, "cruiseState") else True
-      if lat_active and not long_active:
-        return "lat_only"
-      if long_active and not lat_active:
-        return "long_only"
-    except Exception:
-      pass
+    lat_active = bool(getattr(cs, "latActive", True))
+    cruise = getattr(cs, "cruiseState", None)
+    long_active = bool(getattr(cruise, "enabled", True)) if cruise is not None else True
+    if lat_active and not long_active:
+      return "lat_only"
+    if long_active and not lat_active:
+      return "long_only"
   return "engaged"
 
 
@@ -151,43 +148,8 @@ def _ui_params() -> dict[str, bool]:
 
 
 def _estimate_alert_height(size: str, text1: str, text2: str, width: int = 1820) -> int:
-  """Match alert_renderer._calculate_dynamic_height when raylib fonts are available."""
-  try:
-    from openpilot.selfdrive.ui.onroad.alert_renderer import (
-      ALERT_FONT_BIG,
-      ALERT_FONT_MEDIUM,
-      ALERT_FONT_SMALL,
-      ALERT_HEIGHTS,
-      ALERT_LINE_SPACING,
-      ALERT_PADDING,
-    )
-    from openpilot.system.ui.lib.application import FontWeight, gui_app
-    from openpilot.system.ui.lib.text_measure import measure_text_cached
-    from openpilot.system.ui.lib.wrap_text import wrap_text
-
-    font_bold = gui_app.font(FontWeight.BOLD)
-    font_regular = gui_app.font(FontWeight.REGULAR)
-    height = 2 * ALERT_PADDING
-    wrap_width = width - 2 * ALERT_PADDING
-
-    if size == "small":
-      lines = wrap_text(font_bold, text1 or "", ALERT_FONT_MEDIUM, wrap_width)
-      line_height = measure_text_cached(font_bold, "A", ALERT_FONT_MEDIUM).y
-      return int(height + len(lines) * line_height)
-    if size == "mid":
-      lines1 = wrap_text(font_bold, text1 or "", ALERT_FONT_BIG, wrap_width)
-      line_height1 = measure_text_cached(font_bold, "A", ALERT_FONT_BIG).y
-      height += int(len(lines1) * line_height1)
-      if text2:
-        lines2 = wrap_text(font_regular, text2, ALERT_FONT_SMALL, wrap_width)
-        line_height2 = measure_text_cached(font_regular, "A", ALERT_FONT_SMALL).y
-        height += int(ALERT_LINE_SPACING + len(lines2) * line_height2)
-      return int(height)
-    if size == "full":
-      return int(ALERT_HEIGHTS.get("full", 1080))
-  except Exception:
-    pass
-
+  """Estimate alert banner height without pyray / gui_app (headless-safe)."""
+  _ = width  # reserved for future wrap-width tuning
   pad = 40
   if size == "small":
     lines = max(1, (len(text1 or "") + 34) // 35)
@@ -216,6 +178,10 @@ def _cruise_speed_raw(cs, ctrl) -> float:
 
 def build_state_from_sm(sm) -> dict[str, Any]:
   global _v_ego_cluster_seen
+  from webui.server.bridge.car_context import get_car_context
+  from webui.server.bridge.headless_util import is_headless_mode
+
+  car_ctx = get_car_context()
   ds = sm["deviceState"]
   ss = sm["selfdriveState"]
   cs = sm["carState"]
@@ -291,13 +257,13 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   personality = str(ss.personality).split(".")[-1].lower() if hasattr(ss, "personality") else ""
 
   experimental_confirmed = False
-  recording_audio = False
-  developer_ui = 0
-  torque_bar = False
+  recording_audio = car_ctx.recording_audio
+  developer_ui = int(car_ctx.developer_ui or 0)
+  torque_bar = car_ctx.torque_bar
   speed_limit_mode = 0
-  turn_signals = False
-  blindspot = False
-  rocket_fuel_enabled = False
+  turn_signals = car_ctx.turn_signals
+  blindspot = car_ctx.blindspot
+  rocket_fuel_enabled = car_ctx.rocket_fuel_enabled
   try:
     from openpilot.common.params import Params
     p = Params()
@@ -305,99 +271,29 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     speed_limit_mode = int(p.get("SpeedLimitMode", return_default=True) or 0)
   except Exception:
     pass
-  try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
-    recording_audio = bool(getattr(ui_state, "recording_audio", False))
-    developer_ui = int(ui_state.developer_ui or 0)
-    torque_bar = bool(getattr(ui_state, "torque_bar", False))
-    turn_signals = bool(getattr(ui_state, "turn_signals", False))
-    blindspot = bool(getattr(ui_state, "blindspot", False))
-    rocket_fuel_enabled = bool(getattr(ui_state, "rocket_fuel", False))
-  except Exception:
-    pass
 
-  has_longitudinal = False
-  alpha_long_available = False
-  has_icbm = False
-  pcm_cruise = False
-  torque_control_allowed = True
-  lateral_jerk_torque = False
-  mads_limited = False
-  enable_bsm = False
-  sla_available = False
-  is_sp_release = False
-  disable_updates = False
-  is_release_branch = False
-  is_development_branch = False
-  custom_model_active = False
+  has_longitudinal = car_ctx.has_longitudinal_control
+  alpha_long_available = car_ctx.alpha_long_available
+  has_icbm = car_ctx.has_icbm
+  pcm_cruise = car_ctx.pcm_cruise
+  torque_control_allowed = car_ctx.torque_control_allowed
+  lateral_jerk_torque = car_ctx.lateral_jerk_torque
+  mads_limited = car_ctx.mads_limited
+  enable_bsm = car_ctx.enable_bsm
+  sla_available = car_ctx.sla_available
+  is_sp_release = car_ctx.is_sp_release
+  disable_updates = car_ctx.disable_updates
+  is_release_branch = car_ctx.is_release_branch
+  is_development_branch = car_ctx.is_development_branch
+  custom_model_active = car_ctx.custom_model_active
   live_lateral_delay = None
-  steer_actuator_delay = None
-  tesla_has_vehicle_bus = False
-  subaru_sng_available = True
-  cp_loaded = False
+  steer_actuator_delay = car_ctx.steer_actuator_delay
+  tesla_has_vehicle_bus = car_ctx.tesla_has_vehicle_bus
+  subaru_sng_available = car_ctx.subaru_sng_available
+  cp_loaded = car_ctx.cp_loaded
   standstill = bool(getattr(cs, "standstill", False))
   standstill_timer_enabled = ui_params["standstill_timer"]
   try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
-    has_longitudinal = bool(ui_state.has_longitudinal_control)
-    has_icbm = bool(getattr(ui_state, "has_icbm", False))
-    if ui_state.CP is not None:
-      cp_loaded = True
-      pcm_cruise = bool(getattr(ui_state.CP, "pcmCruise", False))
-      alpha_long_available = bool(getattr(ui_state.CP, "alphaLongitudinalAvailable", False))
-      try:
-        from opendbc.car.structs import car
-        torque_control_allowed = ui_state.CP.steerControlType != car.CarParams.SteerControlType.angle
-      except Exception:
-        torque_control_allowed = True
-    lateral_jerk_torque = bool(ui_state.params.get_bool("LateralJerkTorqueController"))
-    disable_updates = bool(ui_state.params.get_bool("DisableUpdates"))
-    is_release_branch = bool(ui_state.params.get_bool("IsReleaseSpBranch"))
-    is_development_branch = bool(ui_state.params.get_bool("IsTestedBranch") or ui_state.params.get_bool("IsDevelopmentBranch"))
-    is_sp_release = bool(getattr(ui_state, "is_sp_release", False)) or is_release_branch
-    custom_model_active = ui_state.params.get("ModelManager_ActiveBundle") is not None
-    if ui_state.CP is not None:
-      enable_bsm = bool(getattr(ui_state.CP, "enableBsm", False))
-      steer_actuator_delay = float(getattr(ui_state.CP, "steerActuatorDelay", 0) or 0)
-    brand = ""
-    if ui_state.is_offroad():
-      bundle = ui_state.params.get("CarPlatformBundle")
-      if isinstance(bundle, dict):
-        brand = bundle.get("brand", "") or ""
-    if not brand and ui_state.CP is not None:
-      brand = ui_state.CP.brand or ""
-    if brand == "rivian":
-      mads_limited = True
-    elif brand == "tesla":
-      try:
-        from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP
-        if ui_state.CP_SP is None or not (ui_state.CP_SP.flags & TeslaFlagsSP.HAS_VEHICLE_BUS):
-          mads_limited = True
-        else:
-          tesla_has_vehicle_bus = True
-          screen_button = int(ui_state.params.get("TeslaMadsScreenButton", return_default=True))
-          mads_limited = screen_button == MadsScreenButtonType.OFF
-      except Exception:
-        pass
-    elif brand == "subaru":
-      try:
-        from opendbc.car.subaru.values import CAR, SubaruFlags
-        platform = ""
-        bundle = ui_state.params.get("CarPlatformBundle")
-        if isinstance(bundle, dict):
-          platform = bundle.get("platform", "") or ""
-        if not platform and ui_state.CP is not None:
-          platform = ui_state.CP.carFingerprint or ""
-        if platform and platform in CAR:
-          flags = CAR[platform].flags
-          subaru_sng_available = bool(flags & (SubaruFlags.STOP_AND_GO | SubaruFlags.HYBRID))
-      except Exception:
-        pass
-    sla_disallow_in_release = brand == "tesla" and is_sp_release
-    sla_always_disallow = brand == "rivian"
-    sla_available = (has_longitudinal or has_icbm) and not sla_disallow_in_release and not sla_always_disallow
-    if ui_state.CP is None or ui_state.CP_SP is None:
-      sla_available = False
     if sm.valid.get("liveDelay"):
       live_lateral_delay = float(getattr(sm["liveDelay"], "lateralDelay", 0) or 0)
   except Exception:
@@ -459,9 +355,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
         sp_hud["speed_limit_ahead"] = round(float(getattr(lmd, "speedLimitAhead", 0) or 0) * conv)
         sp_hud["speed_limit_ahead_dist"] = float(getattr(lmd, "speedLimitAheadDistance", 0) or 0)
     try:
-      from openpilot.selfdrive.ui.ui_state import ui_state
-      if getattr(ui_state, "CP_SP", None) is not None:
-        sp_hud["pcm_cruise_speed"] = bool(ui_state.CP_SP.pcmCruiseSpeed)
+      if car_ctx.pcm_cruise_speed is not None:
+        sp_hud["pcm_cruise_speed"] = bool(car_ctx.pcm_cruise_speed)
     except Exception:
       pass
     if sp_hud.get("speed_limit_assist_state") == "preActive":
@@ -473,9 +368,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   dm_arc = None
   try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
     from webui.server.bridge.dm_snapshot import snapshot_dm_arc
-    dm_arc = snapshot_dm_arc(sm, engaged, int(getattr(ui_state, "started_frame", 0) or 0))
+    dm_arc = snapshot_dm_arc(sm, engaged, int(car_ctx.started_frame or 0))
   except Exception:
     pass
 
@@ -505,14 +399,13 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   dev_ui = None
   circular_alert_allowed = False
   try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
     from webui.server.bridge.dev_ui_api import snapshot_dev_ui
     dev_ui = snapshot_dev_ui(sm, is_metric)
     circular_alert_allowed = (
       started
       and alert_size in ("none", "")
       and sm.valid.get("driverStateV2")
-      and sm.recv_frame.get("driverStateV2", 0) > ui_state.started_frame
+      and sm.recv_frame.get("driverStateV2", 0) > int(car_ctx.started_frame or 0)
     )
   except Exception:
     pass
@@ -526,6 +419,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   driver_face = _driver_face(sm)
   confidence_ball = _confidence_ball(sm, ui_status, started)
+
+  try:
+    from webui.server.bridge.startup_blockers import startup_blockers_from_sm
+    gate = startup_blockers_from_sm(sm)
+  except Exception:
+    gate = {"blockers": [], "ignition": False, "can_start": True}
 
   return {
     "ok": True,
@@ -610,6 +509,10 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "circular_alert_allowed": circular_alert_allowed,
     "confidence_ball": confidence_ball,
     "driver_face": driver_face,
+    "headless": is_headless_mode(),
+    "startup_blockers": gate.get("blockers") or [],
+    "ignition": bool(gate.get("ignition")),
+    "can_start": bool(gate.get("can_start", True)),
   }
 
 
@@ -697,9 +600,8 @@ def _torque_utilization(sm: Any, ctrl: Any, cs: Any) -> float:
       lateral_acceleration = actual_la - roll_comp
       max_la = 3.0
       try:
-        from openpilot.selfdrive.ui.ui_state import ui_state
-        if ui_state.CP is not None:
-          max_la = float(ui_state.CP.maxLateralAccel or max_la)
+        from webui.server.bridge.car_context import get_car_context
+        max_la = float(get_car_context().max_lateral_accel or max_la)
       except Exception:
         pass
       if not bool(sm["carControl"].latActive):

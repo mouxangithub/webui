@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from webui.server.bridge.headless_util import is_headless_mode
+
 # Fallback when languages.json is unavailable (codes match openpilot GUI).
 LANGUAGES = [
   ("en", "English"),
@@ -107,6 +109,8 @@ def device_extras() -> dict[str, Any]:
       "driver_camera_available": True,
       "offroad_mode": offroad_mode,
       "dev_pc": True,
+      "headless": False,
+      "driver_view_enabled": False,
     }
   try:
     import openpilot.cereal.messaging as messaging
@@ -145,6 +149,8 @@ def device_extras() -> dict[str, Any]:
       "current_language": lang,
       "driver_camera_available": True,
       "offroad_mode": p.get_bool("OffroadMode"),
+      "headless": is_headless_mode(),
+      "driver_view_enabled": p.get_bool("IsDriverViewEnabled"),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -159,5 +165,36 @@ def set_language(lang_id: str) -> dict[str, Any]:
     from openpilot.common.params import Params
     Params().put("LanguageSetting", lang_id, block=True)
     return {"ok": True, "language": lang_id}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def driver_view_status() -> dict[str, Any]:
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    return {
+      "ok": True,
+      "driver_view_enabled": p.get_bool("IsDriverViewEnabled"),
+      "headless": is_headless_mode(),
+    }
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def set_driver_view(enabled: bool) -> dict[str, Any]:
+  try:
+    from webui.server.bridge.offroad_guard import require_offroad
+    blocked = require_offroad()
+    if blocked:
+      return blocked
+    from openpilot.common.params import Params
+    p = Params()
+    p.put_bool("IsDriverViewEnabled", bool(enabled), block=True)
+    return {
+      "ok": True,
+      "driver_view_enabled": p.get_bool("IsDriverViewEnabled"),
+      "headless": is_headless_mode(),
+    }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}

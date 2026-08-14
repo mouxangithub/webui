@@ -735,6 +735,40 @@ html.opui-portrait-host #opui-viewport {
   min-height: 500px;
 }
 
+.opui-setup-card--warn {
+  border: 2px solid #e6a700;
+  margin-bottom: 24px;
+}
+
+.opui-setup-card--danger {
+  border: 2px solid #db3822;
+  margin-bottom: 24px;
+}
+
+.opui-home-blockers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.opui-blocker-list {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 36px;
+  line-height: 1.45;
+}
+
+.opui-manager-error {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, monospace;
+  opacity: 0.9;
+}
+
 .opui-setup-title {
   font-size: 64px;
   margin: 0 0 32px;

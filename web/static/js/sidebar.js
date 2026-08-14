@@ -163,6 +163,9 @@ export function updateSidebarMode(started) {
   bottomBtn.classList.toggle("opui-sidebar-btn--flag", !!started);
   bottomBtn.classList.toggle("opui-sidebar-btn--home", !started);
   bottomBtn.disabled = !started;
+  const label = started ? tr("Bookmark route") : tr("Home");
+  bottomBtn.title = label;
+  bottomBtn.setAttribute("aria-label", label);
 }
 
 export function updateSidebarRecording(st) {

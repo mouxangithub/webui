@@ -267,6 +267,7 @@ const paramHandlers = {
 export function setGlobalState(st) {
   globalState = st || globalState;
   updateEngagedWidgets();
+  updateDriverViewRow();
   updateToggleCapabilities(st);
   updateCruiseCapabilities(st);
   updateVisualsCapabilities(st);
@@ -1147,6 +1148,49 @@ async function renderDevicePanel(container, data, titleEl, options = {}) {
     }
   }
   renderGenericPanel(container, { ...data, widgets });
+  if (deviceExtrasCache?.headless) {
+    appendDriverViewRow(container, deviceExtrasCache);
+  }
+}
+
+function appendDriverViewRow(container, ex) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--driver-view";
+  const enabled = !!ex.driver_view_enabled;
+  const offroad = globalState.is_offroad !== false;
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-row-label">${escapeHtml(t("Driver camera preview"))}</div>
+      <div class="opui-row-desc opui-muted">${escapeHtml(t("Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled."))}</div>
+    </div>
+    <label class="opui-toggle">
+      <input type="checkbox" ${enabled ? "checked" : ""} ${offroad ? "" : "disabled"} />
+      <span class="opui-toggle-slider"></span>
+    </label>`;
+  const input = row.querySelector("input");
+  input?.addEventListener("change", async () => {
+    if (!globalState.is_offroad) {
+      input.checked = !input.checked;
+      toast(tr("Only available while offroad"));
+      return;
+    }
+    const want = !!input.checked;
+    const res = await apiPost("/api/opui/device/driver_view", { enabled: want });
+    if (!res.ok) {
+      input.checked = !want;
+      toast(res.message ? tr(res.message) : (res.error || t("Failed")));
+      return;
+    }
+    deviceExtrasCache = { ...(deviceExtrasCache || {}), driver_view_enabled: want };
+    toast(want ? t("Driver camera preview enabled") : t("Driver camera preview disabled"));
+  });
+  container.appendChild(row);
+}
+
+function updateDriverViewRow() {
+  const input = document.querySelector(".opui-sp-row--driver-view input");
+  if (!input) return;
+  input.disabled = globalState.is_offroad === false;
 }
 
 function renderAlwaysOffroadRow(active) {

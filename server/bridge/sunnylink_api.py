@@ -41,6 +41,7 @@ def sunnylink_status() -> dict[str, Any]:
   try:
     import openpilot.cereal.messaging as messaging
     from openpilot.common.params import Params
+    from webui.server.bridge.webui_bg_services import sunnylink_tier_from_params
 
     p = Params()
     backup = {"status": "idle", "progress": 0}
@@ -54,34 +55,19 @@ def sunnylink_status() -> dict[str, Any]:
         "version": getattr(bm, "version", "") or "",
       }
 
-    tier = ""
-    tier_color = "#808080"
-    desc = ""
-    is_sponsor = False
-    is_paired = False
-    try:
-      from openpilot.selfdrive.ui.ui_state import ui_state
-      sl = getattr(ui_state, "sunnylink_state", None)
-      if sl:
-        tier_obj = sl.get_sponsor_tier() if hasattr(sl, "get_sponsor_tier") else None
-        tier = (getattr(tier_obj, "name", "") or "").capitalize()
-        is_sponsor = bool(getattr(sl, "is_sponsor", False) or tier)
-        is_paired = bool(sl.is_paired() if hasattr(sl, "is_paired") else False)
-        tier_color = "#FFD500" if is_sponsor else "#808080"
-        desc = "Paired" if is_paired else "Not paired"
-    except Exception:
-      pass
+    sl_info = sunnylink_tier_from_params()
+    dongle_id = p.get("SunnylinkDongleId") or ""
 
     return {
       "ok": True,
       "enabled": p.get_bool("SunnylinkEnabled"),
-      "dongle_id": p.get("SunnylinkDongleId") or "",
-      "paired": is_paired or bool(p.get("SunnylinkDongleId")),
-      "is_sponsor": is_sponsor,
-      "is_paired": is_paired,
-      "tier": tier,
-      "tier_color": tier_color,
-      "description": desc,
+      "dongle_id": dongle_id,
+      "paired": sl_info["is_paired"] or bool(dongle_id),
+      "is_sponsor": sl_info["is_sponsor"],
+      "is_paired": sl_info["is_paired"],
+      "tier": sl_info["tier"],
+      "tier_color": sl_info["tier_color"],
+      "description": sl_info["description"],
       "backup": backup,
       "consent_version": p.get("CompletedSunnylinkConsentVersion") or "",
       "required_consent_version": _consent_version(),
