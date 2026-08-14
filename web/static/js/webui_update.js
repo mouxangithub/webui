@@ -148,14 +148,14 @@ export async function checkWebUiUpdate({ fetchRemote = true, autoPrompt = false 
 
 export function renderWebUiUpdateRow() {
   const row = document.createElement("div");
-  row.className = "opui-sp-row opui-webui-update-row";
+  row.className = "opui-sp-row opui-sp-row--has-action opui-webui-update-row";
   row.id = "webui-update-software-row";
   row.innerHTML = `
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(tr("Web UI"))}</div>
-      <div class="opui-sp-row-desc" id="webui-update-software-desc">${escapeHtml(tr("Loading..."))}</div>
     </div>
-    <button type="button" class="opui-btn" id="webui-update-software-btn">${escapeHtml(tr("CHECK"))}</button>`;
+    <div class="opui-sp-row-value" id="webui-update-software-desc">${escapeHtml(tr("Loading..."))}</div>
+    <button type="button" class="opui-btn opui-btn--action" id="webui-update-software-btn">${escapeHtml(tr("CHECK"))}</button>`;
   row.querySelector("#webui-update-software-btn")?.addEventListener("click", async () => {
     const btn = row.querySelector("#webui-update-software-btn");
     if (btn) {

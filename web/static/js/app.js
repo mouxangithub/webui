@@ -308,12 +308,39 @@ async function loadCurrentPanel() {
   await renderPanel(currentPanel, panelContent, panelTitle);
 }
 
+const HEADLESS_BANNER_KEY = "opui-headless-banner-dismissed";
+
 function showHeadlessBanner() {
   if (devPc || !window.__OPUI_HEADLESS) return;
-  showBootstrapBanner(
-    tr("No built-in display — use this Web UI as your primary interface. USB: https://10.255.128.121:5080/ or your device IP."),
-    "info",
-  );
+  try {
+    if (localStorage.getItem(HEADLESS_BANNER_KEY) === "1") return;
+  } catch {
+    /* ignore */
+  }
+  const el = document.getElementById("bootstrap-banner");
+  if (!el) return;
+  el.hidden = false;
+  el.dataset.tone = "info";
+  el.classList.add("opui-bootstrap-banner--dismissible");
+  el.replaceChildren();
+  const text = document.createElement("span");
+  text.className = "opui-bootstrap-banner-text";
+  text.textContent = tr("No built-in display — use this Web UI as your primary interface.");
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "opui-bootstrap-banner-close";
+  close.setAttribute("aria-label", tr("Close"));
+  close.textContent = "×";
+  close.addEventListener("click", () => {
+    try {
+      localStorage.setItem(HEADLESS_BANNER_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    showBootstrapBanner("");
+    el.classList.remove("opui-bootstrap-banner--dismissible");
+  });
+  el.append(text, close);
 }
 
 function showBootstrapBanner(message, tone = "warn") {
@@ -322,10 +349,13 @@ function showBootstrapBanner(message, tone = "warn") {
   if (!message) {
     el.hidden = true;
     el.textContent = "";
+    el.replaceChildren();
+    el.classList.remove("opui-bootstrap-banner--dismissible");
     return;
   }
   el.hidden = false;
   el.dataset.tone = tone;
+  el.classList.remove("opui-bootstrap-banner--dismissible");
   el.textContent = message;
 }
 

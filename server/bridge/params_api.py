@@ -24,6 +24,12 @@ def _op_params():
 
 # Custom panels with no widget params still need these keys in panel snapshots.
 _CUSTOM_PANEL_PARAMS: dict[str, list[str]] = {
+  "sunnylink": [
+    "SunnylinkEnabled",
+    "EnableSunnylinkUploader",
+    "SunnylinkDongleId",
+    "CompletedSunnylinkConsentVersion",
+  ],
   "osm": [
     "MapdVersion",
     "OsmLocationName",
@@ -68,6 +74,31 @@ def _param_type_name(p, key: str) -> str | None:
   if name:
     return name
   return _param_type_names().get(t)
+
+
+def _infer_param_type_from_widget(wtype: str | None) -> str | None:
+  if wtype == "bool":
+    return "BOOL"
+  if wtype in ("option", "int", "choice"):
+    return "INT"
+  return None
+
+
+def _default_param_value(ptype: str) -> str:
+  return {"BOOL": "0", "INT": "0", "FLOAT": "0"}.get(ptype, "")
+
+
+def _read_param_value_with_fallback(p, key: str, ptype: str) -> str:
+  known = _param_type_name(p, key)
+  if known is not None:
+    return _read_param_value(p, key, known)
+  try:
+    raw = p.get(key)
+    if raw is not None:
+      return _read_param_value(p, key, ptype)
+  except Exception:
+    pass
+  return _default_param_value(ptype)
 
 
 def _serialize_value(val: Any) -> str:
@@ -239,11 +270,12 @@ def panel_values(panel_id: str) -> dict[str, Any]:
 
     ptype = _param_type_name(p, key)
     if ptype is None:
-      widgets_out.append({**w, "available": False, "missing": True})
-      continue
+      ptype = _infer_param_type_from_widget(wtype)
+      if ptype is None:
+        widgets_out.append({**w, "available": False, "missing": True})
+        continue
 
-    raw = p.get(key)
-    val = _read_param_value(p, key, ptype)
+    val = _read_param_value_with_fallback(p, key, ptype)
     values[key] = val
     locked = False
     try:

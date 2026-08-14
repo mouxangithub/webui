@@ -179,16 +179,16 @@ PANELS: list[dict[str, Any]] = [
       {"type": "bool", "param": "IntelligentCruiseButtonManagement", "label": "Intelligent Cruise Button Management (ICBM) (Alpha)",
        "offroad_only": True, "dynamic_desc": "icbm",
        "desc": "When enabled, sunnypilot will attempt to manage the built-in cruise control buttons by emulating button presses for limited longitudinal control."},
-      {"type": "bool", "param": "DynamicExperimentalControl", "label": "Dynamic Experimental Control",
+      {"type": "bool", "param": "DynamicExperimentalControl", "label": "Enable Dynamic Experimental Control",
        "desc": "Let the model decide when to use sunnypilot ACC or sunnypilot End to End Longitudinal.",
        "capability": "longitudinal"},
-      {"type": "bool", "param": "SmartCruiseControlVision", "label": "SCC Vision",
+      {"type": "bool", "param": "SmartCruiseControlVision", "label": "Smart Cruise Control - Vision",
        "desc": "Use vision path predictions to estimate the appropriate speed to drive through turns ahead.",
        "capability": "scc"},
-      {"type": "bool", "param": "SmartCruiseControlMap", "label": "SCC Map",
+      {"type": "bool", "param": "SmartCruiseControlMap", "label": "Smart Cruise Control - Map",
        "desc": "Use map data to estimate the appropriate speed to drive through turns ahead.",
        "capability": "scc"},
-      {"type": "bool", "param": "CustomAccIncrementsEnabled", "label": "Custom ACC Increments",
+      {"type": "bool", "param": "CustomAccIncrementsEnabled", "label": "Custom ACC Speed Increments",
        "offroad_only": True, "dynamic_desc": "custom_acc",
        "desc": "Enable custom Short & Long press increments for cruise speed increase/decrease.",
        "capability": "custom_acc"},
@@ -209,9 +209,9 @@ PANELS: list[dict[str, Any]] = [
        "desc": "Enabling this will display warnings when a vehicle is detected in your blind spot as long as your car has BSM supported."},
       {"type": "bool", "param": "TorqueBar", "label": "Steering Arc",
        "desc": "Display steering arc on the driving screen when lateral control is enabled."},
-      {"type": "bool", "param": "RainbowMode", "label": "Tesla Rainbow Mode",
+      {"type": "bool", "param": "RainbowMode", "label": "Enable Tesla Rainbow Mode",
        "desc": "Display a rainbow effect on the path the model wants to take. It does not affect driving in any way."},
-      {"type": "bool", "param": "StandstillTimer", "label": "Standstill Timer",
+      {"type": "bool", "param": "StandstillTimer", "label": "Enable Standstill Timer",
        "desc": "Show a timer on the HUD when the car is at a standstill."},
       {"type": "bool", "param": "RoadNameToggle", "label": "Display Road Name",
        "desc": "Displays the name of the road the car is traveling on. The OpenStreetMap database of the location must be downloaded to fetch the road name."},
@@ -332,10 +332,17 @@ SUBPANELS: dict[str, dict[str, Any]] = {
     "parent": "steering",
     "widgets": [
       {"type": "option", "param": "AutoLaneChangeTimer", "label": "Auto Lane Change by Blinker",
-       "min": -1, "max": 5, "step": 1, "label_format": "lane_change_timer",
-       "desc": "Set a timer to delay the auto lane change operation when the blinker is used."},
+       "min": -1, "max": 5, "step": 1, "label_format": "lane_change_timer", "layout": "stacked",
+       "desc": "Set a timer to delay the auto lane change operation when the blinker is used. "
+               "No nudge on the steering wheel is required to auto lane change if a timer is set. Default is Nudge. "
+               "Please use caution when using this feature. Only use the blinker when traffic and road conditions permit."},
+      {"type": "separator"},
       {"type": "bool", "param": "AutoLaneChangeBsmDelay", "label": "Auto Lane Change: Delay with Blind Spot",
-       "desc": "Enable a delay timer for seamless lane changes when BSM detects an obstructing vehicle."},
+       "desc": "Toggle to enable a delay timer for seamless lane changes when blind spot monitoring (BSM) "
+               "detects a obstructing vehicle, ensuring safe maneuvering."},
+      {"type": "separator"},
+      {"type": "bool", "param": "RoadEdgeLaneChangeEnabled", "label": "Block Lane Change: Road Edge Detection",
+       "desc": "Blocks the lane change if the model sees a road edge on your signaled side."},
     ],
   },
   "steering__torque": {
@@ -436,13 +443,12 @@ def panel_schema() -> dict[str, Any]:
   for p in PANELS:
     entry = {**p, "icon": PANEL_ICONS.get(p["id"], "")}
     if headless and p.get("id") == "display":
-      entry["title"] = "Web Stream"
       entry["headless_note"] = "Built-in display settings are hidden on headless devices."
       widgets = _filter_widgets(list(entry.get("widgets") or []))
       if headless:
         widgets.insert(0, {
           "type": "html",
-          "html": "<p class=\"opui-muted\">No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.</p>",
+          "i18n_key": "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.",
         })
         widgets.insert(1, {"type": "separator"})
       entry["widgets"] = widgets

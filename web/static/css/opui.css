@@ -95,6 +95,17 @@ html.opui-portrait-host #opui-viewport {
   left: var(--sidebar-w);
   width: calc(100% - var(--sidebar-w));
   background: #000;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#screen-settings {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .opui[data-screen="onroad"] .opui-main,
@@ -819,12 +830,18 @@ html.opui-portrait-host #opui-viewport {
   margin: 10px;
   background: #292929;
   border-radius: 40px;
-  height: calc(100% - 20px);
-  padding: 25px 50px;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: calc(100% - 20px);
+  padding: 25px 50px 120px;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   box-shadow: none;
   border: none;
   touch-action: pan-y;
+  scroll-padding-bottom: 80px;
 }
 
 /* List items — sunnypilot SP list_view (170px rows) */
@@ -887,17 +904,26 @@ html.opui-portrait-host #opui-viewport {
   font-size: 35px;
   cursor: pointer;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .opui-btn.primary { background: #465BEA; }
 .opui-btn.danger { background: #e22c2c; }
 
+/* openpilot list_view: BUTTON 250×100, BORDER_RADIUS 50 — all settings row actions */
+.opui-sp-row .opui-btn:not(.opui-btn--compact):not(.opui-btn--dialog):not(.opui-btn--large):not(.opui-btn--customize),
 .opui-btn--action {
   min-width: 250px;
   width: 250px;
+  max-width: 250px;
   height: 100px;
-  font-size: 35px;
+  min-height: 100px;
   padding: 0 20px;
+  font-size: 35px;
+  font-weight: 500;
+  border-radius: 50px;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .opui-sp-row--stacked {
@@ -1760,6 +1786,12 @@ html.opui-portrait-host #opui-viewport {
   padding: 0 48px 32px;
 }
 
+.opui-panel > .opui-sp-row:last-child,
+.opui-panel > .opui-dual-row:last-child,
+.opui-panel > .opui-wifi-list:last-child {
+  margin-bottom: 48px;
+}
+
 .opui-wifi-status {
   padding: 48px 24px;
   text-align: center;
@@ -2425,12 +2457,40 @@ html.opui-portrait-host #opui-viewport {
 .opui-sp-row-value {
   flex: 0 1 auto;
   max-width: 42%;
-  font-size: 48px;
-  line-height: 1.1;
-  color: #aaa;
+  font-size: 40px;
+  line-height: 1.2;
+  color: #808080;
   text-align: right;
   word-break: break-word;
   margin-right: 8px;
+}
+
+.opui-sp-row--value-right {
+  flex-wrap: nowrap;
+}
+
+.opui-sp-row--value-right .opui-sp-row-text {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.opui-sp-row--value-right .opui-sp-row-value {
+  flex: 1 1 auto;
+  max-width: none;
+  margin-right: 0;
+  margin-left: auto;
+  padding-left: 32px;
+  text-align: right;
+}
+
+.opui-sp-row--has-action .opui-sp-row-value {
+  flex: 1 1 auto;
+  max-width: none;
+  margin-right: 0;
+  margin-left: auto;
+  padding-left: 24px;
+  padding-right: 8px;
+  text-align: right;
 }
 .opui-sp-row-title { font-size: 50px; line-height: 1.1; }
 .opui-sp-row-icon {
@@ -2594,13 +2654,12 @@ html.opui-portrait-host #opui-viewport {
   margin: 0;
   height: 150px;
   border: none;
-  border-radius: 20px;
+  border-radius: 50px;
   background: #393939;
   color: #fff;
   font-size: 44px;
   cursor: pointer;
   text-align: center;
-}
 }
 
 .opui-simple-btn:disabled {
@@ -3253,6 +3312,32 @@ body.opui-modal-open {
   text-align: center;
   pointer-events: none;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+}
+.opui-bootstrap-banner--dismissible {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding-right: 12px;
+}
+.opui-bootstrap-banner-text {
+  flex: 1;
+}
+.opui-bootstrap-banner-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.opui-bootstrap-banner-close:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 .opui-bootstrap-banner[data-tone="info"] {
   background: #1c3a6e;

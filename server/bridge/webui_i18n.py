@@ -204,6 +204,21 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Next": "Next",
     "Back": "Back",
     "Decline, uninstall sunnypilot": "Decline, uninstall sunnypilot",
+    "No built-in display — use this Web UI as your primary interface.": (
+      "No built-in display — use this Web UI as your primary interface."
+    ),
+    "Web Stream": "Web Stream",
+    "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
+      "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI."
+    ),
+    "Driver Camera Preview enabled": "Driver Camera Preview enabled",
+    "Driver Camera Preview disabled": "Driver Camera Preview disabled",
+    "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": (
+      "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled."
+    ),
+    "Enable driver camera preview in Web UI while offroad. Turn off before driving.": (
+      "Enable driver camera preview in Web UI while offroad. Turn off before driving."
+    ),
   },
   "zh-CHS": {
     "Web UI": "Web UI",
@@ -405,6 +420,21 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Next": "下一步",
     "Back": "返回",
     "Decline, uninstall sunnypilot": "拒绝并卸载 sunnypilot",
+    "No built-in display — use this Web UI as your primary interface.": (
+      "无内置屏幕 — 请将此 Web UI 作为主界面。"
+    ),
+    "Web Stream": "Web 直播",
+    "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
+      "无内置屏幕 — 亮度与屏保设置不适用。下方相机流设置供 Web UI 使用。"
+    ),
+    "Driver Camera Preview enabled": "驾驶员摄像头预览已开启",
+    "Driver Camera Preview disabled": "驾驶员摄像头预览已关闭",
+    "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": (
+      "仅离路时可用。启用 camerad 以在 WebUI 中预览驾驶员摄像头。开启后将阻止上路。"
+    ),
+    "Enable driver camera preview in Web UI while offroad. Turn off before driving.": (
+      "离路时在 Web UI 中预览驾驶员摄像头，上路前请关闭。"
+    ),
   },
   "zh-CHT": {
     "Web UI": "Web UI",
@@ -565,12 +595,37 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "SW": "西南",
     "W": "西",
     "NW": "西北",
+    "No built-in display — use this Web UI as your primary interface.": (
+      "無內建螢幕 — 請將此 Web UI 作為主介面。"
+    ),
+    "Web Stream": "Web 直播",
+    "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
+      "無內建螢幕 — 亮度與螢幕保護設定不適用。下方相機串流設定供 Web UI 使用。"
+    ),
+    "Driver Camera Preview enabled": "駕駛員攝影機預覽已開啟",
+    "Driver Camera Preview disabled": "駕駛員攝影機預覽已關閉",
+    "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": (
+      "僅離路時可用。啟用 camerad 以在 WebUI 中預覽駕駛員攝影機。開啟後將阻止上路。"
+    ),
+    "Enable driver camera preview in Web UI while offroad. Turn off before driving.": (
+      "離路時在 Web UI 中預覽駕駛員攝影機，上路前請關閉。"
+    ),
   },
 }
 
 
-def webui_extra_strings(po_code: str) -> dict[str, str]:
-  """Return WebUI-only translations for a .po suffix; falls back to English."""
+def webui_extra_strings(po_code: str, po_strings: dict[str, str] | None = None) -> dict[str, str]:
+  """Return WebUI strings missing from the shared .po catalog (English fallback)."""
+  po_strings = po_strings or {}
   en = _WEBUI_STRINGS.get("en", {})
-  locale = _WEBUI_STRINGS.get(po_code, {})
-  return {**en, **locale}
+  manual = _WEBUI_STRINGS.get(po_code, {})
+  out: dict[str, str] = {}
+  for key, en_val in en.items():
+    if (po_strings.get(key) or "").strip():
+      continue
+    manual_val = (manual.get(key) or "").strip()
+    if manual_val and manual_val != en_val:
+      out[key] = manual[key]
+    else:
+      out[key] = en_val
+  return out

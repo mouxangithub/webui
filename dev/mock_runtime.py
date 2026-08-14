@@ -111,6 +111,9 @@ def _seed_params() -> dict[str, bytes | str]:
     "OffroadMode": b"0",
     "HasAcceptedTerms": b"2",
     "CompletedTrainingVersion": b"0.2.0",
+    "AutoLaneChangeTimer": b"0",
+    "AutoLaneChangeBsmDelay": b"0",
+    "RoadEdgeLaneChangeEnabled": b"0",
   })
   return data
 
@@ -140,7 +143,7 @@ class MockParams:
     if val in ("0", "1") and key not in (
       "LongitudinalPersonality", "DistractionDetectionLevel", "ChevronInfo",
       "DevUIInfo", "SpeedLimitMode", "MadsSteeringMode", "MaxTimeOffroad",
-      "DeviceBootMode",
+      "DeviceBootMode", "AutoLaneChangeTimer",
     ):
       return ParamKeyType.BOOL
     try:

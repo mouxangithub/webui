@@ -46,7 +46,7 @@ def sunnylink_status() -> dict[str, Any]:
     p = Params()
     backup = {"status": "idle", "progress": 0}
     sm = messaging.SubMaster(["backupManagerSP"], poll="backupManagerSP")
-    sm.update(200)
+    sm.update(80)
     if sm.valid.get("backupManagerSP"):
       bm = sm["backupManagerSP"]
       backup = {

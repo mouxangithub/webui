@@ -267,7 +267,6 @@ const paramHandlers = {
 export function setGlobalState(st) {
   globalState = st || globalState;
   updateEngagedWidgets();
-  updateDriverViewRow();
   updateToggleCapabilities(st);
   updateCruiseCapabilities(st);
   updateVisualsCapabilities(st);
@@ -1148,49 +1147,6 @@ async function renderDevicePanel(container, data, titleEl, options = {}) {
     }
   }
   renderGenericPanel(container, { ...data, widgets });
-  if (deviceExtrasCache?.headless) {
-    appendDriverViewRow(container, deviceExtrasCache);
-  }
-}
-
-function appendDriverViewRow(container, ex) {
-  const row = document.createElement("div");
-  row.className = "opui-sp-row opui-sp-row--driver-view";
-  const enabled = !!ex.driver_view_enabled;
-  const offroad = globalState.is_offroad !== false;
-  row.innerHTML = `
-    <div class="opui-sp-row-text">
-      <div class="opui-row-label">${escapeHtml(t("Driver camera preview"))}</div>
-      <div class="opui-row-desc opui-muted">${escapeHtml(t("Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled."))}</div>
-    </div>
-    <label class="opui-toggle">
-      <input type="checkbox" ${enabled ? "checked" : ""} ${offroad ? "" : "disabled"} />
-      <span class="opui-toggle-slider"></span>
-    </label>`;
-  const input = row.querySelector("input");
-  input?.addEventListener("change", async () => {
-    if (!globalState.is_offroad) {
-      input.checked = !input.checked;
-      toast(tr("Only available while offroad"));
-      return;
-    }
-    const want = !!input.checked;
-    const res = await apiPost("/api/opui/device/driver_view", { enabled: want });
-    if (!res.ok) {
-      input.checked = !want;
-      toast(res.message ? tr(res.message) : (res.error || t("Failed")));
-      return;
-    }
-    deviceExtrasCache = { ...(deviceExtrasCache || {}), driver_view_enabled: want };
-    toast(want ? t("Driver camera preview enabled") : t("Driver camera preview disabled"));
-  });
-  container.appendChild(row);
-}
-
-function updateDriverViewRow() {
-  const input = document.querySelector(".opui-sp-row--driver-view input");
-  if (!input) return;
-  input.disabled = globalState.is_offroad === false;
 }
 
 function renderAlwaysOffroadRow(active) {
@@ -1291,7 +1247,12 @@ function renderWidget(w, panelData) {
   if (kind === "html") {
     const block = document.createElement("div");
     block.className = "opui-html-block";
-    block.innerHTML = w.html || "";
+    if (w.i18n_key) {
+      block.classList.add("opui-muted");
+      block.textContent = t(w.i18n_key);
+    } else {
+      block.innerHTML = w.html || "";
+    }
     return block;
   }
 
@@ -1634,6 +1595,7 @@ function renderOptionRow(w, panelData) {
       w.value = String(paramVal);
       if (panelData?.values) panelData.values[w.param] = String(paramVal);
       if (w.param === "OnroadScreenOffBrightness") updateDisplayDependencies(panelData);
+      if (w.param === "AutoLaneChangeTimer") updateLaneChangeSubpanel(globalState);
     }
   };
   minus.disabled = idx <= min;
@@ -1869,9 +1831,7 @@ function renderActionRow(w) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
     </div>
-    <div class="opui-row-actions">
-      <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(t(w.button || "GO"))}</button>
-    </div>`;
+    <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(t(w.button || "GO"))}</button>`;
   if (desc) bindRowExpand(row, { desc });
   const btn = row.querySelector("button");
   if (disabled) {
@@ -2147,7 +2107,7 @@ async function renderNetworkAdvancedPanel(container, data) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Tethering Password"))}</div>
     </div>
-    <button type="button" class="opui-btn">${escapeHtml(t("EDIT"))}</button>`;
+    <button type="button" class="opui-btn opui-btn--action">${escapeHtml(t("EDIT"))}</button>`;
   passRow.querySelector("button")?.addEventListener("click", async () => {
     const password = await showKeyboard({
       title: t("Tethering Password"),
@@ -2182,7 +2142,7 @@ async function renderNetworkAdvancedPanel(container, data) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("APN Setting"))}</div>
     </div>
-    <button type="button" class="opui-btn">${escapeHtml(t("EDIT"))}</button>`;
+    <button type="button" class="opui-btn opui-btn--action">${escapeHtml(t("EDIT"))}</button>`;
   apnRow.querySelector("button")?.addEventListener("click", async () => {
     const apn = await showKeyboard({
       title: `${t("Enter APN")} — ${t("leave blank for automatic configuration")}`,
@@ -2238,7 +2198,7 @@ async function renderNetworkAdvancedPanel(container, data) {
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Hidden Network"))}</div>
     </div>
-    <button type="button" class="opui-btn">${escapeHtml(t("CONNECT"))}</button>`;
+    <button type="button" class="opui-btn opui-btn--action">${escapeHtml(t("CONNECT"))}</button>`;
   hiddenRow.querySelector("button")?.addEventListener("click", async () => {
     const ssid = await showKeyboard({ title: t("Hidden Network"), minLen: 1, maxLen: 64 });
     if (!ssid) return;
@@ -2311,7 +2271,7 @@ async function renderModelsPanel(container, data) {
   }
 
   const pickRow = document.createElement("div");
-  pickRow.className = "opui-sp-row";
+  pickRow.className = "opui-sp-row opui-sp-row--has-action";
   pickRow.dataset.modelsSelect = "1";
   const modelName = m.active_name || formatBundleDisplay(data.values?.ModelManager_ActiveBundle) || "—";
   const modelDesc = !globalState.is_offroad
@@ -2322,7 +2282,7 @@ async function renderModelsPanel(container, data) {
       <div class="opui-sp-row-title">${escapeHtml(t("Current Model"))}</div>
       <div class="opui-sp-row-desc">${escapeHtml(modelDesc)}</div>
     </div>
-    <button type="button" class="opui-btn" ${globalState.is_offroad ? "" : "disabled"}>${escapeHtml(t("SELECT"))}</button>`;
+    <button type="button" class="opui-btn opui-btn--action" ${globalState.is_offroad ? "" : "disabled"}>${escapeHtml(t("SELECT"))}</button>`;
   pickRow.querySelector("button")?.addEventListener("click", async () => {
     if (!globalState.is_offroad) {
       toast(t("Changing model is only allowed while offroad."));
@@ -2375,7 +2335,7 @@ async function renderModelsPanel(container, data) {
     const cancel = document.createElement("div");
     cancel.className = "opui-sp-row";
     cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Cancel Download"))}</div></div>
-      <button type="button" class="opui-btn danger">${escapeHtml(t("Cancel"))}</button>`;
+      <button type="button" class="opui-btn opui-btn--action danger">${escapeHtml(t("Cancel"))}</button>`;
     cancel.querySelector("button")?.addEventListener("click", async () => {
       await apiPost("/api/opui/action/models_cancel_download");
       toast(t("Download cancelled"));
@@ -2728,7 +2688,7 @@ async function renderVehiclePanel(container, data) {
     <div class="opui-sp-row-text">
       <div id="vehicle-platform-title" class="opui-sp-row-title opui-vehicle-title--${statusClass}">${escapeHtml(titleText)}</div>
     </div>
-    <button type="button" id="vehicle-platform-btn" class="opui-btn">${escapeHtml(actionLabel)}</button>`;
+    <button type="button" id="vehicle-platform-btn" class="opui-btn opui-btn--action">${escapeHtml(actionLabel)}</button>`;
   pickRow.querySelector("button")?.addEventListener("click", async () => {
     const latest = await apiGet("/api/opui/vehicle/platforms");
     const hasManual = !!latest.manual;
@@ -2974,7 +2934,7 @@ function renderLanguageRow() {
       <div class="opui-sp-row-title">${escapeHtml(t("Change Language"))}</div>
       ${current ? `<div class="opui-sp-row-desc">${escapeHtml(current.label)}</div>` : ""}
     </div>
-    <button type="button" class="opui-btn">${escapeHtml(t("CHANGE"))}</button>`;
+    <button type="button" class="opui-btn opui-btn--action">${escapeHtml(t("CHANGE"))}</button>`;
   row.querySelector("button")?.addEventListener("click", async () => {
     const ex = deviceExtrasCache || await apiGet("/api/opui/device/extras");
     if (!ex.ok) return;
@@ -3011,7 +2971,7 @@ function renderDriverCameraRow() {
       <div class="opui-sp-row-title">${escapeHtml(t("Driver Camera"))}</div>
       <div class="opui-sp-row-desc">${escapeHtml(t("Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"))}</div>
     </div>
-    <button type="button" class="opui-btn" ${disabled ? "disabled" : ""}>${escapeHtml(t("PREVIEW"))}</button>`;
+    <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(t("PREVIEW"))}</button>`;
   if (!disabled) {
     row.querySelector("button")?.addEventListener("click", () => {
       window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
@@ -3044,7 +3004,7 @@ function createSunnylinkActionRow({ title, desc, buttonText, valueText, valueCol
   return row;
 }
 
-async function sunnylinkConsentFlow() {
+async function sunnylinkConsentFlow(slStatus) {
   while (true) {
     const enable = await showConfirm({
       message: t("sunnylink enables secured remote access to your comma device from anywhere, including settings management, remote monitoring, real-time dashboard, etc."),
@@ -3068,7 +3028,7 @@ function createSunnylinkToggleRow(w, rightValue, disabled, slStatus) {
   if (w.param === "SunnylinkEnabled") {
     extra.onBeforeChange = async (checked) => {
       if (!checked) return true;
-      const ok = await sunnylinkConsentFlow();
+      const ok = await sunnylinkConsentFlow(slStatus);
       if (!ok) return false;
       const version = slStatus?.required_consent_version || "1.0";
       await putParam("CompletedSunnylinkConsentVersion", version);
@@ -3098,15 +3058,9 @@ function createSunnylinkToggleRow(w, rightValue, disabled, slStatus) {
 async function renderSunnylinkPanel(container, data) {
   const gen = beginPanelRender();
   container.innerHTML = "";
-  const sl = await apiGet("/api/opui/sunnylink/status");
-  if (panelRenderStale(gen)) return;
-  const values = data.values || {};
-  const slEnabled = String(values.SunnylinkEnabled) === "1" || values.SunnylinkEnabled === true;
+  const values = { ...(data.values || {}) };
   const offroad = globalState.is_offroad;
-  const dongleId = sl.ok && sl.dongle_id ? sl.dongle_id : t("N/A");
-  const tierName = sl.tier || t("Not Sponsor");
-  const sponsorBtn = sl.is_sponsor ? t("THANKS ♥") : t("SPONSOR");
-  const pairBtn = sl.is_paired ? t("Paired") : t("Not Paired");
+  const slEnabled = paramIsOn(values.SunnylinkEnabled);
   const childDisabled = !slEnabled;
 
   const hdr = document.createElement("div");
@@ -3116,63 +3070,68 @@ async function renderSunnylinkPanel(container, data) {
     <div class="opui-sunnylink-desc opui-sunnylink-desc--green">${escapeHtml(t("For secure backup, restore, and remote configuration"))}</div>
     <div class="opui-sunnylink-desc opui-sunnylink-desc--orange">${escapeHtml(t("Sponsorship isn't required for basic backup/restore"))}<br>${escapeHtml(t("Click the Sponsor button for more details"))}</div>`;
   container.appendChild(hdr);
-
   appendSpSeparator(container);
 
-  container.appendChild(createSunnylinkToggleRow({
+  const slStatusPromise = apiGet("/api/opui/sunnylink/status");
+  const sl = { ok: false, tier: "", tier_color: "#808080", is_sponsor: false, is_paired: false };
+
+  const enabledRow = createSunnylinkToggleRow({
     param: "SunnylinkEnabled",
     label: "Enable sunnylink",
     desc: "This is the master switch, it will allow you to cutoff any sunnylink requests should you want to do that.",
     value: values.SunnylinkEnabled,
     offroad_only: true,
-  }, `${t("Dongle ID")}: ${dongleId}`, !offroad, sl));
-
+  }, `${t("Dongle ID")}: ${values.SunnylinkDongleId || t("N/A")}`, !offroad, sl);
+  enabledRow.dataset.slMaster = "1";
+  container.appendChild(enabledRow);
   appendSpSeparator(container);
 
-  container.appendChild(createSunnylinkActionRow({
+  const sponsorRow = createSunnylinkActionRow({
     title: "Sponsor Status",
     desc: "Become a sponsor of sunnypilot to get early access to sunnylink features when they become available.",
-    buttonText: sponsorBtn,
-    valueText: tierName,
-    valueColor: sl.tier_color || "#808080",
+    buttonText: t("SPONSOR"),
+    valueText: t("Not Sponsor"),
+    valueColor: "#808080",
     disabled: childDisabled,
     onClick: async () => {
       const res = await apiGet("/api/opui/sunnylink/pair?mode=sponsor");
       if (!res.ok) { toast(res.error || t("Failed")); return; }
       await showQrPair({ title: t("Sponsor sunnylink"), url: res.url, qrDataUrl: res.qr_data_url });
     },
-  }));
-
+  });
+  sponsorRow.dataset.slSponsor = "1";
+  container.appendChild(sponsorRow);
   appendSpSeparator(container);
 
-  container.appendChild(createSunnylinkActionRow({
+  const pairRow = createSunnylinkActionRow({
     title: "Pair GitHub Account",
     desc: "Pair your GitHub account to grant your device sponsor benefits, including API access on sunnylink.",
-    buttonText: pairBtn,
+    buttonText: t("Not Paired"),
     disabled: childDisabled,
     onClick: async () => {
       const res = await apiGet("/api/opui/sunnylink/pair?mode=pair");
       if (!res.ok) { toast(res.error || t("Failed")); return; }
       await showQrPair({ title: t("Pair GitHub Account"), url: res.url, qrDataUrl: res.qr_data_url });
     },
-  }));
-
+  });
+  pairRow.dataset.slPair = "1";
+  container.appendChild(pairRow);
   appendSpSeparator(container);
 
-  container.appendChild(createSunnylinkToggleRow({
+  const uploaderRow = createSunnylinkToggleRow({
     param: "EnableSunnylinkUploader",
     label: "Enable sunnylink uploader (infrastructure test)",
     desc: "Enable sunnylink uploader to allow sunnypilot to upload your driving data to sunnypilot servers. (Only for highest tiers, and does NOT bring ANY benefit to you yet. We are just testing data volume.)",
     value: values.EnableSunnylinkUploader,
     offroad_only: false,
-  }, "", childDisabled, sl));
-
+  }, "", childDisabled, sl);
+  uploaderRow.dataset.slUploader = "1";
+  container.appendChild(uploaderRow);
   appendSpSeparator(container);
 
-  if (sl.ok && sl.backup?.status && sl.backup.status !== "idle") {
-    container.appendChild(createProgressRow(`${t("Backup")} ${sl.backup.status}`, sl.backup.progress || 0));
-    appendSpSeparator(container);
-  }
+  const backupSlot = document.createElement("div");
+  backupSlot.dataset.slBackup = "1";
+  container.appendChild(backupSlot);
 
   const dualDisabled = childDisabled || !offroad;
   const dual = createDualButton(
@@ -3199,7 +3158,36 @@ async function renderSunnylinkPanel(container, data) {
       else toast(res.error || t("Failed"));
     },
   );
+  dual.dataset.slDual = "1";
   container.appendChild(dual);
+
+  const applySunnylinkStatus = (status) => {
+    if (!status?.ok) return;
+    const dongleId = status.dongle_id || values.SunnylinkDongleId || t("N/A");
+    const dongleEl = enabledRow.querySelector(".opui-sunnylink-dongle");
+    if (dongleEl) dongleEl.textContent = `${t("Dongle ID")}: ${dongleId}`;
+
+    const sponsorBtn = sponsorRow.querySelector("button");
+    const sponsorVal = sponsorRow.querySelector(".opui-row-value");
+    if (sponsorBtn) sponsorBtn.textContent = status.is_sponsor ? t("THANKS ♥") : t("SPONSOR");
+    if (sponsorVal) {
+      sponsorVal.textContent = status.tier || t("Not Sponsor");
+      sponsorVal.style.color = status.tier_color || "#808080";
+    }
+
+    const pairBtn = pairRow.querySelector("button");
+    if (pairBtn) pairBtn.textContent = status.is_paired ? t("Paired") : t("Not Paired");
+
+    backupSlot.innerHTML = "";
+    if (status.backup?.status && status.backup.status !== "idle") {
+      backupSlot.appendChild(createProgressRow(`${t("Backup")} ${status.backup.status}`, status.backup.progress || 0));
+      appendSpSeparator(backupSlot);
+    }
+  };
+
+  Object.assign(sl, await slStatusPromise);
+  if (panelRenderStale(gen)) return;
+  applySunnylinkStatus(sl);
 }
 
 async function renderFirehosePanel(container) {
@@ -3289,13 +3277,13 @@ async function renderSoftwarePanel(container, data) {
   }
 
   const version = document.createElement("div");
-  version.className = "opui-sp-row opui-sp-row--stacked";
+  version.className = "opui-sp-row opui-sp-row--value-right";
   version.innerHTML = `
     <div class="opui-sp-row-text opui-sp-row-text--expandable">
       <div class="opui-sp-row-title">${escapeHtml(t("Current Version"))}</div>
-      <div class="opui-sp-row-desc" id="software-current-desc">${escapeHtml(sw.current || t("N/A"))}</div>
       <div class="opui-release-notes" id="software-current-notes" hidden></div>
-    </div>`;
+    </div>
+    <div class="opui-sp-row-value" id="software-current-desc">${escapeHtml(sw.current || t("N/A"))}</div>`;
   version.querySelector(".opui-sp-row-text")?.addEventListener("click", (e) => {
     const notes = document.getElementById("software-current-notes");
     if (!notes || !notes.innerHTML.trim()) return;
@@ -3307,13 +3295,13 @@ async function renderSoftwarePanel(container, data) {
   container.appendChild(version);
 
   const download = document.createElement("div");
-  download.className = "opui-sp-row";
+  download.className = "opui-sp-row opui-sp-row--has-action";
   download.innerHTML = `
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Download"))}</div>
-      <div class="opui-sp-row-desc" id="software-download-value"></div>
     </div>
-    <button type="button" class="opui-btn" id="software-download-btn">${escapeHtml(t("CHECK"))}</button>`;
+    <div class="opui-sp-row-value" id="software-download-value"></div>
+    <button type="button" class="opui-btn opui-btn--action" id="software-download-btn">${escapeHtml(t("CHECK"))}</button>`;
   download.querySelector("#software-download-btn")?.addEventListener("click", async () => {
     const btn = download.querySelector("#software-download-btn");
     const label = btn?.textContent?.trim();
@@ -3327,15 +3315,15 @@ async function renderSoftwarePanel(container, data) {
 
   const install = document.createElement("div");
   install.id = "software-install-row";
-  install.className = "opui-sp-row opui-sp-row--stacked";
+  install.className = "opui-sp-row opui-sp-row--has-action";
   install.hidden = true;
   install.innerHTML = `
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t("Install Update"))}</div>
-      <div class="opui-sp-row-desc" id="software-install-value"></div>
       <div class="opui-release-notes" id="software-install-notes" hidden></div>
     </div>
-    <button type="button" class="opui-btn" id="software-install-btn">${escapeHtml(t("INSTALL"))}</button>`;
+    <div class="opui-sp-row-value" id="software-install-value"></div>
+    <button type="button" class="opui-btn opui-btn--action" id="software-install-btn">${escapeHtml(t("INSTALL"))}</button>`;
   install.querySelector("#software-install-btn")?.addEventListener("click", async () => {
     const res = await apiPost("/api/opui/action/updater_install");
     if (res.ok) toast(t("Install Update"));
@@ -3345,13 +3333,13 @@ async function renderSoftwarePanel(container, data) {
 
   if (sw.branches?.length) {
     const branchRow = document.createElement("div");
-    branchRow.className = "opui-sp-row";
+    branchRow.className = "opui-sp-row opui-sp-row--has-action";
     branchRow.innerHTML = `
       <div class="opui-sp-row-text">
         <div class="opui-sp-row-title">${escapeHtml(t("Target Branch"))}</div>
-        <div class="opui-sp-row-desc">${escapeHtml(sw.target_branch || t("N/A"))}</div>
       </div>
-      <button type="button" class="opui-btn">${escapeHtml(t("SELECT"))}</button>`;
+      <div class="opui-sp-row-value">${escapeHtml(sw.target_branch || t("N/A"))}</div>
+      <button type="button" class="opui-btn opui-btn--action">${escapeHtml(t("SELECT"))}</button>`;
     branchRow.querySelector("button")?.addEventListener("click", async () => {
       const idx = Math.max(0, sw.branches.indexOf(sw.target_branch));
       const pick = await showMultiOption({
