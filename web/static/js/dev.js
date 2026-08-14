@@ -1,6 +1,7 @@
 import { apiGet, apiPost } from "./api.js";
 import { opuiWs } from "./ws.js";
 import { tr } from "./i18n.js";
+import { updateHomeScreen } from "./home.js";
 
 const PRESET_I18N = {
   home: "Offroad",
@@ -29,6 +30,7 @@ function syncDevPanelI18n() {
     if (key) btn.textContent = tr(key);
   });
   const map = {
+    "dev-label-headless": "Headless (no display)",
     "dev-label-started": "On road",
     "dev-label-engaged": "Engaged",
     "dev-label-experimental": "Experimental",
@@ -109,6 +111,7 @@ export async function initDevPanel() {
     setCollapsed(!panel.classList.contains("opui-dev-panel--collapsed"));
   });
 
+  const headless = document.getElementById("dev-headless");
   const started = document.getElementById("dev-started");
   const engaged = document.getElementById("dev-engaged");
   const experimental = document.getElementById("dev-experimental");
@@ -119,6 +122,7 @@ export async function initDevPanel() {
 
   function syncFormFromSim(s) {
     if (!s) return;
+    if (headless) headless.checked = !!s.headless;
     if (started) started.checked = !!s.started;
     if (engaged) engaged.checked = !!s.engaged;
     if (experimental) experimental.checked = !!s.experimental_mode;
@@ -132,6 +136,11 @@ export async function initDevPanel() {
     if (!r.ok) return;
     syncFormFromSim(r.simulation);
     if (r.state) dispatchDevState(r.state);
+    if (r.home?.ok) updateHomeScreen(r.home);
+    if (r.simulation?.headless) {
+      window.__OPUI_HEADLESS = true;
+      window.dispatchEvent(new CustomEvent("opui:headless-sim", { detail: { headless: true } }));
+    }
   }
 
   async function pushPatch(patch, { optimistic = true } = {}) {
@@ -145,6 +154,13 @@ export async function initDevPanel() {
     if (r.ok) {
       syncFormFromSim(r.simulation);
       if (r.state) dispatchDevState(r.state);
+      if ("headless" in patch) {
+        window.__OPUI_HEADLESS = !!patch.headless;
+        window.dispatchEvent(new CustomEvent("opui:headless-sim", {
+          detail: { headless: window.__OPUI_HEADLESS },
+        }));
+      }
+      if (r.home?.ok) updateHomeScreen(r.home);
     }
     return r;
   }
@@ -159,6 +175,9 @@ export async function initDevPanel() {
     });
   });
 
+  headless?.addEventListener("change", () => {
+    pushPatch({ headless: headless.checked });
+  });
   started?.addEventListener("change", () => {
     const patch = { started: started.checked };
     if (!started.checked) patch.engaged = false;

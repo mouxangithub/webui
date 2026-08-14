@@ -7,7 +7,11 @@ import os
 
 def is_headless_mode() -> bool:
   if os.environ.get("WEBUI_DEV_PC") == "1":
-    return False
+    try:
+      from webui.dev.mock_runtime import SIM
+      return bool(SIM.get("headless"))
+    except Exception:
+      return False
   try:
     from openpilot.common.hardware import TICI, HARDWARE
     if not TICI:

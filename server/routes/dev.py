@@ -46,10 +46,12 @@ def _apply_sim_patch(body: dict) -> None:
 
 def _dev_response(extra: dict | None = None) -> dict:
   from webui.dev.mock_runtime import SIM
-  from webui.server.bridge.state_hub import get_state, refresh_dev_state
+  from webui.server.bridge.home_api import snapshot_home
+  from webui.server.bridge.state_hub import _set_home, get_state, refresh_dev_state
 
   refresh_dev_state()
-  out = {"ok": True, "simulation": dict(SIM), "state": get_state()}
+  _set_home(snapshot_home())
+  out = {"ok": True, "simulation": dict(SIM), "state": get_state(), "home": snapshot_home()}
   if extra:
     out.update(extra)
   return out

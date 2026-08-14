@@ -73,6 +73,7 @@ SIM: dict[str, Any] = {
   "torque_bar": True,
   "torque_utilization": 0.42,
   "pcm_cruise_speed": False,
+  "headless": False,
 }
 
 
@@ -205,6 +206,8 @@ def _mock_dev_ui(s: dict[str, Any]) -> dict[str, Any]:
 
 
 def snapshot_dev_ui_state() -> dict[str, Any]:
+  from webui.server.bridge.home_api import _mock_startup_blockers
+
   s = SIM
   unit = "km/h" if s["is_metric"] else "mph"
   speed = s["speed_kmh"] if s["is_metric"] else round(s["speed_kmh"] * 0.621371)
@@ -217,6 +220,7 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
   return {
     "ok": True,
     "dev_pc": True,
+    "headless": bool(s.get("headless")),
     "started": s["started"],
     "engaged": s["engaged"],
     "ui_status": s["ui_status"] if s["started"] else "disengaged",
@@ -304,6 +308,9 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
         [114, 92], [112, 86], [108, 78], [104, 72], [96, 70],
       ],
     } if s["started"] else None,
+    "startup_blockers": _mock_startup_blockers(s),
+    "ignition": False,
+    "can_start": not _mock_startup_blockers(s),
   }
 
 

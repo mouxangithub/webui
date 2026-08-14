@@ -109,7 +109,7 @@ def device_extras() -> dict[str, Any]:
       "driver_camera_available": True,
       "offroad_mode": offroad_mode,
       "dev_pc": True,
-      "headless": False,
+      "headless": is_headless_mode(),
       "driver_view_enabled": False,
     }
   try:

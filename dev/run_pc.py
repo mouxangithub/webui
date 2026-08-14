@@ -45,7 +45,7 @@ def main() -> None:
     print("  TLS: 可用 https://<本机局域网IP>:{port}/ 测试 WebCodecs（需信任自签证书）".format(port=args.port))
     print("  HTTP: http://<本机局域网IP>:{port}/ 会自动跳转到 HTTPS".format(port=args.port))
   print()
-  print("  说明: Mock Params + 模拟行车状态；右下角 Dev 面板可切换 HOME/ONROAD/告警。")
+  print("  说明: Mock Params + 模拟行车状态；右下角 Dev 面板可切换离路/行驶、无屏模式等。")
   print("  与车机 1:1 差距见 webui/dev/README.md")
   print()
   run_web_app(app, host=args.host, port=args.port, tls=args.tls)

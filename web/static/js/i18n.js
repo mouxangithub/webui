@@ -56,6 +56,7 @@ const STATIC_UI_KEYS = {
   "Upload driver camera data to improve driver monitoring? You can change this later in Toggles.": "Upload driver camera data to improve driver monitoring? You can change this later in Toggles.",
   "Enable": "Enable",
   "Not now": "Not now",
+  "Headless (no display)": "Headless (no display)",
 };
 
 const STATIC_UI_TITLES = {

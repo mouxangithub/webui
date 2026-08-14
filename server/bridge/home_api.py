@@ -106,5 +106,17 @@ def _mock_home() -> dict[str, Any]:
     "alert_count": len(alerts),
     "offroad_alerts": alerts,
     "dongle_id": "dev-preview-0000",
-    "headless": False,
+    "headless": bool(SIM.get("headless")),
+    "startup_blockers": _mock_startup_blockers(SIM),
   }
+
+
+def _mock_startup_blockers(sim: dict[str, Any]) -> list[dict[str, str]]:
+  if not sim.get("headless") or sim.get("started"):
+    return []
+  return [
+    {
+      "id": "completed_training",
+      "message": "Complete the training guide (Device → Training Guide)",
+    },
+  ]

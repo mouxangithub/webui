@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from openpilot.selfdrive.ui.onroad.model_projection import ModelProjector
-
-_projector: ModelProjector | None = None
+_projector: Any = None
 _overlay_sm = None
 
 _OVERLAY_SERVICES = [
@@ -42,8 +40,10 @@ def _empty(w: int, h: int) -> dict[str, Any]:
   }
 
 
-def _get_projector(width: int, height: int) -> ModelProjector:
+def _get_projector(width: int, height: int):
   global _projector
+  from openpilot.selfdrive.ui.onroad.model_projection import ModelProjector
+
   if _projector is None:
     _projector = ModelProjector(width, height)
   else:

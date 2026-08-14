@@ -545,6 +545,13 @@ window.addEventListener("opui:dev-state", (ev) => {
   if (ev.detail) handleState(ev.detail);
 });
 
+window.addEventListener("opui:headless-sim", (ev) => {
+  window.__OPUI_HEADLESS = !!ev.detail?.headless;
+  if (window.__OPUI_HEADLESS) showHeadlessBanner();
+  else showBootstrapBanner("");
+  if (app.dataset.screen === "settings") loadCurrentPanel();
+});
+
 $("#btn-close-settings").addEventListener("click", () => {
   setScreen(lastStarted ? "onroad" : "home");
 });
