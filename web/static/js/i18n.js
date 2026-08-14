@@ -7,6 +7,13 @@ export function tr(text) {
   return strings[text] || text;
 }
 
+/** Plural helper — keys like "{} ALERT" / "{} ALERTS" with `{}` placeholder. */
+export function trn(singular, plural, count) {
+  const n = Number(count) || 0;
+  const template = tr(n === 1 ? singular : plural);
+  return template.includes("{}") ? template.replace("{}", String(n)) : template;
+}
+
 export function getLanguage() {
   return language;
 }
@@ -29,6 +36,7 @@ const STATIC_UI_KEYS = {
   "webui-update-check": "Check again",
   "webui-update-apply": "Update now",
   "camera-status-text": "Loading camera...",
+  "btn-home-camera-preview-label": "Driving preview",
 };
 
 const STATIC_UI_TITLES = {

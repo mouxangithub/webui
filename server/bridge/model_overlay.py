@@ -117,7 +117,7 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900) -> dict[str, An
   try:
     from webui.server.bridge.state_hub import get_state
     thermal = str(get_state().get("device", {}).get("thermal", "ok")).lower()
-    if thermal in ("overheated", "critical", "danger"):
+    if thermal in ("critical", "danger"):
       return {"ok": True, "skipped": "thermal", "width": width, "height": height, "lanes": [], "path": [], "leads": []}
   except Exception:
     pass
@@ -146,9 +146,6 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900) -> dict[str, An
 
     sm = ui_state.sm
     if not sm.valid.get("modelV2"):
-      return _empty(width, height)
-
-    if sm.recv_frame["modelV2"] < ui_state.started_frame and ui_state.started_frame > 0:
       return _empty(width, height)
 
     arv = _get_augmented_road_view()
@@ -214,6 +211,7 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900) -> dict[str, An
           "glow": [[float(x), float(y)] for x, y in lv.glow],
           "chevron": [[float(x), float(y)] for x, y in lv.chevron],
           "alpha": lv.fill_alpha,
+          "d_rel": float(lead_data.dRel),
           "metrics": _lead_metrics(lead_data, v_ego),
         })
 
@@ -274,19 +272,59 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900) -> dict[str, An
     return out
 
 
+def _mock_lane_polygon(cx: float, w: float, h: float, offset: float, half_width: float) -> list[list[float]]:
+  """Perspective lane strip for PC preview."""
+  top_y = h * 0.28
+  bot_y = h * 0.96
+  top_scale = 0.35
+  bot_scale = 1.0
+  top_cx = cx + offset * w * top_scale
+  bot_cx = cx + offset * w * bot_scale
+  tw = half_width * w * top_scale
+  bw = half_width * w * bot_scale
+  return [
+    [bot_cx - bw, bot_y], [bot_cx + bw, bot_y],
+    [top_cx + tw, top_y], [top_cx - tw, top_y],
+  ]
+
+
 def _mock_overlay(w: int, h: int) -> dict[str, Any]:
   """Perspective lane curves for PC preview."""
   cx = w * 0.5
   lanes = []
-  for offset, prob in [(-0.12, 0.85), (-0.04, 0.9), (0.04, 0.9), (0.12, 0.85)]:
-    center = [[cx + offset * w * (1 - t / 100) * 0.8, h * (1 - t / 100)] for t in range(0, 101, 4)]
-    lanes.append({"prob": prob, "polygon": [], "center": center})
+  for offset, prob, hw in [(-0.14, 0.85, 0.045), (-0.05, 0.9, 0.04), (0.05, 0.9, 0.04), (0.14, 0.85, 0.045)]:
+    poly = _mock_lane_polygon(cx, w, h, offset, hw)
+    lanes.append({
+      "prob": prob,
+      "polygon": poly,
+      "center": [[(poly[0][0] + poly[1][0]) * 0.25 + (poly[2][0] + poly[3][0]) * 0.25, y]
+                 for y in [h * 0.96, h * 0.72, h * 0.48, h * 0.28]],
+    })
 
-  path = [[cx, h * 0.95], [cx, h * 0.55], [cx, h * 0.25]]
-  path_poly = [
-    [cx - 40, h * 0.95], [cx + 40, h * 0.95],
-    [cx + 20, h * 0.25], [cx - 20, h * 0.25],
+  path_poly = _mock_lane_polygon(cx, w, h, 0.0, 0.055)
+  path = [
+    [(path_poly[0][0] + path_poly[1][0]) / 2, path_poly[0][1]],
+    [(path_poly[2][0] + path_poly[3][0]) / 2, (path_poly[0][1] + path_poly[2][1]) / 2],
+    [(path_poly[2][0] + path_poly[3][0]) / 2, path_poly[2][1]],
   ]
+  lead_cx = cx + w * 0.02
+  lead_y = h * 0.44
+  lead_s = w * 0.038
+  mock_lead = {
+    "glow": [
+      [lead_cx - lead_s * 1.6, lead_y + lead_s],
+      [lead_cx, lead_y - lead_s * 1.2],
+      [lead_cx + lead_s * 1.6, lead_y + lead_s],
+    ],
+    "chevron": [
+      [lead_cx - lead_s, lead_y + lead_s * 0.55],
+      [lead_cx, lead_y - lead_s * 0.75],
+      [lead_cx + lead_s, lead_y + lead_s * 0.55],
+    ],
+    "alpha": 210,
+    "d_rel": 28.5,
+    "metrics": ["28m", "-2.1"],
+  }
   return {
     "ok": True,
     "width": w,
@@ -295,9 +333,9 @@ def _mock_overlay(w: int, h: int) -> dict[str, Any]:
     "edges": [],
     "path": path,
     "path_polygon": path_poly,
-    "leads": [],
+    "leads": [mock_lead],
     "experimental": True,
-    "rainbow": True,
+    "rainbow": False,
     "allow_throttle": True,
     "path_blend": 1.0,
     "path_gradient": [

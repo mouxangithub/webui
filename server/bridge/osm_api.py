@@ -9,9 +9,63 @@ import time
 from pathlib import Path
 from typing import Any
 
+_DATA_DIR = Path(__file__).resolve().parent / "data"
+_CACHE_DIR = _DATA_DIR / "cache"
 _SIZE_CACHE: dict[str, Any] = {"ts": 0.0, "size_mb": 0.0, "computing": False}
 _SIZE_TTL = 20.0
 _REGIONS_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def _bundled_regions(region_type: str) -> dict[str, Any] | None:
+  key = region_type or "Country"
+  fname = "osm_countries.json" if key == "Country" else "osm_us_states.json"
+  path = _DATA_DIR / fname
+  if not path.is_file():
+    return None
+  try:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if key == "Country":
+      countries = sorted(
+        [{"name": k, "title": v.get("full_name", k)} for k, v in raw.items()],
+        key=lambda c: c["title"],
+      )
+      return {"ok": True, "region_type": "Country", "countries": countries, "bundled": True, "full": len(countries) >= 150}
+    states = sorted(
+      [{"name": k, "title": v.get("full_name", k)} for k, v in raw.items() if k != "All"],
+      key=lambda s: s["title"],
+    )
+    states.insert(0, {"name": "All", "title": raw.get("All", {}).get("full_name", "All states (~6.0 GB)")})
+    return {"ok": True, "region_type": "State", "states": states, "bundled": True, "full": len(states) >= 50}
+  except Exception:
+    return None
+
+
+def _disk_cache_path(region_type: str) -> Path:
+  key = (region_type or "Country").lower()
+  return _CACHE_DIR / f"osm_{key}_regions.json"
+
+
+def _load_disk_cache(region_type: str) -> dict[str, Any] | None:
+  path = _disk_cache_path(region_type)
+  if not path.is_file():
+    return None
+  try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("ok"):
+      data["cached"] = True
+      return data
+  except Exception:
+    pass
+  return None
+
+
+def _save_disk_cache(region_type: str, data: dict[str, Any]) -> None:
+  try:
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {k: v for k, v in data.items() if k not in ("bundled", "cached", "full")}
+    _disk_cache_path(region_type).write_text(json.dumps(payload), encoding="utf-8")
+  except Exception:
+    pass
 
 
 def _shm_params():
@@ -120,8 +174,23 @@ def osm_fetch_regions(region_type: str = "Country") -> dict[str, Any]:
       states.insert(0, {"name": "All", "title": "All states (~6.0 GB)"})
       data = {"ok": True, "region_type": "State", "states": states}
     _REGIONS_CACHE[key] = data
+    _save_disk_cache(key, data)
     return data
   except Exception as exc:
+    if key in _REGIONS_CACHE:
+      return _REGIONS_CACHE[key]
+    cached = _load_disk_cache(key)
+    if cached:
+      _REGIONS_CACHE[key] = cached
+      return cached
+    bundled = _bundled_regions(key)
+    if bundled:
+      _REGIONS_CACHE[key] = bundled
+      return bundled
+    if os.environ.get("WEBUI_DEV_PC") == "1":
+      data = _mock_regions(key)
+      _REGIONS_CACHE[key] = data
+      return data
     return {"ok": False, "error": str(exc)}
 
 

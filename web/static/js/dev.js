@@ -2,11 +2,32 @@ import { apiGet, apiPost } from "./api.js";
 import { opuiWs } from "./ws.js";
 import { tr } from "./i18n.js";
 
+const PRESET_I18N = {
+  home: "Offroad",
+  onroad_engaged: "On road · Engaged",
+  onroad_disengaged: "On road · Disengaged",
+  lat_only: "Lateral only",
+  alert_critical: "Critical alert",
+  e2e_green: "E2E green",
+  standstill_timer: "Standstill timer",
+  long_only: "Longitudinal only",
+  alert_full: "Full-screen alert",
+  home_update: "Home · Update",
+  home_alerts: "Home · Alerts",
+  confidence_low: "Confidence · low",
+  confidence_high: "Confidence · high",
+  onroad_overlay: "On road · overlay",
+};
+
 function syncDevPanelI18n() {
   const title = document.getElementById("dev-panel-title");
   if (title) title.textContent = tr("PC Dev simulation");
   const overrideBtn = document.getElementById("dev-preset-override");
   if (overrideBtn) overrideBtn.textContent = tr("Override");
+  document.querySelectorAll("[data-preset]").forEach((btn) => {
+    const key = PRESET_I18N[btn.dataset.preset];
+    if (key) btn.textContent = tr(key);
+  });
   const map = {
     "dev-label-started": "On road",
     "dev-label-engaged": "Engaged",
@@ -64,6 +85,29 @@ export async function initDevPanel() {
   panel.hidden = false;
   syncDevPanelI18n();
   window.addEventListener("opui:language-changed", syncDevPanelI18n);
+
+  const toggle = document.getElementById("dev-panel-toggle");
+  const COLLAPSE_KEY = "opui-dev-panel-collapsed";
+
+  const setCollapsed = (collapsed) => {
+    panel.classList.toggle("opui-dev-panel--collapsed", collapsed);
+    toggle?.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    try {
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  try {
+    setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
+  } catch {
+    setCollapsed(false);
+  }
+
+  toggle?.addEventListener("click", () => {
+    setCollapsed(!panel.classList.contains("opui-dev-panel--collapsed"));
+  });
 
   const started = document.getElementById("dev-started");
   const engaged = document.getElementById("dev-engaged");

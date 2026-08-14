@@ -37,6 +37,7 @@ from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.home_api import snapshot_home
+from webui.server.bridge.onboarding_api import accept_terms, complete_training, onboarding_status
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.webui_update_api import apply_webui_update, dismiss_webui_update, snapshot_webui_update
 from webui.server.bridge.developer_api import developer_error_log
@@ -350,6 +351,18 @@ async def api_home(_request: web.Request) -> web.Response:
   return json_response(snapshot_home())
 
 
+async def api_onboarding(_request: web.Request) -> web.Response:
+  return json_response(onboarding_status())
+
+
+async def api_onboarding_accept(_request: web.Request) -> web.Response:
+  return json_response(accept_terms())
+
+
+async def api_onboarding_complete(_request: web.Request) -> web.Response:
+  return json_response(complete_training())
+
+
 async def api_i18n(_request: web.Request) -> web.Response:
   return json_response(snapshot_i18n())
 
@@ -386,6 +399,9 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/bootstrap", api_bootstrap)
   app.router.add_get("/api/opui/state", api_state)
   app.router.add_get("/api/opui/home", api_home)
+  app.router.add_get("/api/opui/onboarding", api_onboarding)
+  app.router.add_put("/api/opui/onboarding/accept_terms", api_onboarding_accept)
+  app.router.add_put("/api/opui/onboarding/complete", api_onboarding_complete)
   app.router.add_get("/api/opui/i18n", api_i18n)
   app.router.add_get("/api/opui/panels", api_panels_schema)
   app.router.add_get("/api/opui/panels/{panel_id}", api_panel_get)

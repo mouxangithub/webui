@@ -111,6 +111,42 @@ export function showConfirm(opts) {
   });
 }
 
+export function showQrPair(opts = {}) {
+  const { title = tr("Scan QR code"), url = "", qrDataUrl = "" } = opts;
+  return new Promise((resolve) => {
+    const root = document.getElementById("modal-qr");
+    const titleEl = document.getElementById("modal-qr-title");
+    const img = document.getElementById("modal-qr-img");
+    const hint = document.getElementById("modal-qr-hint");
+    const openBtn = document.getElementById("modal-qr-open");
+    const closeBtn = document.getElementById("modal-qr-close");
+    if (!root || !img) {
+      if (url) window.open(url, "_blank", "noopener");
+      resolve(true);
+      return;
+    }
+    if (titleEl) titleEl.textContent = title;
+    if (hint) hint.textContent = url;
+    img.src = qrDataUrl || "";
+    img.hidden = !qrDataUrl;
+    if (openBtn) openBtn.textContent = tr("Open link");
+    if (closeBtn) closeBtn.textContent = tr("Close");
+    const finish = () => {
+      popModal(root);
+      openBtn?.removeEventListener("click", onOpen);
+      closeBtn?.removeEventListener("click", onClose);
+      resolve(true);
+    };
+    const onOpen = () => {
+      if (url) window.open(url, "_blank", "noopener");
+    };
+    const onClose = () => finish();
+    openBtn?.addEventListener("click", onOpen);
+    closeBtn?.addEventListener("click", onClose, { once: true });
+    pushModal(root, onClose);
+  });
+}
+
 export function showKeyboard(opts = {}) {
   const {
     title = "Enter text",

@@ -15,10 +15,18 @@ export function setWebCodecsPreference(mode) {
   localStorage.setItem(WEBCODECS_PREF_KEY, mode);
 }
 
+export function webCodecsCapability() {
+  const secureContext = typeof window !== "undefined" && window.isSecureContext;
+  const videoDecoder = typeof VideoDecoder !== "undefined";
+  const trackGenerator = typeof MediaStreamTrackGenerator !== "undefined";
+  const encodedStreams = typeof RTCRtpReceiver !== "undefined"
+    && typeof RTCRtpReceiver.prototype?.createEncodedStreams === "function";
+  return { secureContext, videoDecoder, trackGenerator, encodedStreams };
+}
+
 export function webCodecsCapable() {
-  return typeof VideoDecoder !== "undefined"
-    && typeof MediaStreamTrackGenerator !== "undefined"
-    && typeof RTCRtpReceiver !== "undefined";
+  const c = webCodecsCapability();
+  return c.secureContext && c.videoDecoder && c.trackGenerator && c.encodedStreams;
 }
 
 export function getStreamDecodePath() {

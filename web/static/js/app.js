@@ -10,8 +10,12 @@ import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, drawModelOverlay, setModelOverlayEnabled } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
+import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
 import { opuiWs } from "./ws.js";
+import { clientToOpui } from "./opui_coords.js";
+
+export { clientToOpui };
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -46,7 +50,10 @@ function applyDesignTokens(tokens) {
   if (d.sidebar_width) root.style.setProperty("--sidebar-w", `${d.sidebar_width}px`);
   if (d.onroad_sidebar_width) root.style.setProperty("--onroad-sidebar-w", `${d.onroad_sidebar_width}px`);
   if (d.border_size) root.style.setProperty("--border-w", `${d.border_size}px`);
-  if (d.border_roundness != null) root.style.setProperty("--border-roundness", String(d.border_roundness));
+  if (d.border_roundness != null) {
+    root.style.setProperty("--border-roundness", String(d.border_roundness));
+    root.style.setProperty("--border-r", `calc(min(100cqw, 100cqh) * ${d.border_roundness})`);
+  }
   if (c.engaged) root.style.setProperty("--engaged", c.engaged);
   if (c.disengaged) root.style.setProperty("--disengaged", c.disengaged);
   if (c.override) root.style.setProperty("--override", c.override);
@@ -468,6 +475,9 @@ function setupWebSocket() {
     if (app.dataset.screen === "settings") notifyPanelWatch(currentPanel);
     syncModelOverlayWatch();
   });
+  opuiWs.on("close", () => {
+    if (app.dataset.screen === "onroad") syncModelOverlayWatch();
+  });
 }
 
 setSubpanelNavigator((panelId) => {
@@ -557,6 +567,7 @@ bindExperimentalButton();
 bindDriverCameraDialog();
 bindDmArcClick();
 bindHomeHeader();
+bindOnboardingDialog();
 initModelCanvas();
 applySidebarAssets();
 setupWebSocket();
@@ -565,6 +576,7 @@ bootstrap().then(() => {
   initDevPanel();
   initWebUiUpdate();
   refreshWebUiUpdateI18n();
+  initOnboarding();
   fitOpuiScale();
   prewarmWebrtc();
   const refit = () => {

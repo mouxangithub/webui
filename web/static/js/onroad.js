@@ -3,6 +3,7 @@ import { tr, syncDriverCamUi } from "./i18n.js";
 import { updateSpHud } from "./hud_sp.js";
 import { updateDevUi } from "./hud_dev.js";
 import { updateCircularAlert } from "./hud_circular.js";
+import { updateConfidenceBall } from "./hud_confidence.js";
 import { updateTorqueBar } from "./hud_torque.js";
 import {
   startRoadStream as startRoadWebrtc,
@@ -18,9 +19,11 @@ import {
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
 
-/** ~3s hold at ~20Hz state push (matches hud_renderer SP icbm_active_counter). */
-let icbmHoldTicks = 0;
-const ICBM_HOLD_TICKS = 60;
+/** ICBM cluster speed display hold — 3s wall clock (matches hud_renderer SP). */
+let icbmHoldUntil = 0;
+const ICBM_HOLD_MS = 3000;
+
+let bottomFadeFiltered = 0;
 
 let expHeldMode = null;
 let expHoldUntil = 0;
@@ -66,10 +69,10 @@ function applyCruiseStyle(st) {
     && Math.round(st.set_speed) !== Math.round(cluster);
 
   if (!pcmCruise && clusterMismatch && st.car_control_enabled) {
-    icbmHoldTicks = ICBM_HOLD_TICKS;
-  } else if (icbmHoldTicks > 0) {
-    icbmHoldTicks -= 1;
+    icbmHoldUntil = performance.now() + ICBM_HOLD_MS;
   }
+
+  const showIcbm = performance.now() < icbmHoldUntil;
 
   cruise.className = "opui-hud-cruise";
   if (hasSet) cruise.classList.add("is-set");
@@ -81,9 +84,18 @@ function applyCruiseStyle(st) {
   }
 
   if (cruiseMax) {
-    const showIcbm = icbmHoldTicks > 0;
     cruiseMax.classList.toggle("is-icbm", showIcbm);
     cruiseMax.textContent = showIcbm ? String(Math.round(cluster)) : tr("MAX");
+  }
+}
+
+function applyCruiseRadius() {
+  const cruise = document.getElementById("hud-set-speed");
+  if (!cruise || cruise.hidden) return;
+  const w = cruise.offsetWidth;
+  const h = cruise.offsetHeight;
+  if (w > 0 && h > 0) {
+    cruise.style.borderRadius = `${Math.round(Math.min(w, h) * 0.35)}px`;
   }
 }
 
@@ -110,7 +122,19 @@ function applyExperimentalButton(st) {
     expHoldUntil = 0;
   }
   expIcon.src = mode ? EXP_MODE_ICON : EXP_WHEEL_ICON;
-  expBtn.classList.toggle("is-pressed", !engageable || expBtn.matches(":active"));
+  const pressed = !engageable || expBtn.matches(":active");
+  expBtn.classList.toggle("is-pressed", pressed);
+  expBtn.classList.toggle("is-not-engageable", !engageable);
+}
+
+function updateCameraBottomFade(st) {
+  const fade = document.getElementById("camera-bottom-fade");
+  if (!fade) return;
+  const engaged = !!st.started && st.ui_status !== "disengaged";
+  const target = engaged && !!st.torque_bar ? 1 : 0;
+  const k = 1 - Math.exp(-1 / (20 * 0.1));
+  bottomFadeFiltered += (target - bottomFadeFiltered) * k;
+  fade.style.opacity = String(Math.max(0, Math.min(1, bottomFadeFiltered)));
 }
 
 export function updateOnroadHud(st) {
@@ -167,6 +191,7 @@ export function updateOnroadHud(st) {
   }
 
   applyCruiseStyle(st);
+  applyCruiseRadius();
   applyExperimentalButton(st);
 
   if (border) {
@@ -192,6 +217,7 @@ export function updateOnroadHud(st) {
       else if (size === "small") alertBar.classList.add("opui-alert--small");
       else alertBar.classList.add("opui-alert--mid");
       const heightPx = Number(st.alert?.height_px);
+      alertBar.classList.toggle("opui-alert--dynamic", heightPx > 0);
       if (heightPx > 0) {
         alertBar.style.minHeight = `${heightPx}px`;
       } else {
@@ -235,7 +261,9 @@ export function updateOnroadHud(st) {
   updateSpHud(st);
   updateDevUi(st);
   updateCircularAlert(st);
+  updateConfidenceBall(st);
   updateTorqueBar(st, Number(st.developer_ui) || 0);
+  updateCameraBottomFade(st);
   updateDriverCameraOverlay(st);
 }
 

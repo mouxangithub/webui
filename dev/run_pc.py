@@ -20,6 +20,7 @@ def main() -> None:
   parser = argparse.ArgumentParser(description="op Web UI PC 开发预览服务")
   parser.add_argument("--port", type=int, default=5080)
   parser.add_argument("--host", type=str, default="127.0.0.1")
+  parser.add_argument("--tls", action="store_true", help="HTTPS (for WebCodecs over LAN IP testing)")
   args = parser.parse_args()
 
   # Install mocks before any webui.server import
@@ -32,18 +33,21 @@ def main() -> None:
   os.environ.setdefault("OPENPILOT_ROOT", op_root)
   ensure_runtime()
 
-  from aiohttp import web
   from webui.server.app_factory import create_app
+  from webui.server.run_server import run_web_app
 
   app = create_app()
 
+  scheme = "https" if args.tls else "http"
   print()
-  print(f"  op Web UI PC 预览: http://{args.host}:{args.port}/")
+  print(f"  op Web UI PC 预览: {scheme}://{args.host}:{args.port}/")
+  if args.tls:
+    print("  TLS: 可用 https://<本机局域网IP>:{port}/ 测试 WebCodecs（需信任自签证书）".format(port=args.port))
   print()
   print("  说明: Mock Params + 模拟行车状态；右下角 Dev 面板可切换 HOME/ONROAD/告警。")
   print("  与车机 1:1 差距见 webui/dev/README.md")
   print()
-  web.run_app(app, host=args.host, port=args.port)
+  run_web_app(app, host=args.host, port=args.port, tls=args.tls)
 
 
 if __name__ == "__main__":

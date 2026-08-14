@@ -128,7 +128,7 @@ function maybeToastDowngrade(reason) {
 }
 
 function updateOverlayPolicy() {
-  const allow = !thermalHot && !forcedLowReason && effectiveQuality !== "low"
+  const allow = !thermalHot && !forcedLowReason
     && !document.hidden && !videoPausedByPolicy;
   if (allow === overlayAllowed) return;
   overlayAllowed = allow;

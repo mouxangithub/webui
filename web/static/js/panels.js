@@ -2,12 +2,12 @@ import { apiGet, apiPost, apiPut, toast } from "./api.js";
 import { tr } from "./i18n.js";
 import { getQualityPreference, setQualityPreference, QUALITY_LEVELS } from "./webrtc_stream_adaptive.js";
 import {
-  getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, getStreamDecodePath,
+  getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, webCodecsCapability, getStreamDecodePath,
 } from "./webrtc_webcodecs.js";
 import { renderWebUiUpdateRow, fetchWebUiUpdate, syncWebUiUpdateRow } from "./webui_update.js";
 import { opuiWs } from "./ws.js";
 import {
-  showConfirm, showKeyboard, showTree, showHtml, showMultiOption,
+  showConfirm, showKeyboard, showTree, showHtml, showMultiOption, showQrPair,
   createSpToggle, createProgressRow, createDualButton, bindRowExpand,
 } from "./components.js";
 
@@ -1927,13 +1927,15 @@ async function renderNetworkPanel(container, data) {
   container.appendChild(list);
 
   const asset = (rel) => `/api/opui/assets/${rel.replace(/^\//, "")}`;
-  const strengthIcon = (strength) => {
-    const level = Math.max(0, Math.min(3, Math.round((strength || 0) / 33)));
+  const strengthIcon = (strength, secured) => {
+    if (secured && strength <= 0) {
+      return asset("icons_mici/settings/network/wifi_strength_slash.png");
+    }
+    const level = Math.max(0, Math.min(2, Math.floor((strength || 0) / 34)));
     const names = [
-      "selfdrive/assets/icons/wifi_strength_low.png",
-      "selfdrive/assets/icons/wifi_strength_medium.png",
-      "selfdrive/assets/icons/wifi_strength_high.png",
-      "selfdrive/assets/icons/wifi_strength_full.png",
+      "icons_mici/settings/network/wifi_strength_low.png",
+      "icons_mici/settings/network/wifi_strength_medium.png",
+      "icons_mici/settings/network/wifi_strength_full.png",
     ];
     return asset(names[level]);
   };
@@ -1992,7 +1994,7 @@ async function renderNetworkPanel(container, data) {
       }
       const signal = document.createElement("img");
       signal.className = "opui-wifi-icon opui-wifi-signal";
-      signal.src = strengthIcon(n.strength);
+      signal.src = strengthIcon(n.strength, n.security > 0);
       signal.alt = "";
       meta.appendChild(signal);
       item.append(ssidBtn, meta);
@@ -2572,6 +2574,11 @@ async function pickOsmRegion(regionType) {
     toast(regions.error || "Failed");
     return;
   }
+  if (regions.bundled) {
+    toast(t(regions.full ? "Using offline region list" : "Using offline region list (partial)"));
+  } else if (regions.cached) {
+    toast(t("Using cached region list"));
+  }
 
   if (regionType === "Country") {
     const folders = [{
@@ -2738,30 +2745,37 @@ const STREAM_QUALITY_LABELS = {
 
 function renderStreamPreviewQualityRow(w) {
   const row = document.createElement("div");
-  row.className = "opui-sp-block";
+  row.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--segmented opui-stream-settings-block";
   const cur = getQualityPreference();
-  row.innerHTML = `
-    <div class="opui-sp-row-text" style="margin-bottom:16px">
-      <div class="opui-sp-row-title">${escapeHtml(t("Preview quality"))}</div>
-      ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc))}</div>` : ""}
-    </div>
-    <div class="opui-multi-grid" role="group" aria-label="${escapeHtml(t("Preview quality"))}"></div>`;
-  const grid = row.querySelector(".opui-multi-grid");
+
+  const text = document.createElement("div");
+  text.className = "opui-sp-row-text";
+  text.innerHTML = `
+    <div class="opui-sp-row-title">${escapeHtml(t("Preview quality"))}</div>
+    ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc))}</div>` : ""}`;
+
+  const group = document.createElement("div");
+  group.className = "opui-multi-btn-group opui-multi-btn-group--stream-quality";
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", t("Preview quality"));
+
   for (const level of QUALITY_LEVELS) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `opui-multi-opt${level === cur ? " selected" : ""}`;
+    btn.classList.toggle("selected", level === cur);
     btn.textContent = t(STREAM_QUALITY_LABELS[level] || level);
     btn.addEventListener("click", async () => {
       setQualityPreference(level);
-      grid.querySelectorAll(".opui-multi-opt").forEach((el) => el.classList.remove("selected"));
+      group.querySelectorAll("button").forEach((el) => el.classList.remove("selected"));
       btn.classList.add("selected");
       toast(t("Preview quality updated"));
       const { applyStreamQuality, isRoadStreaming } = await import("./webrtc_stream.js?v=52");
       if (isRoadStreaming()) await applyStreamQuality(level, { user: true });
     });
-    grid.appendChild(btn);
+    group.appendChild(btn);
   }
+
+  row.append(text, group);
   return row;
 }
 
@@ -2769,30 +2783,50 @@ const WEBCODECS_LABELS = { auto: "Auto", on: "On", off: "Off" };
 
 function renderStreamWebcodecsRow() {
   const row = document.createElement("div");
-  row.className = "opui-sp-block";
+  row.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--segmented opui-stream-settings-block";
   const cur = getWebCodecsPreference();
   const capable = webCodecsCapable();
-  row.innerHTML = `
-    <div class="opui-sp-row-text" style="margin-bottom:16px">
-      <div class="opui-sp-row-title">${escapeHtml(t("Hardware decode"))}</div>
-      <div class="opui-sp-row-desc">${escapeHtml(capable ? t("Use WebCodecs for lower preview latency when supported.") : t("WebCodecs is not available in this browser."))}</div>
-    </div>
-    <div class="opui-multi-grid" role="group"></div>`;
-  const grid = row.querySelector(".opui-multi-grid");
+  const cap = webCodecsCapability();
+
+  const text = document.createElement("div");
+  text.className = "opui-sp-row-text";
+  text.innerHTML = `
+    <div class="opui-sp-row-title">${escapeHtml(t("Hardware decode"))}</div>
+    <div class="opui-sp-row-desc">${escapeHtml(t("Use WebCodecs for lower preview latency when supported."))}</div>`;
+  if (!capable) {
+    const hint = document.createElement("div");
+    hint.className = "opui-stream-hint opui-stream-hint--muted";
+    if (!cap.secureContext) {
+      hint.textContent = t("WebCodecs requires HTTPS or localhost. On the device use https://<IP>:5080/ (trust the certificate once).");
+    } else if (!cap.videoDecoder || !cap.trackGenerator || !cap.encodedStreams) {
+      hint.textContent = t("WebCodecs is not available in this browser.");
+    } else {
+      hint.textContent = t("WebCodecs is not available in this browser.");
+    }
+    text.appendChild(hint);
+  }
+
+  const group = document.createElement("div");
+  group.className = "opui-choice-group opui-choice-group--stream-decode";
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", t("Hardware decode"));
+
   for (const mode of ["auto", "on", "off"]) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `opui-multi-opt${mode === cur ? " selected" : ""}`;
+    btn.classList.toggle("selected", mode === cur);
     btn.disabled = !capable && mode !== "off";
     btn.textContent = t(WEBCODECS_LABELS[mode] || mode);
     btn.addEventListener("click", () => {
       setWebCodecsPreference(mode);
-      grid.querySelectorAll(".opui-multi-opt").forEach((el) => el.classList.remove("selected"));
+      group.querySelectorAll("button").forEach((el) => el.classList.remove("selected"));
       btn.classList.add("selected");
       toast(t("Hardware decode setting updated"));
     });
-    grid.appendChild(btn);
+    group.appendChild(btn);
   }
+
+  row.append(text, group);
   return row;
 }
 
@@ -2803,37 +2837,83 @@ function formatBitrate(bps) {
   return `${Math.round(bps / 1000)} kbps`;
 }
 
+function streamDiagValueClass(kind) {
+  if (kind === "on") return "opui-stream-diag-value--on";
+  if (kind === "off") return "opui-stream-diag-value--off";
+  if (kind === "warn") return "opui-stream-diag-value--warn";
+  if (kind === "danger") return "opui-stream-diag-value--danger";
+  return "";
+}
+
 function renderStreamDiagnosticsRow() {
   const row = document.createElement("div");
-  row.className = "opui-sp-block";
+  row.className = "opui-stream-diag opui-stream-settings-block";
   row.innerHTML = `
-    <div class="opui-sp-row-text" style="margin-bottom:12px">
-      <div class="opui-sp-row-title">${escapeHtml(t("Livestream diagnostics"))}</div>
-      <div class="opui-sp-row-desc" id="stream-diag-body">${escapeHtml(t("Loading..."))}</div>
-    </div>`;
-  const body = row.querySelector("#stream-diag-body");
+    <div class="opui-stream-diag-title">${escapeHtml(t("Livestream diagnostics"))}</div>
+    <div class="opui-stream-diag-grid" id="stream-diag-grid"></div>
+    <div class="opui-stream-diag-foot" id="stream-diag-foot" hidden></div>`;
+  const grid = row.querySelector("#stream-diag-grid");
+  const foot = row.querySelector("#stream-diag-foot");
+
+  const tiles = [
+    { id: "live", label: t("Livestream") },
+    { id: "webrtc", label: t("webrtcd") },
+    { id: "bitrate", label: t("Bitrate") },
+    { id: "camera", label: t("Camera") },
+    { id: "thermal", label: t("Thermal") },
+    { id: "lag", label: t("Encoder lag") },
+    { id: "memory", label: t("Memory") },
+    { id: "cpu", label: t("CPU temp") },
+  ];
+
+  const cells = {};
+  for (const tile of tiles) {
+    const item = document.createElement("div");
+    item.className = "opui-stream-diag-item";
+    item.dataset.tile = tile.id;
+    item.innerHTML = `
+      <span class="opui-stream-diag-label">${escapeHtml(tile.label)}</span>
+      <span class="opui-stream-diag-value">—</span>`;
+    grid.appendChild(item);
+    cells[tile.id] = item.querySelector(".opui-stream-diag-value");
+  }
+
+  const setCell = (id, text, tone = "") => {
+    const el = cells[id];
+    const item = el?.closest(".opui-stream-diag-item");
+    if (!el || !item) return;
+    if (text === null) {
+      item.hidden = true;
+      return;
+    }
+    item.hidden = false;
+    el.textContent = text;
+    el.className = "opui-stream-diag-value" + (tone ? ` ${streamDiagValueClass(tone)}` : "");
+  };
+
   const refresh = async () => {
     try {
       const h = await apiGet("/api/opui/stream/health");
       if (!h?.ok) {
-        body.textContent = h?.error || t("Update status unavailable");
+        setCell("live", h?.error || t("Update status unavailable"), "danger");
+        foot.hidden = true;
         return;
       }
-      const lines = [
-        `${t("Livestream")}: ${h.livestreaming ? t("On") : t("Off")}`,
-        `${t("webrtcd")}: ${h.webrtcd_listening ? t("On") : t("Off")}`,
-        `${t("Bitrate")}: ${formatBitrate(h.encoder_bitrate)}`,
-        `${t("Camera")}: ${h.active_camera || "—"}`,
-        `${t("Thermal")}: ${h.thermal || "—"}`,
-        `${t("Encoder lag")}: ${h.encoder_lagging ? t("Yes") : t("No")}`,
-      ];
-      if (h.cpu_temp != null) lines.push(`${t("CPU temp")}: ${h.cpu_temp}°C`);
-      if (h.memory_usage_percent != null) lines.push(`${t("Memory")}: ${h.memory_usage_percent}%`);
+      setCell("live", h.livestreaming ? t("On") : t("Off"), h.livestreaming ? "on" : "off");
+      setCell("webrtc", h.webrtcd_listening ? t("On") : t("Off"), h.webrtcd_listening ? "on" : "off");
+      setCell("bitrate", formatBitrate(h.encoder_bitrate));
+      setCell("camera", h.active_camera || "—");
+      setCell("thermal", h.thermal || "—", h.thermal === "ok" ? "on" : "warn");
+      setCell("lag", h.encoder_lagging ? t("Yes") : t("No"), h.encoder_lagging ? "warn" : "on");
+      setCell("memory", h.memory_usage_percent != null ? `${h.memory_usage_percent}%` : null);
+      setCell("cpu", h.cpu_temp != null ? `${h.cpu_temp}°C` : null);
       const decode = getStreamDecodePath();
-      lines.push(`${t("Decode path")}: ${decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)")}`);
-      body.textContent = lines.join(" · ");
+      const decodeLabel = decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)");
+      foot.textContent = `${t("Decode path")}: ${decodeLabel}`;
+      foot.hidden = false;
     } catch {
-      body.textContent = t("Update status unavailable");
+      setCell("live", t("Update status unavailable"), "danger");
+      foot.hidden = true;
     }
   };
   refresh();
@@ -3014,8 +3094,8 @@ async function renderSunnylinkPanel(container, data) {
     disabled: childDisabled,
     onClick: async () => {
       const res = await apiGet("/api/opui/sunnylink/pair?mode=sponsor");
-      if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
-      else toast(res.error || t("Failed"));
+      if (!res.ok) { toast(res.error || t("Failed")); return; }
+      await showQrPair({ title: t("Sponsor sunnylink"), url: res.url, qrDataUrl: res.qr_data_url });
     },
   }));
 
@@ -3028,8 +3108,8 @@ async function renderSunnylinkPanel(container, data) {
     disabled: childDisabled,
     onClick: async () => {
       const res = await apiGet("/api/opui/sunnylink/pair?mode=pair");
-      if (res.ok && res.url) window.open(res.url, "_blank", "noopener");
-      else toast(res.error || t("Failed"));
+      if (!res.ok) { toast(res.error || t("Failed")); return; }
+      await showQrPair({ title: t("Pair GitHub Account"), url: res.url, qrDataUrl: res.qr_data_url });
     },
   }));
 

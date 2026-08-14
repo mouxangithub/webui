@@ -1,6 +1,6 @@
 /** Offroad home layout — Prime card, experimental banner, Firehose setup, UPDATE/ALERTS pills. */
 
-import { tr } from "./i18n.js";
+import { tr, trn } from "./i18n.js";
 import { apiGet, apiPost } from "./api.js";
 
 function assetUrl(rel) {
@@ -92,7 +92,8 @@ function renderHomePills(home) {
 
   updateBtn.classList.toggle("is-active", homeView === "update");
   alertsBtn.classList.toggle("is-active", homeView === "alerts");
-  alertsBtn.textContent = alertCount === 1 ? "1 ALERT" : `${alertCount} ALERTS`;
+  updateBtn.textContent = tr("UPDATE");
+  alertsBtn.textContent = trn("{} ALERT", "{} ALERTS", alertCount);
 }
 
 function renderHomeView(home) {
@@ -198,7 +199,7 @@ function renderPrimeCard(home) {
   if (home.prime) {
     el.innerHTML = `
       <div class="opui-prime opui-prime--subscribed">
-        <div class="opui-prime-check">${escapeHtml(tr("✓ SUBSCRIBED"))}</div>
+        <div class="opui-prime-check"><img src="/api/opui/assets/icons/checkmark.png" alt="" /> ${escapeHtml(tr("SUBSCRIBED"))}</div>
         <div class="opui-prime-brand">${escapeHtml(tr("comma prime"))}</div>
       </div>`;
     return;
@@ -210,7 +211,7 @@ function renderPrimeCard(home) {
       <p class="opui-prime-desc">${escapeHtml(tr("Become a comma prime member at connect.comma.ai"))}</p>
       <div class="opui-prime-features-title">${escapeHtml(tr("PRIME FEATURES:"))}</div>
       <ul class="opui-prime-features">
-        ${PRIME_FEATURES.map((f) => `<li><span class="opui-prime-tick">✓</span>${escapeHtml(tr(f))}</li>`).join("")}
+        ${PRIME_FEATURES.map((f) => `<li><span class="opui-prime-tick"><img src="/api/opui/assets/icons/checkmark.png" alt="" /></span>${escapeHtml(tr(f))}</li>`).join("")}
       </ul>
     </div>`;
 }

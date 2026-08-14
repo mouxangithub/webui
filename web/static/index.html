@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="stylesheet" href="/static/css/opui.css?v=70" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=84" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -20,7 +21,7 @@
     <aside id="metrics-sidebar" class="opui-metrics-sidebar">
       <button type="button" id="btn-sidebar-settings" class="opui-sidebar-btn opui-sidebar-btn--settings" title="Settings"></button>
       <div id="sidebar-network" class="opui-sidebar-network">
-        <div class="opui-net-dots"></div>
+        <div class="opui-net-dots" aria-hidden="true"></div>
         <div class="opui-net-type">Wi-Fi</div>
       </div>
       <div id="metrics" class="opui-side-metrics"></div>
@@ -33,7 +34,7 @@
       <section id="screen-home" class="opui-screen opui-screen--home">
         <header class="opui-home-header">
           <div class="opui-home-pills" id="home-pills" hidden>
-            <button type="button" id="home-pill-update" class="opui-home-pill opui-home-pill--update" hidden>UPDATE</button>
+            <button type="button" id="home-pill-update" class="opui-home-pill opui-home-pill--update" hidden></button>
             <button type="button" id="home-pill-alerts" class="opui-home-pill opui-home-pill--alerts" hidden></button>
           </div>
           <div id="home-version" class="opui-home-version">
@@ -51,7 +52,7 @@
           <div class="opui-home-col opui-home-col--left">
             <div id="home-prime" class="opui-home-prime-wrap"></div>
             <button type="button" id="btn-home-camera-preview" class="opui-home-camera-preview">
-              行车画面预览
+              <span id="btn-home-camera-preview-label">Driving preview</span>
             </button>
           </div>
           <div class="opui-home-col opui-home-col--right">
@@ -77,10 +78,12 @@
         <div id="camera-wrap" class="opui-camera-wrap">
           <video id="road-video" class="opui-camera-video" autoplay playsinline muted></video>
           <div id="model-overlay" class="opui-model-overlay" hidden></div>
+          <div id="confidence-ball" class="opui-confidence-ball" hidden aria-hidden="true"></div>
           <div id="camera-fallback" class="opui-camera-fallback" hidden>
             <div class="opui-camera-fallback__spinner" aria-hidden="true"></div>
             <p id="camera-status-text">Loading camera...</p>
           </div>
+          <div id="camera-bottom-fade" class="opui-camera-bottom-fade" aria-hidden="true"></div>
         </div>
         <div id="hud" class="opui-hud">
         <div class="opui-hud-gradient" aria-hidden="true"></div>
@@ -95,7 +98,7 @@
           </div>
           <span id="hud-speed-limit"></span>
         </div>
-        <div id="hud-road-name" class="opui-hud-road" hidden></div>
+        <div id="hud-road-name" class="opui-hud-road" hidden><span class="opui-hud-road__text"></span></div>
         <div id="hud-blinker-l" class="opui-blinker opui-blinker--l" hidden>◀</div>
         <div id="hud-blinker-r" class="opui-blinker opui-blinker--r" hidden>▶</div>
         <div id="hud-bsl" class="opui-bsl opui-bsl--l" hidden></div>
@@ -110,10 +113,8 @@
         <svg id="dm-arc" class="opui-dm-arc" viewBox="0 0 192 192">
           <circle class="dm-arc-bg" cx="96" cy="96" r="80" fill="rgba(0,0,0,0.65)"/>
           <polyline class="dm-arc-face" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="5" stroke-linejoin="round" points=""/>
-          <circle class="dm-arc-h" cx="96" cy="96" r="58" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="6"
-            stroke-linecap="round" transform="rotate(0 96 96)" stroke-dasharray="0 300"/>
-          <circle class="dm-arc-v" cx="96" cy="96" r="58" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="6"
-            stroke-linecap="round" transform="rotate(90 96 96)" stroke-dasharray="0 300"/>
+          <polyline class="dm-arc-h" fill="none" stroke-linecap="round" stroke-linejoin="round" points=""/>
+          <polyline class="dm-arc-v" fill="none" stroke-linecap="round" stroke-linejoin="round" points=""/>
         </svg>
         <img class="opui-dm-face" src="/api/opui/assets/icons/driver_face.png" alt="" />
         </div>
@@ -168,8 +169,20 @@
       </div>
     </div>
 
+    <div id="modal-qr" class="opui-modal" hidden>
+      <div class="opui-modal-card opui-modal-card--qr">
+        <div id="modal-qr-title" class="opui-modal-title"></div>
+        <img id="modal-qr-img" class="opui-qr-img" alt="" />
+        <p id="modal-qr-hint" class="opui-qr-hint"></p>
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--split">
+          <button type="button" id="modal-qr-open" class="opui-btn opui-btn--dialog">Open link</button>
+          <button type="button" id="modal-qr-close" class="opui-btn opui-btn--dialog opui-btn--primary">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="modal-keyboard" class="opui-modal opui-modal--keyboard" hidden>
-      <div class="opui-modal-card opui-modal-card--dialog opui-modal-card--keyboard">
+      <div class="opui-modal-card opui-modal-card--keyboard">
         <div id="keyboard-title" class="opui-modal-title"></div>
         <div id="keyboard-display" class="opui-keyboard-display"></div>
         <div id="keyboard-grid" class="opui-keyboard-grid"></div>
@@ -241,32 +254,67 @@
         <div id="driver-face-box" class="opui-driver-cam__face" hidden></div>
       </div>
     </dialog>
+
+    <dialog id="onboarding-dialog" class="opui-dialog opui-onboarding" hidden>
+      <div id="onboarding-terms">
+        <h2 class="opui-onboarding-title" id="onboarding-welcome-title">Welcome to sunnypilot</h2>
+        <p class="opui-onboarding-desc" id="onboarding-terms-desc"></p>
+        <div class="opui-dialog-actions">
+          <button type="button" id="onboarding-decline-btn" class="opui-btn">Decline</button>
+          <button type="button" id="onboarding-accept" class="opui-btn opui-btn--primary">Agree</button>
+        </div>
+      </div>
+      <div id="onboarding-training" hidden>
+        <img id="onboarding-training-img" class="opui-onboarding-training-img" alt="" />
+        <div class="opui-onboarding-progress"><div id="onboarding-training-progress"></div></div>
+        <p id="onboarding-training-step" class="opui-muted"></p>
+        <div class="opui-dialog-actions">
+          <button type="button" id="onboarding-training-skip" class="opui-btn">Skip</button>
+          <button type="button" id="onboarding-training-next" class="opui-btn opui-btn--primary">Next</button>
+        </div>
+      </div>
+      <div id="onboarding-decline" hidden>
+        <p id="onboarding-decline-text"></p>
+        <div class="opui-dialog-actions">
+          <button type="button" id="onboarding-decline-back" class="opui-btn">Back</button>
+          <button type="button" id="onboarding-uninstall" class="opui-btn opui-btn--danger">Decline, uninstall sunnypilot</button>
+        </div>
+      </div>
+    </dialog>
   </div>
   </div>
 
   <!-- PC dev simulation — outside scaled viewport -->
   <aside id="dev-panel" class="opui-dev-panel" hidden>
-    <div id="dev-panel-title" class="opui-dev-title">PC Dev simulation</div>
+    <button type="button" id="dev-panel-toggle" class="opui-dev-header" aria-expanded="true" aria-controls="dev-panel-body">
+      <span id="dev-panel-title" class="opui-dev-title">PC Dev simulation</span>
+      <span class="opui-dev-chevron" aria-hidden="true"></span>
+    </button>
+    <div id="dev-panel-body" class="opui-dev-body">
     <div class="opui-dev-presets">
-      <button type="button" data-preset="home">离路</button>
-      <button type="button" data-preset="onroad_engaged">行驶·激活</button>
-      <button type="button" data-preset="onroad_disengaged">行驶·未激活</button>
+      <button type="button" data-preset="home">Offroad</button>
+      <button type="button" data-preset="onroad_engaged">On road · Engaged</button>
+      <button type="button" data-preset="onroad_disengaged">On road · Disengaged</button>
       <button type="button" id="dev-preset-override" data-preset="override">Override</button>
-      <button type="button" data-preset="lat_only">仅横向</button>
-      <button type="button" data-preset="alert_critical">严重告警</button>
-      <button type="button" data-preset="e2e_green">E2E 绿灯</button>
-      <button type="button" data-preset="standstill_timer">静止计时</button>
-      <button type="button" data-preset="long_only">仅纵向</button>
-      <button type="button" data-preset="alert_full">全屏告警</button>
-      <button type="button" data-preset="home_update">Home·更新</button>
-      <button type="button" data-preset="home_alerts">Home·告警</button>
+      <button type="button" data-preset="lat_only">Lateral only</button>
+      <button type="button" data-preset="alert_critical">Critical alert</button>
+      <button type="button" data-preset="e2e_green">E2E green</button>
+      <button type="button" data-preset="standstill_timer">Standstill timer</button>
+      <button type="button" data-preset="long_only">Longitudinal only</button>
+      <button type="button" data-preset="alert_full">Full-screen alert</button>
+      <button type="button" data-preset="home_update">Home · Update</button>
+      <button type="button" data-preset="home_alerts">Home · Alerts</button>
+      <button type="button" data-preset="confidence_low">Confidence · low</button>
+      <button type="button" data-preset="confidence_high">Confidence · high</button>
+      <button type="button" data-preset="onroad_overlay">On road · overlay</button>
     </div>
     <label class="opui-dev-row"><input type="checkbox" id="dev-started" /> <span id="dev-label-started">On road</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-engaged" /> <span id="dev-label-engaged">Engaged</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> <span id="dev-label-experimental">Experimental</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> <span id="dev-label-recording">Recording microphone</span></label>
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
+    </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=70"></script>
+  <script type="module" src="/static/js/app.js?v=84"></script>
 </body>
 </html>

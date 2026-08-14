@@ -82,7 +82,12 @@ async def api_dev_presets(request: web.Request) -> web.Response:
   preset = request.match_info.get("preset", "")
   presets = {
     "home": {"started": False, "engaged": False, "ui_status": "disengaged", "alert_text1": "", "alert_text2": "", "alert_size": "none"},
-    "onroad_engaged": {"started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 88, "alert_text1": "", "alert_text2": "", "alert_size": "none"},
+    "onroad_engaged": {
+      "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 88,
+      "alert_text1": "", "alert_text2": "", "alert_size": "none",
+      "torque_bar": True, "torque_utilization": 0.62, "developer_ui": 1,
+      "confidence_target": 0.85,
+    },
     "onroad_disengaged": {"started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 45, "alert_text1": "", "alert_text2": "", "alert_size": "none"},
     "override": {"started": True, "engaged": True, "ui_status": "override", "speed_kmh": 100, "alert_text1": "", "alert_text2": "", "alert_size": "none"},
     "lat_only": {"started": True, "engaged": True, "ui_status": "lat_only", "speed_kmh": 60, "alert_text1": "", "alert_text2": "", "alert_size": "none"},
@@ -92,7 +97,7 @@ async def api_dev_presets(request: web.Request) -> web.Response:
     },
     "e2e_green": {
       "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 0,
-      "standstill": True, "e2e_green_light": True, "alert_size": "none",
+      "standstill": True, "e2e_green_light": True, "e2e_lead_depart": False, "alert_size": "none",
     },
     "standstill_timer": {
       "started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 0,
@@ -121,6 +126,22 @@ async def api_dev_presets(request: web.Request) -> web.Response:
       "offroad_alerts": [
         {"key": "Offroad_ConnectivityNeeded", "text": "Connect to internet to check for updates.", "severity": 1},
       ],
+    },
+    "confidence_low": {
+      "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 55,
+      "torque_bar": True, "torque_utilization": 0.35, "developer_ui": 0,
+      "confidence_target": 0.12, "alert_size": "none",
+    },
+    "confidence_high": {
+      "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 95,
+      "torque_bar": True, "torque_utilization": 0.78, "developer_ui": 2,
+      "confidence_target": 0.92, "experimental_mode": True, "alert_size": "none",
+    },
+    "onroad_overlay": {
+      "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 72,
+      "experimental_mode": True, "experimental_mode_confirmed": True,
+      "torque_bar": True, "torque_utilization": 0.5, "developer_ui": 3,
+      "confidence_target": 0.7, "alert_size": "none",
     },
   }
   if preset not in presets:

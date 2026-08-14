@@ -94,7 +94,8 @@ def _cold_state_snapshot() -> dict[str, Any]:
     services = [
       "deviceState", "selfdriveState", "carState", "controlsState",
       "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-      "longitudinalPlanSP",
+      "longitudinalPlanSP", "radarState", "liveParameters", "liveTorqueParameters",
+      "gpsLocationExternal", "gpsLocation", "carControl", "carOutput",
     ]
     try:
       services.append("selfdriveStateSP")
@@ -139,7 +140,8 @@ def _device_loop() -> None:
   services = [
     "deviceState", "selfdriveState", "carState", "controlsState", "carControl",
     "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-    "longitudinalPlanSP", "liveMapDataSP",
+    "longitudinalPlanSP", "liveMapDataSP", "radarState", "liveParameters",
+    "liveTorqueParameters", "gpsLocationExternal", "gpsLocation", "carOutput",
   ]
   try:
     services.append("selfdriveStateSP")

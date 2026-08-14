@@ -140,7 +140,7 @@ function updateNetworkIndicator(d) {
   const dotsEl = wrap.querySelector(".opui-net-dots");
 
   if (typeEl && netType !== lastNetType) {
-    typeEl.textContent = netType;
+    typeEl.textContent = tr(netType);
     lastNetType = netType;
   }
 

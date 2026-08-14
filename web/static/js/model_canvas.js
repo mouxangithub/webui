@@ -1,6 +1,7 @@
 /** Canvas overlay for modelV2 lanes / path / leads (mirrors ModelRenderer). */
 
 import { tr } from "./i18n.js";
+import { initModelWebGL, drawModelWebGL, isModelWebGLReady } from "./model_webgl.js";
 
 let canvas = null;
 let ctx = null;
@@ -12,9 +13,11 @@ const LEAD_FILL = "rgba(255, 196, 0, 0.45)";
 
 export function initModelCanvas() {
   const host = document.getElementById("model-overlay");
-  if (!host || canvas) return;
+  if (!host) return;
+  initModelWebGL();
+  if (canvas) return;
   canvas = document.createElement("canvas");
-  canvas.className = "opui-model-canvas";
+  canvas.className = "opui-model-canvas opui-model-metrics";
   host.appendChild(canvas);
   ctx = canvas.getContext("2d");
 }
@@ -180,43 +183,45 @@ function drawPath(path, experimental, rainbow, allowThrottle) {
   ctx.stroke();
 }
 
-function drawLead(lead, chevronAlpha) {
-  const glow = asPoints(lead.glow);
+function drawLead(lead, chevronAlpha, canvasH) {
   const chevron = asPoints(lead.chevron);
-  const alpha = (lead.alpha ?? 180) / 255;
-  if (glow.length >= 3) drawPoly(glow, `rgba(255, 196, 0, ${alpha * 0.35})`, null);
-  if (chevron.length >= 3) drawPoly(chevron, LEAD_FILL, "rgba(255, 220, 80, 0.9)", 2);
-
   const metrics = lead.metrics || [];
   if (!metrics.length || !chevron.length || chevronAlpha <= 0) return;
 
   const apex = chevron[1] || chevron[0];
-  const cx = apex[0];
-  const cy = apex[1];
+  const chevronX = apex[0];
+  const chevronY = apex[1];
+  const dRel = Number(lead.d_rel);
+  const sz = Number.isFinite(dRel)
+    ? Math.max(15, Math.min(30, (25 * 30) / (dRel / 3 + 30))) * 2.35
+    : 55;
   const fontSize = 40;
   const lineHeight = 50;
   const margin = 20;
   const textAlpha = Math.max(0, Math.min(1, chevronAlpha));
 
-  let textY = cy + 55;
+  let textY = chevronY + sz + 15;
   const totalH = metrics.length * lineHeight;
-  if (textY + totalH > (lastOverlay?.height || 900) - margin) {
-    textY = Math.max(margin, cy - 15 - totalH);
+  if (textY + totalH > (canvasH || 900) - margin) {
+    const yMax = Math.min(chevronY, (canvasH || 900) - margin);
+    textY = Math.max(margin, yMax - 15 - totalH);
   }
 
   ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
-  ctx.textAlign = "center";
   ctx.textBaseline = "top";
 
   metrics.forEach((line, i) => {
     const y = textY + i * lineHeight;
+    if (y + lineHeight > (canvasH || 900) - margin) return;
     const text = formatMetricLine(line);
+    const textW = ctx.measureText(text).width;
+    let x = chevronX - textW / 2;
+    x = Math.max(margin, Math.min(x, (lastOverlay?.width || 1600) - textW - margin));
     ctx.fillStyle = `rgba(0, 0, 0, ${0.78 * textAlpha})`;
-    ctx.fillText(text, cx + 2, y + 2);
+    ctx.fillText(text, x + 2, y + 2);
     ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`;
-    ctx.fillText(text, cx, y);
+    ctx.fillText(text, x, y);
   });
-  ctx.textAlign = "start";
 }
 
 function formatMetricLine(line) {
@@ -238,18 +243,40 @@ export function setModelOverlayEnabled(enabled) {
 }
 
 export function drawModelOverlay(data) {
-  if (!overlayDrawEnabled || !ctx || !canvas || !data?.ok) return;
+  if (!overlayDrawEnabled || !data?.ok) return;
   if (!data._animate) lastOverlay = data;
   const host = document.getElementById("model-overlay");
   const w = data.width || host?.clientWidth || 1600;
   const h = data.height || host?.clientHeight || 900;
+
+  if (isModelWebGLReady()) {
+    drawModelWebGL(data);
+    if (ctx && canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(w * dpr));
+      canvas.height = Math.max(1, Math.floor(h * dpr));
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      const chevronAlpha = Number(data.chevron_alpha) || 0;
+      for (const lead of data.leads || []) drawLead(lead, chevronAlpha, h);
+    }
+    return;
+  }
+
+  if (!ctx || !canvas) return;
   resize(w, h);
   ctx.clearRect(0, 0, w, h);
 
   for (const lane of data.lanes || []) drawLane(lane);
   for (const edge of data.edges || []) {
     const poly = asPoints(edge.polygon);
-    if (poly.length >= 3) drawPoly(poly, "rgba(255, 80, 80, 0.25)", "rgba(255, 120, 120, 0.5)", 2);
+    if (poly.length >= 3) {
+      const std = typeof edge.std === "number" ? edge.std : 0;
+      const alpha = Math.max(0, Math.min(1, 1 - std));
+      drawPoly(poly, `rgba(255, 0, 0, ${alpha * 0.45})`, `rgba(255, 0, 0, ${alpha})`, 2);
+    }
   }
   const drewRibbon = drawPathRibbon(
     data.path_polygon,
@@ -263,7 +290,14 @@ export function drawModelOverlay(data) {
     drawPath(data.path, data.experimental, data.rainbow, data.allow_throttle !== false);
   }
   const chevronAlpha = Number(data.chevron_alpha) || 0;
-  for (const lead of data.leads || []) drawLead(lead, chevronAlpha);
+  for (const lead of data.leads || []) {
+    const glow = asPoints(lead.glow);
+    const chevron = asPoints(lead.chevron);
+    const alpha = (lead.alpha ?? 180) / 255;
+    if (glow.length >= 3) drawPoly(glow, `rgba(255, 196, 0, ${alpha * 0.35})`, null);
+    if (chevron.length >= 3) drawPoly(chevron, LEAD_FILL, "rgba(255, 220, 80, 0.9)", 2);
+    drawLead(lead, chevronAlpha, h);
+  }
 
   if (data.rainbow) {
     rainbowHue = (rainbowHue + 2) % 360;

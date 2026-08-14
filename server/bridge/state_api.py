@@ -151,7 +151,43 @@ def _ui_params() -> dict[str, bool]:
 
 
 def _estimate_alert_height(size: str, text1: str, text2: str, width: int = 1820) -> int:
-  """Approximate SP alert_renderer dynamic height for mid/small."""
+  """Match alert_renderer._calculate_dynamic_height when raylib fonts are available."""
+  try:
+    from openpilot.selfdrive.ui.onroad.alert_renderer import (
+      ALERT_FONT_BIG,
+      ALERT_FONT_MEDIUM,
+      ALERT_FONT_SMALL,
+      ALERT_HEIGHTS,
+      ALERT_LINE_SPACING,
+      ALERT_PADDING,
+    )
+    from openpilot.system.ui.lib.application import FontWeight, gui_app
+    from openpilot.system.ui.lib.text_measure import measure_text_cached
+    from openpilot.system.ui.lib.wrap_text import wrap_text
+
+    font_bold = gui_app.font(FontWeight.BOLD)
+    font_regular = gui_app.font(FontWeight.REGULAR)
+    height = 2 * ALERT_PADDING
+    wrap_width = width - 2 * ALERT_PADDING
+
+    if size == "small":
+      lines = wrap_text(font_bold, text1 or "", ALERT_FONT_MEDIUM, wrap_width)
+      line_height = measure_text_cached(font_bold, "A", ALERT_FONT_MEDIUM).y
+      return int(height + len(lines) * line_height)
+    if size == "mid":
+      lines1 = wrap_text(font_bold, text1 or "", ALERT_FONT_BIG, wrap_width)
+      line_height1 = measure_text_cached(font_bold, "A", ALERT_FONT_BIG).y
+      height += int(len(lines1) * line_height1)
+      if text2:
+        lines2 = wrap_text(font_regular, text2, ALERT_FONT_SMALL, wrap_width)
+        line_height2 = measure_text_cached(font_regular, "A", ALERT_FONT_SMALL).y
+        height += int(ALERT_LINE_SPACING + len(lines2) * line_height2)
+      return int(height)
+    if size == "full":
+      return int(ALERT_HEIGHTS.get("full", 1080))
+  except Exception:
+    pass
+
   pad = 40
   if size == "small":
     lines = max(1, (len(text1 or "") + 34) // 35)
@@ -188,6 +224,11 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   started = bool(ds.started)
   if not started:
     _v_ego_cluster_seen = False
+    try:
+      from webui.server.bridge.dm_snapshot import reset_dm_state
+      reset_dm_state()
+    except Exception:
+      pass
   engaged = bool(ss.active)
   ui_params = _ui_params()
   is_metric = False
@@ -253,9 +294,15 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   recording_audio = False
   developer_ui = 0
   torque_bar = False
+  speed_limit_mode = 0
+  turn_signals = False
+  blindspot = False
+  rocket_fuel_enabled = False
   try:
     from openpilot.common.params import Params
-    experimental_confirmed = Params().get_bool("ExperimentalModeConfirmed")
+    p = Params()
+    experimental_confirmed = p.get_bool("ExperimentalModeConfirmed")
+    speed_limit_mode = int(p.get("SpeedLimitMode", return_default=True) or 0)
   except Exception:
     pass
   try:
@@ -263,6 +310,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     recording_audio = bool(getattr(ui_state, "recording_audio", False))
     developer_ui = int(ui_state.developer_ui or 0)
     torque_bar = bool(getattr(ui_state, "torque_bar", False))
+    turn_signals = bool(getattr(ui_state, "turn_signals", False))
+    blindspot = bool(getattr(ui_state, "blindspot", False))
+    rocket_fuel_enabled = bool(getattr(ui_state, "rocket_fuel", False))
   except Exception:
     pass
 
@@ -377,6 +427,13 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       if resolver is not None:
         conv = 3.6 if is_metric else 2.23694
         sp_hud["speed_limit_resolver"] = round(float(getattr(resolver, "speedLimit", 0) or 0) * conv)
+        sp_hud["speed_limit"] = sp_hud["speed_limit_resolver"]
+        sp_hud["speed_limit_last"] = round(float(getattr(resolver, "speedLimitLast", 0) or 0) * conv)
+        sp_hud["speed_limit_final_last"] = round(float(getattr(resolver, "speedLimitFinalLast", 0) or 0) * conv)
+        sp_hud["speed_limit_offset"] = round(float(getattr(resolver, "speedLimitOffset", 0) or 0) * conv)
+        sp_hud["speed_limit_valid"] = bool(getattr(resolver, "speedLimitValid", False))
+        sp_hud["speed_limit_last_valid"] = bool(getattr(resolver, "speedLimitLastValid", False))
+        sp_hud["speed_limit_source"] = str(getattr(resolver, "source", "")).split(".")[-1]
         sp_hud["speed_limit_assist_state"] = str(getattr(getattr(assist, "assist", None), "state", "")).split(".")[-1]
       sp_hud["speed_limit_assist_active"] = bool(getattr(getattr(assist, "assist", None), "active", False))
       scc = getattr(lp_sp, "smartCruiseControl", None)
@@ -391,10 +448,14 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       if e2e is not None:
         sp_hud["e2e_green_light"] = bool(getattr(e2e, "greenLightAlert", False))
         sp_hud["e2e_lead_depart"] = bool(getattr(e2e, "leadDepartAlert", False))
+    if not sp_hud.get("road_name") and sm.valid.get("liveMapDataSP"):
+      lmd = sm["liveMapDataSP"]
+      sp_hud["road_name"] = getattr(lmd, "roadName", "") or ""
     if sm.valid.get("liveMapDataSP"):
       lmd = sm["liveMapDataSP"]
       conv = 3.6 if is_metric else 2.23694
-      if bool(getattr(lmd, "speedLimitAheadValid", False)):
+      sp_hud["speed_limit_ahead_valid"] = bool(getattr(lmd, "speedLimitAheadValid", False))
+      if sp_hud["speed_limit_ahead_valid"]:
         sp_hud["speed_limit_ahead"] = round(float(getattr(lmd, "speedLimitAhead", 0) or 0) * conv)
         sp_hud["speed_limit_ahead_dist"] = float(getattr(lmd, "speedLimitAheadDistance", 0) or 0)
     try:
@@ -403,31 +464,39 @@ def build_state_from_sm(sm) -> dict[str, Any]:
         sp_hud["pcm_cruise_speed"] = bool(ui_state.CP_SP.pcmCruiseSpeed)
     except Exception:
       pass
+    if sp_hud.get("speed_limit_assist_state") == "preActive":
+      arrow = _speed_limit_pre_active_arrow(sm, is_metric, sp_hud, display_set_speed if is_cruise_set else 0)
+      if arrow:
+        sp_hud["pre_active_arrow"] = arrow
   except Exception:
     pass
 
   dm_arc = None
   try:
-    from openpilot.common.params import Params
-    always_dm = Params().get_bool("AlwaysOnDM")
-    alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
-    if always_dm and alert_size in ("none", "") and sm.valid.get("driverStateV2"):
-      dsv2 = sm["driverStateV2"]
-      dms = sm["driverMonitoringState"] if sm.valid.get("driverMonitoringState") else None
-      pose = getattr(dsv2, "faceOrientation", [0, 0, 0])
-      dm_arc = {
-        "visible": True,
-        "prob": float(getattr(dms, "awareProb", 0) or 0) if dms else 0.0,
-        "pose": [float(pose[0]), float(pose[1]), float(pose[2])] if len(pose) >= 3 else [0, 0, 0],
-        "engaged": engaged,
-        "rhd": bool(getattr(cs, "vegoCluster", 0)) if hasattr(cs, "vegoCluster") else False,
-      }
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    from webui.server.bridge.dm_snapshot import snapshot_dm_arc
+    dm_arc = snapshot_dm_arc(sm, engaged, int(getattr(ui_state, "started_frame", 0) or 0))
   except Exception:
     pass
 
-  alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
-  alert_t1 = ss.alertText1 or ""
-  alert_t2 = ss.alertText2 or ""
+  alert_resolved = None
+  try:
+    from webui.server.bridge.alert_resolve import resolve_onroad_alert
+    alert_resolved = resolve_onroad_alert(sm, ss, started)
+  except Exception:
+    pass
+
+  if alert_resolved:
+    alert_size = alert_resolved["size"]
+    alert_t1 = alert_resolved["text1"]
+    alert_t2 = alert_resolved["text2"]
+    alert_status = alert_resolved.get("status", "normal")
+  else:
+    alert_size = str(ss.alertSize).split(".")[-1].lower() if ss.alertSize else "none"
+    alert_t1 = ss.alertText1 or ""
+    alert_t2 = ss.alertText2 or ""
+    alert_status = str(ss.alertStatus).split(".")[-1] if ss.alertStatus else "normal"
+
   alert_height = _estimate_alert_height(alert_size, alert_t1, alert_t2)
   if alert_height <= 0:
     alert_heights = {"none": 0, "small": 271, "mid": 420, "full": 1080}
@@ -456,6 +525,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       torque_utilization = 0.0
 
   driver_face = _driver_face(sm)
+  confidence_ball = _confidence_ball(sm, ui_status, started)
 
   return {
     "ok": True,
@@ -503,8 +573,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       "text1": alert_t1,
       "text2": alert_t2,
       "size": alert_size,
-      "status": str(ss.alertStatus).split(".")[-1] if ss.alertStatus else "",
+      "status": alert_status,
       "height_px": alert_height,
+      "synthetic": bool((alert_resolved or {}).get("synthetic")),
     },
     "device": {
       "network_type": net_type,
@@ -526,12 +597,18 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     },
     "sp_hud": sp_hud,
     "dm_arc": dm_arc,
+    "speed_limit_mode": speed_limit_mode,
+    "turn_signals": turn_signals,
+    "blindspot": blindspot,
+    "rocket_fuel_enabled": rocket_fuel_enabled,
+    "a_ego": float(cs.aEgo) if cs.aEgo == cs.aEgo else 0.0,
     "developer_ui": developer_ui,
     "dev_ui": dev_ui,
     "recording_audio": recording_audio,
     "torque_bar": torque_bar,
     "torque_utilization": torque_utilization,
     "circular_alert_allowed": circular_alert_allowed,
+    "confidence_ball": confidence_ball,
     "driver_face": driver_face,
   }
 
@@ -578,6 +655,33 @@ def _clamp(v: float, lo: float, hi: float) -> float:
   return max(lo, min(hi, v))
 
 
+def _confidence_ball(sm: Any, ui_status: str, started: bool) -> dict[str, Any] | None:
+  """Target for client FirstOrder filter (confidence_ball.py)."""
+  if not started:
+    return None
+  target = -0.5
+  try:
+    if sm.valid.get("modelV2"):
+      dp = sm["modelV2"].meta.disengagePredictions
+      steer_probs = list(getattr(dp, "steerOverrideProbs", None) or [1.0])
+      brake_probs = list(getattr(dp, "brakeDisengageProbs", None) or [1.0])
+      steer = max(steer_probs) if steer_probs else 1.0
+      brake = max(brake_probs) if brake_probs else 1.0
+      if ui_status == "disengaged":
+        target = -0.5
+      elif ui_status == "lat_only":
+        target = 1.0 - steer
+      elif ui_status == "long_only":
+        target = 1.0 - brake
+      elif ui_status == "override":
+        target = 0.0
+      else:
+        target = (1.0 - brake) * (1.0 - steer)
+  except Exception:
+    pass
+  return {"target": round(float(target), 4), "ui_status": ui_status}
+
+
 def _torque_utilization(sm: Any, ctrl: Any, cs: Any) -> float:
   try:
     lat_which = ctrl.lateralControlState.which()
@@ -613,6 +717,23 @@ def _personality_index(name: str) -> int | None:
   return mapping.get((name or "").lower())
 
 
+def _speed_limit_pre_active_arrow(sm: Any, is_metric: bool, sp_hud: dict[str, Any], set_speed: float) -> str | None:
+  """Return 'up' or 'down' for pre-active assist arrow (speed_limit.py)."""
+  try:
+    final_last = sp_hud.get("speed_limit_final_last")
+    if final_last is None:
+      return None
+    set_round = round(float(set_speed))
+    limit_round = round(float(final_last))
+    if set_round < limit_round:
+      return "up"
+    if set_round > limit_round:
+      return "down"
+  except Exception:
+    pass
+  return None
+
+
 def snapshot_ui_state() -> dict[str, Any]:
   import os
   if os.environ.get("WEBUI_DEV_PC") == "1":
@@ -631,7 +752,8 @@ def snapshot_ui_state() -> dict[str, Any]:
     services = [
       "deviceState", "selfdriveState", "carState", "controlsState", "carControl",
       "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-      "longitudinalPlanSP", "liveMapDataSP",
+      "longitudinalPlanSP", "liveMapDataSP", "radarState", "liveParameters",
+      "liveTorqueParameters", "gpsLocationExternal", "gpsLocation", "carOutput",
     ]
     try:
       services.append("selfdriveStateSP")

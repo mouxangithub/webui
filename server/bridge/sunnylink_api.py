@@ -91,11 +91,28 @@ def sunnylink_status() -> dict[str, Any]:
     return {"ok": False, "error": str(exc)}
 
 
+def _qr_data_url(text: str) -> str:
+  import base64
+  import io
+
+  import qrcode
+
+  qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=8, border=4)
+  qr.add_data(text)
+  qr.make(fit=True)
+  img = qr.make_image(fill_color="black", back_color="white")
+  buf = io.BytesIO()
+  img.save(buf, format="PNG")
+  b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+  return f"data:image/png;base64,{b64}"
+
+
 def sunnylink_pair_url(mode: str = "pair") -> dict[str, Any]:
   sponsor = mode == "sponsor"
   try:
     if sponsor:
-      return {"ok": True, "mode": "sponsor", "url": "https://github.com/sponsors/sunnyhaibin"}
+      url = "https://github.com/sponsors/sunnyhaibin"
+      return {"ok": True, "mode": "sponsor", "url": url, "qr_data_url": _qr_data_url(url)}
 
     import base64
     from openpilot.common.params import Params
@@ -106,13 +123,16 @@ def sunnylink_pair_url(mode: str = "pair") -> dict[str, Any]:
       return {"ok": False, "error": "sunnylink dongle id not registered"}
     token = SunnylinkApi(sl_dongle).get_token()
     payload = base64.b64encode(f"1|{sl_dongle}|{token}".encode()).decode()
-    return {"ok": True, "mode": "pair", "url": f"{API_HOST}/sso?state={payload}"}
+    url = f"{API_HOST}/sso?state={payload}"
+    return {"ok": True, "mode": "pair", "url": url, "qr_data_url": _qr_data_url(url)}
   except Exception as exc:
     if os.environ.get("WEBUI_DEV_PC") == "1":
+      url = "https://github.com/sponsors/sunnyhaibin" if sponsor else "https://connect.sunnypilot.ai/?dongle=sl-dev-preview"
       return {
         "ok": True,
         "mode": "sponsor" if sponsor else "pair",
-        "url": "https://github.com/sponsors/sunnyhaibin" if sponsor else "https://connect.sunnypilot.ai/?dongle=sl-dev-preview",
+        "url": url,
+        "qr_data_url": _qr_data_url(url),
         "dev_pc": True,
       }
     return {"ok": False, "error": str(exc)}

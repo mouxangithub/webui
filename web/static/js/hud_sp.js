@@ -1,6 +1,7 @@
 /** sunnypilot onroad HUD extensions (speed limit, road name, blinkers, DM arc, rocket fuel, SCC). */
 
 import { tr } from "./i18n.js";
+import { AlertFadeAnimator } from "./fade_anim.js";
 
 const TURN_IMG = "/api/opui/assets/icons_mici/onroad/turn_signal_left.png";
 const BSM_IMG = "/api/opui/assets/icons_mici/onroad/blind_spot_left.png";
@@ -9,7 +10,26 @@ const ARROW_UP = "/api/opui/assets/sunnypilot/selfdrive/assets/img_plus_arrow_up
 const ARROW_DOWN = "/api/opui/assets/sunnypilot/selfdrive/assets/img_minus_arrow_down.png";
 const ARC_LEN = 133;
 
+const TURN_BLINK_PERIOD = 1 / (80 / 60);
+const TURN_FILTER_RC = 0.3;
+const TURN_TARGET_ON = 510;
+const TURN_TARGET_OFF = 51;
+
 let vcAccel = 0;
+const turnBlink = {
+  left: { timer: 0, alpha: TURN_TARGET_OFF, active: false },
+  right: { timer: 0, alpha: TURN_TARGET_OFF, active: false },
+};
+let turnAnimId = 0;
+
+const roadMarquee = {
+  offset: 0,
+  direction: 1,
+  pause: 0,
+  overflow: 0,
+  speed: 40,
+  animId: 0,
+};
 
 export function updateSpHud(st) {
   const hud = document.getElementById("hud");
@@ -31,8 +51,112 @@ export function updateSpHud(st) {
   updateTurnSignals(st, sp);
 
   const roadName = st.road_name_toggle ? sp.road_name : "";
-  setText("hud-road-name", roadName);
+  updateRoadName(roadName);
   drawDmArc(st.dm_arc, hideDm, Number(st.developer_ui) || 0);
+}
+
+function measureRoadText(text, fontSize = 46) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return text.length * fontSize * 0.55;
+  ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`;
+  return ctx.measureText(text).width;
+}
+
+function stopRoadMarquee() {
+  if (roadMarquee.animId) {
+    cancelAnimationFrame(roadMarquee.animId);
+    roadMarquee.animId = 0;
+  }
+}
+
+function updateRoadName(text) {
+  const wrap = document.getElementById("hud-road-name");
+  const label = wrap?.querySelector(".opui-hud-road__text");
+  if (!wrap || !label) return;
+
+  if (!text) {
+    wrap.hidden = true;
+    wrap.classList.remove("is-marquee");
+    label.textContent = "";
+    label.style.transform = "";
+    stopRoadMarquee();
+    return;
+  }
+
+  wrap.hidden = false;
+  const hud = document.getElementById("hud");
+  const availW = Math.max(400, (hud?.clientWidth || 2160) - 40);
+  const padding = 40;
+  const fontSize = 46;
+  const maxBox = Math.max(200, Math.min(measureRoadText(text, fontSize) + padding, availW * 0.7));
+  const fullW = measureRoadText(text, fontSize);
+
+  wrap.style.maxWidth = `${Math.round(maxBox)}px`;
+  label.textContent = text;
+  label.style.fontSize = `${fontSize}px`;
+
+  if (fullW + padding > maxBox) {
+    wrap.classList.add("is-marquee");
+    roadMarquee.overflow = fullW - (maxBox - padding);
+    if (!roadMarquee.animId) {
+      let last = performance.now();
+      const tick = (now) => {
+        if (wrap.hidden || !wrap.classList.contains("is-marquee")) {
+          roadMarquee.animId = 0;
+          return;
+        }
+        const dt = Math.min(0.05, (now - last) / 1000);
+        last = now;
+        if (roadMarquee.pause > 0) {
+          roadMarquee.pause -= dt;
+        } else {
+          roadMarquee.offset += roadMarquee.direction * roadMarquee.speed * dt;
+          if (roadMarquee.offset >= roadMarquee.overflow) {
+            roadMarquee.offset = roadMarquee.overflow;
+            roadMarquee.direction = -1;
+            roadMarquee.pause = 1.2;
+          } else if (roadMarquee.offset <= 0) {
+            roadMarquee.offset = 0;
+            roadMarquee.direction = 1;
+            roadMarquee.pause = 1.2;
+          }
+        }
+        label.style.transform = `translateX(${-roadMarquee.offset}px)`;
+        roadMarquee.animId = requestAnimationFrame(tick);
+      };
+      roadMarquee.animId = requestAnimationFrame(tick);
+    }
+  } else {
+    wrap.classList.remove("is-marquee");
+    label.style.transform = "";
+    stopRoadMarquee();
+  }
+}
+
+function ensureTurnAnimLoop() {
+  if (turnAnimId) return;
+  let last = performance.now();
+  const tick = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    const k = 1 - Math.exp(-dt / TURN_FILTER_RC);
+    for (const side of ["left", "right"]) {
+      const state = turnBlink[side];
+      const target = state.active ? TURN_TARGET_ON : TURN_TARGET_OFF;
+      if (state.active && now / 1000 - state.timer > TURN_BLINK_PERIOD) {
+        state.timer = now / 1000;
+        state.alpha = TURN_TARGET_ON;
+      }
+      state.alpha += (target - state.alpha) * k;
+      const el = document.getElementById(side === "left" ? "hud-blinker-l" : "hud-blinker-r");
+      if (el && !el.hidden && !el.classList.contains("is-bsm")) {
+        el.style.opacity = String(Math.min(1, Math.max(0, state.alpha / 255)));
+      }
+    }
+    turnAnimId = requestAnimationFrame(tick);
+  };
+  turnAnimId = requestAnimationFrame(tick);
 }
 
 function updateTurnSignals(st, sp) {
@@ -50,6 +174,7 @@ function updateTurnSignals(st, sp) {
   hideEl("hud-bsr");
   updateTurnSide("hud-blinker-l", allowBsm && sp.blindspot_left, allowTurn && sp.turn_signal_left);
   updateTurnSide("hud-blinker-r", allowBsm && sp.blindspot_right, allowTurn && sp.turn_signal_right, true);
+  ensureTurnAnimLoop();
 }
 
 function updateTurnSide(id, bsm, blinker, flip = false) {
@@ -61,10 +186,23 @@ function updateTurnSide(id, bsm, blinker, flip = false) {
   }
   el.hidden = false;
   el.classList.toggle("is-bsm", bsm);
-  el.classList.toggle("is-blink", !bsm && blinker);
+  el.classList.remove("is-blink");
   const img = bsm ? BSM_IMG : TURN_IMG;
   el.style.backgroundImage = `url("${img}")`;
-  el.style.transform = flip ? "scaleX(-1)" : "";
+  const baseTransform = flip ? "scaleX(-1)" : "";
+  if (bsm) {
+    el.style.opacity = "1";
+    el.style.transform = baseTransform;
+    return;
+  }
+  const side = id.includes("r") ? "right" : "left";
+  turnBlink[side].active = !!blinker;
+  if (!blinker) {
+    el.style.opacity = "0.2";
+    el.style.transform = baseTransform;
+    return;
+  }
+  el.style.transform = baseTransform;
 }
 
 function updateSpeedLimit(sp, st) {
@@ -77,7 +215,15 @@ function updateSpeedLimit(sp, st) {
   }
 
   slaWrap.hidden = false;
-  slaWrap.classList.toggle("opui-hud-sla--mutcd", st.is_metric === false);
+  const isMutcd = st.is_metric === false;
+  slaWrap.classList.toggle("opui-hud-sla--mutcd", isMutcd);
+  if (isMutcd) {
+    const w = slaWrap.offsetWidth || 200;
+    const h = slaWrap.offsetHeight || 216;
+    slaWrap.style.borderRadius = `${Math.round(Math.min(w, h) * 0.35)}px`;
+  } else {
+    slaWrap.style.borderRadius = "";
+  }
 
   const mutcdLabels = slaWrap.querySelector(".opui-hud-sla-mutcd-labels");
   if (mutcdLabels) {
@@ -139,11 +285,14 @@ function updateSpeedLimit(sp, st) {
     slaWrap.parentElement.appendChild(arrowEl);
   }
   if (arrowEl) {
+    slaArrowFade.update(preActive);
     if (preActive && sp.pre_active_arrow) {
       arrowEl.hidden = false;
       arrowEl.src = sp.pre_active_arrow === "down" ? ARROW_DOWN : ARROW_UP;
+      arrowEl.style.opacity = String(Math.max(0, Math.min(1, slaArrowFade.alpha)));
     } else {
       arrowEl.hidden = true;
+      arrowEl.style.opacity = "0";
     }
   }
 
@@ -223,6 +372,11 @@ function updateRocketFuel(st) {
 }
 
 function clearSpHud() {
+  stopRoadMarquee();
+  turnBlink.left.active = false;
+  turnBlink.right.active = false;
+  dmFadeFiltered = 0;
+  dmFadeTs = 0;
   ["hud-speed-limit-wrap", "hud-blinker-l", "hud-blinker-r", "hud-bsl", "hud-bsr",
     "hud-rocket", "hud-road-name", "hud-scc-v", "hud-scc-m", "dm-arc-wrap"].forEach((id) => {
     hideEl(id);
@@ -241,15 +395,24 @@ function updateSccTags(sp) {
   const map = document.getElementById("hud-scc-m");
   const override = !!sp.long_override;
 
+  sccVisionActive = !!sp.scc_vision_active;
+  sccMapActive = !!sp.scc_map_active;
+  sccVisionFade.update(sccVisionActive);
+  sccMapFade.update(sccMapActive);
+
   if (vision) {
     vision.hidden = !sp.scc_vision_enabled;
     vision.classList.toggle("is-override", override);
-    vision.classList.toggle("is-dim", !sp.scc_vision_active && sp.scc_vision_enabled);
+    vision.classList.remove("is-dim");
+    const alpha = sccVisionActive ? sccVisionFade.alpha : 1;
+    vision.style.opacity = String(Math.max(0, Math.min(1, alpha)));
   }
   if (map) {
     map.hidden = !sp.scc_map_enabled;
     map.classList.toggle("is-override", override);
-    map.classList.toggle("is-dim", !sp.scc_map_active && sp.scc_map_enabled);
+    map.classList.remove("is-dim");
+    const alpha = sccMapActive ? sccMapFade.alpha : 1;
+    map.style.opacity = String(Math.max(0, Math.min(1, alpha)));
   }
 }
 
@@ -264,6 +427,15 @@ function setText(id, text) {
   el.textContent = text;
 }
 
+let dmFadeFiltered = 0;
+let dmFadeTs = 0;
+
+const slaArrowFade = new AlertFadeAnimator({ durationOn: 0.75, rc: 0.05 });
+const sccVisionFade = new AlertFadeAnimator();
+const sccMapFade = new AlertFadeAnimator();
+let sccVisionActive = false;
+let sccMapActive = false;
+
 function drawDmArc(dm, hideDm, devUi) {
   const wrap = document.getElementById("dm-arc-wrap");
   const svg = document.getElementById("dm-arc");
@@ -271,6 +443,7 @@ function drawDmArc(dm, hideDm, devUi) {
   if (!dm?.visible || hideDm) {
     wrap.hidden = true;
     wrap.classList.remove("is-clickable");
+    dmFadeFiltered = hideDm ? 1 : 0;
     return;
   }
   wrap.hidden = false;
@@ -279,6 +452,16 @@ function drawDmArc(dm, hideDm, devUi) {
   wrap.classList.toggle("opui-dm-wrap--dev-bottom", devUi === 1 || devUi === 3);
   wrap.classList.toggle("is-dm-active", !!dm.active);
 
+  const fadeTarget = hideDm ? 1 : (Number(dm.fade) || 0);
+  if (fadeTarget > dmFadeFiltered) {
+    dmFadeFiltered = Math.min(fadeTarget, dmFadeFiltered + 0.2);
+  } else if (fadeTarget < dmFadeFiltered) {
+    dmFadeFiltered = Math.max(fadeTarget, dmFadeFiltered - 0.2);
+  }
+  const fadeMul = 1 - dmFadeFiltered;
+  const arcAlpha = (dm.active ? 0.4 : 0.15) * fadeMul;
+  const faceAlpha = (dm.active ? 0.65 : 0.2) * fadeMul;
+
   const faceLine = svg.querySelector(".dm-arc-face");
   const faceImg = wrap.querySelector(".opui-dm-face");
   const outline = dm.face_outline || [];
@@ -286,7 +469,7 @@ function drawDmArc(dm, hideDm, devUi) {
     if (outline.length >= 2) {
       faceLine.setAttribute("points", outline.map((p) => `${p[0]},${p[1]}`).join(" "));
       faceLine.hidden = false;
-      faceLine.setAttribute("stroke-opacity", dm.active ? "0.65" : "0.2");
+      faceLine.setAttribute("stroke-opacity", String(faceAlpha));
       if (faceImg) faceImg.hidden = true;
     } else {
       faceLine.setAttribute("points", "");
@@ -297,22 +480,25 @@ function drawDmArc(dm, hideDm, devUi) {
 
   const hArc = svg.querySelector(".dm-arc-h");
   const vArc = svg.querySelector(".dm-arc-v");
-  const len = 300;
   const engagedColor = dm.engaged ? "#1af242" : "#8b8b8b";
-  const hx = dm.pose_h ?? 0;
-  const vy = dm.pose_v ?? 0;
-  const hFrac = Math.min(1, hx);
-  const vFrac = Math.min(1, vy);
-  if (hArc) {
-    hArc.setAttribute("stroke", engagedColor);
-    hArc.setAttribute("stroke-dasharray", `${len * hFrac} ${len}`);
-    hArc.setAttribute("stroke-opacity", dm.active ? "0.4" : "0.15");
+
+  function applyArcPoly(el, arc) {
+    if (!el) return;
+    const pts = arc?.points;
+    if (!pts?.length) {
+      el.setAttribute("points", "");
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.setAttribute("points", pts.map((p) => `${p[0]},${p[1]}`).join(" "));
+    el.setAttribute("stroke", engagedColor);
+    el.setAttribute("stroke-width", String(arc.thickness ?? 6.7));
+    el.setAttribute("stroke-opacity", String(arcAlpha));
   }
-  if (vArc) {
-    vArc.setAttribute("stroke", engagedColor);
-    vArc.setAttribute("stroke-dasharray", `${len * vFrac} ${len}`);
-    vArc.setAttribute("stroke-opacity", dm.active ? "0.4" : "0.15");
-  }
+
+  applyArcPoly(hArc, dm.h_arc);
+  applyArcPoly(vArc, dm.v_arc);
 }
 
 let dmArcBound = false;

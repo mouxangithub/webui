@@ -27,10 +27,60 @@ def _lead_speed_color(v_rel: float) -> str:
   return "#ffffff"
 
 
-def _lat_color(lat_active: bool, steer_override: bool) -> str:
+def _lat_color(lat_active: bool, steer_override: bool, angle_deg: float = 0.0, check_angle: bool = False) -> str:
+  color = "#ffffff"
+  if lat_active:
+    color = "#919b95" if steer_override else "#00ff00"
+
+  if check_angle:
+    if abs(angle_deg) > 180:
+      return "#ff0000"
+    if abs(angle_deg) > 90:
+      return "#ffbc00"
+  return color
+
+
+def _desired_steer_color(lat_active: bool, angle_deg: float) -> str:
   if not lat_active:
     return "#ffffff"
-  return "#919b95" if steer_override else "#00ff00"
+  if abs(angle_deg) > 180:
+    return "#ff0000"
+  if abs(angle_deg) > 90:
+    return "#ffbc00"
+  return "#00ff00"
+
+
+def _gps_data(sm: Any):
+  if sm.valid.get("gpsLocationExternal"):
+    return sm["gpsLocationExternal"], True
+  if sm.valid.get("gpsLocation"):
+    return sm["gpsLocation"], True
+  return None, False
+
+
+def _bearing_value(gps_data) -> str:
+  bearing_accuracy_deg = float(getattr(gps_data, "bearingAccuracyDeg", 180.0))
+  bearing_deg = float(getattr(gps_data, "bearingDeg", 0.0))
+  if bearing_accuracy_deg == 180.0:
+    return "OFF | -"
+
+  if (337.5 <= bearing_deg <= 360) or (0 <= bearing_deg <= 22.5):
+    dir_value = "N"
+  elif 22.5 < bearing_deg < 67.5:
+    dir_value = "NE"
+  elif 67.5 <= bearing_deg <= 112.5:
+    dir_value = "E"
+  elif 112.5 < bearing_deg < 157.5:
+    dir_value = "SE"
+  elif 157.5 <= bearing_deg <= 202.5:
+    dir_value = "S"
+  elif 202.5 < bearing_deg < 247.5:
+    dir_value = "SW"
+  elif 247.5 <= bearing_deg <= 292.5:
+    dir_value = "W"
+  else:
+    dir_value = "NW"
+  return f"{dir_value} | {bearing_deg:.0f}°"
 
 
 def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
@@ -54,16 +104,18 @@ def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
   cc = sm["carControl"]
   conv = CV.MS_TO_KPH if is_metric else CV.MS_TO_MPH
   speed_unit = "km/h" if is_metric else "mph"
+  accel_unit = "m/s^2"
 
   lead = sm["radarState"].leadOne if sm.valid.get("radarState") else None
   lead_present = bool(lead and lead.present)
   lead_d = float(lead.dRel) if lead_present else 0.0
   lead_v = float(lead.vRel) if lead_present else 0.0
+  v_ego = float(cs.vEgo)
 
   lat_active = bool(cc.latActive)
   steer_override = bool(cs.steeringPressed)
+  angle_steers = float(cs.steeringAngleDeg)
   roll = float(sm["liveParameters"].roll) if sm.valid.get("liveParameters") else 0.0
-  v_ego = float(cs.vEgo)
   curvature = float(ctrl.curvature)
   actual_la = (curvature * v_ego ** 2) - (roll * 9.81)
 
@@ -82,15 +134,9 @@ def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
     },
     {
       "label": "REAL STEER",
-      "value": f"{float(cs.steeringAngleDeg):.1f}°",
+      "value": f"{angle_steers:.1f}°",
       "unit": "",
-      "color": "#ffffff",
-    },
-    {
-      "label": "ACTUAL L.A.",
-      "value": f"{actual_la:.2f}",
-      "unit": "m/s²",
-      "color": _lat_color(lat_active, steer_override),
+      "color": _lat_color(lat_active, steer_override, angle_steers, check_angle=True),
     },
   ]
 
@@ -106,23 +152,113 @@ def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
     right.insert(3, {
       "label": "DESIRED L.A.",
       "value": f"{desired_la:.2f}" if lat_active else "-",
-      "unit": "m/s²",
+      "unit": accel_unit,
       "color": _lat_color(lat_active, steer_override),
     })
+  elif lat_which == "angleState":
+    steer_desired = float(ctrl.lateralControlState.angleState.steeringAngleDeg)
+    right.insert(3, {
+      "label": "DESIRED STEER",
+      "value": f"{steer_desired:.1f}°" if lat_active else "-",
+      "unit": "",
+      "color": _desired_steer_color(lat_active, angle_steers),
+    })
+  elif lat_which == "pidState":
+    steer_desired = float(ctrl.lateralControlState.pidState.steeringAngleDesiredDeg)
+    right.insert(3, {
+      "label": "DESIRED STEER",
+      "value": f"{steer_desired:.1f}°" if lat_active else "-",
+      "unit": "",
+      "color": _desired_steer_color(lat_active, angle_steers),
+    })
+
+  right.append({
+    "label": "ACTUAL L.A.",
+    "value": f"{actual_la:.2f}",
+    "unit": accel_unit,
+    "color": _lat_color(lat_active, steer_override),
+  })
 
   bottom: list[dict[str, str]] = [
     {
-      "label": "A_EGO",
+      "label": "ACC.",
       "value": f"{float(cs.aEgo):.1f}",
-      "unit": "m/s²",
+      "unit": accel_unit,
       "color": "#ffffff",
     },
     {
-      "label": "LEAD SPEED",
-      "value": f"{lead_v * conv:.0f}" if lead_present else "-",
+      "label": "L.S.",
+      "value": f"{(lead_v + v_ego) * conv:.0f}" if lead_present else "-",
       "unit": speed_unit,
       "color": _lead_speed_color(lead_v) if lead_present else "#ffffff",
     },
   ]
+
+  if lat_which == "torqueState":
+    override_active = False
+    try:
+      override_active = (
+        ui_state.enforce_torque_control
+        and ui_state.custom_torque_params
+        and ui_state.torque_override_enabled
+      )
+    except Exception:
+      pass
+    if sm.valid.get("liveTorqueParameters") or override_active:
+      if override_active:
+        fric_val = f"{ui_state.torque_override_friction:.3f}"
+        laf_val = f"{ui_state.torque_override_lat_accel_factor:.3f}"
+        fric_color = "#ffffff"
+        laf_color = "#ffffff"
+      else:
+        ltp = sm["liveTorqueParameters"]
+        fric_val = f"{ltp.frictionCoefficientFiltered:.3f}"
+        laf_val = f"{ltp.latAccelFactorFiltered:.3f}"
+        live_valid = bool(getattr(ltp, "liveValid", False))
+        fric_color = "#00ff00" if live_valid else "#ffffff"
+        laf_color = fric_color
+      bottom.extend([
+        {
+          "label": "FRIC.",
+          "value": fric_val,
+          "unit": "",
+          "color": fric_color,
+        },
+        {
+          "label": "L.A.F.",
+          "value": laf_val,
+          "unit": "",
+          "color": laf_color,
+        },
+      ])
+  else:
+    bottom.append({
+      "label": "E.T.",
+      "value": f"{abs(float(cs.steeringTorqueEps)):.1f}",
+      "unit": "N·dm",
+      "color": "#ffffff",
+    })
+    gps_data, gps_valid = _gps_data(sm)
+    if gps_valid:
+      bottom.append({
+        "label": "B.D.",
+        "value": _bearing_value(gps_data),
+        "unit": "",
+        "color": "#ffffff",
+      })
+
+  gps_data, gps_valid = _gps_data(sm)
+  if gps_valid:
+    altitude = float(getattr(gps_data, "altitude", 0.0))
+    if sm.valid.get("gpsLocationExternal"):
+      gps_accuracy = float(getattr(gps_data, "horizontalAccuracy", 0.0))
+    else:
+      gps_accuracy = 1.0
+    bottom.append({
+      "label": "ALT.",
+      "value": f"{altitude:.1f}" if gps_accuracy != 0.0 else "-",
+      "unit": "m",
+      "color": "#ffffff",
+    })
 
   return {"mode": mode, "bottom": bottom, "right": right}

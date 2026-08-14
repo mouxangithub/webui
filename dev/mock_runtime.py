@@ -43,6 +43,7 @@ SIM: dict[str, Any] = {
   "sunnylink": {"status": "ONLINE", "tone": "good"},
   "road_name": "Dev Preview Rd",
   "speed_limit": 60,
+  "speed_limit_mode": 1,
   "speed_limit_assist": "preActive",
   "scc_vision_enabled": True,
   "scc_vision_active": True,
@@ -67,6 +68,7 @@ SIM: dict[str, Any] = {
   "standstill_timer": 0,
   "e2e_green_light": False,
   "e2e_lead_depart": False,
+  "confidence_target": 0.72,
   "engageable": True,
   "torque_bar": True,
   "torque_utilization": 0.42,
@@ -106,6 +108,8 @@ def _seed_params() -> dict[str, bytes | str]:
     "QuietMode": b"0",
     "OnroadUploads": b"1",
     "OffroadMode": b"0",
+    "HasAcceptedTerms": b"2",
+    "CompletedTrainingVersion": b"0.2.0",
   })
   return data
 
@@ -180,17 +184,22 @@ class MockParams:
 
 def _mock_dev_ui(s: dict[str, Any]) -> dict[str, Any]:
   mode = int(s.get("developer_ui", 0))
+  unit = "km/h" if s.get("is_metric", True) else "mph"
+  accel = "m/s^2"
   return {
     "mode": mode,
     "bottom": [
-      {"label": "A_EGO", "value": "0.0", "unit": "m/s²", "color": "#ffffff"},
-      {"label": "LEAD SPEED", "value": "0", "unit": "km/h", "color": "#ffffff"},
+      {"label": "ACC.", "value": "-0.8", "unit": accel, "color": "#ffffff"},
+      {"label": "L.S.", "value": "68", "unit": unit, "color": "#ffbc00"},
+      {"label": "FRIC.", "value": "0.120", "unit": "", "color": "#00ff00"},
+      {"label": "L.A.F.", "value": "1.850", "unit": "", "color": "#00ff00"},
     ],
     "right": [
       {"label": "REL DIST", "value": "42", "unit": "m", "color": "#ffbc00"},
-      {"label": "REL SPEED", "value": "5", "unit": "km/h", "color": "#ffffff"},
-      {"label": "REAL STEER", "value": "2.1°", "unit": "", "color": "#ffffff"},
-      {"label": "ACTUAL L.A.", "value": "0.12", "unit": "m/s²", "color": "#00ff00"},
+      {"label": "REL SPEED", "value": "5", "unit": unit, "color": "#ffffff"},
+      {"label": "REAL STEER", "value": "2.1°", "unit": "", "color": "#00ff00"},
+      {"label": "DESIRED L.A.", "value": "0.15", "unit": accel, "color": "#00ff00"},
+      {"label": "ACTUAL L.A.", "value": "0.12", "unit": accel, "color": "#00ff00"},
     ],
   }
 
@@ -240,6 +249,14 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "standstill_timer_enabled": s.get("standstill_timer_enabled", False),
     "sp_hud": {
       "speed_limit": s.get("speed_limit"),
+      "speed_limit_last": s.get("speed_limit"),
+      "speed_limit_final_last": s.get("speed_limit"),
+      "speed_limit_valid": True,
+      "speed_limit_last_valid": True,
+      "speed_limit_offset": 0,
+      "speed_limit_source": "map",
+      "speed_limit_resolver": s.get("speed_limit"),
+      "speed_limit_assist_state": s.get("speed_limit_assist", ""),
       "speed_limit_assist": s.get("speed_limit_assist", ""),
       "speed_limit_assist_active": bool(s.get("speed_limit_assist")),
       "road_name": s.get("road_name", ""),
@@ -264,13 +281,28 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "torque_bar": bool(s.get("torque_bar", False)),
     "torque_utilization": float(s.get("torque_utilization", 0.0)),
     "circular_alert_allowed": s["started"] and s.get("alert_size", "none") in ("none", ""),
+    "confidence_ball": {"target": float(s.get("confidence_target", 0.72)), "ui_status": s.get("ui_status", "engaged")} if s["started"] else None,
     "dev_ui": _mock_dev_ui(s) if s["started"] and int(s.get("developer_ui", 0)) > 0 else None,
+    "speed_limit_mode": int(s.get("speed_limit_mode", 1)),
+    "turn_signals": True,
+    "blindspot": True,
+    "rocket_fuel_enabled": True,
+    "a_ego": -0.8,
     "dm_arc": {
       "visible": True,
       "prob": s.get("dm_prob", 0.8),
       "pose": s.get("dm_pose", [0, 0, 0]),
       "engaged": s["engaged"],
       "rhd": False,
+      "active": True,
+      "pose_h": 0.35,
+      "pose_v": 0.22,
+      "face_outline": [
+        [96, 70], [88, 72], [84, 78], [80, 86], [78, 92], [76, 100], [74, 112],
+        [74, 128], [76, 134], [80, 142], [84, 148], [90, 154], [96, 158], [102, 154],
+        [108, 148], [112, 142], [116, 134], [118, 128], [118, 112], [116, 100],
+        [114, 92], [112, 86], [108, 78], [104, 72], [96, 70],
+      ],
     } if s["started"] else None,
   }
 
