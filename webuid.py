@@ -61,6 +61,7 @@ def main() -> None:
   print(f"  op Web UI: {scheme}://127.0.0.1:{args.port}/")
   if args.tls:
     print(f"  TLS: 局域网请用 {scheme}://<车机IP>:{args.port}/ （首次需在浏览器信任自签证书）")
+    print(f"  HTTP: http://<车机IP>:{args.port}/ 会自动跳转到 HTTPS")
     print("  说明: HTTPS 可启用 WebCodecs；HTTP 局域网 IP 仅支持 Video 元素解码")
   elif not dev_pc:
     print("  提示: 局域网 WebCodecs 需 HTTPS，启动时加 --tls 或设置 WEBUI_TLS=1")
