@@ -9,9 +9,17 @@ from typing import Any
 
 from aiohttp import web
 
-from webui.server.bridge.model_overlay import snapshot_model_overlay
+from webui.server.bridge.model_overlay import (
+  OVERLAY_PARAM_KEYS,
+  invalidate_overlay_params_cache,
+  overlay_anim_key,
+  overlay_frame_key,
+  overlay_geometry_key,
+  overlay_wire_payload,
+  snapshot_model_overlay,
+)
 from webui.server.bridge.params_api import panel_values, put_param
-from webui.server.bridge.state_hub import get_home, get_state, home_seq, state_seq
+from webui.server.bridge.state_hub import get_home, get_home_json, get_state, get_state_json, home_seq, state_seq
 from webui.server.bridge.ws_rpc import bootstrap_payload, custom_panel_data, dispatch_http
 
 log = logging.getLogger("webui.ws")
@@ -30,6 +38,8 @@ MODEL_INTERVAL = 0.1
 MODEL_INTERVAL_LOW = 0.2
 _last_i18n_lang: str | None = None
 I18N_INTERVAL = 0.5
+STREAM_HEALTH_INTERVAL = 3.0
+_stream_health_hash = ""
 
 
 def _values_hash(values: dict[str, Any]) -> str:
@@ -40,14 +50,24 @@ def _data_hash(data: Any) -> str:
   return json.dumps(data, sort_keys=True, default=str)
 
 
+def ws_connection_count() -> int:
+  return len(_connections)
+
+
 async def ws_opui_handler(request: web.Request) -> web.WebSocketResponse:
   ws = web.WebSocketResponse(heartbeat=30)
   await ws.prepare(request)
   _connections.add(ws)
+  try:
+    from webui.server.bridge.webui_bg_services import note_ws_client_connected
+    note_ws_client_connected()
+  except Exception:
+    pass
   _meta[ws] = {
     "state": True,
     "home": True,
     "i18n": False,
+    "stream_health": False,
     "watch_panel": None,
     "model_overlay": None,
     "last_state_seq": -1,
@@ -55,6 +75,8 @@ async def ws_opui_handler(request: web.Request) -> web.WebSocketResponse:
     "last_panel_hash": "",
     "last_custom_hash": "",
     "last_model_hash": "",
+    "last_geometry_hash": "",
+    "last_anim_hash": "",
   }
   try:
     await ws.send_json({
@@ -63,11 +85,17 @@ async def ws_opui_handler(request: web.Request) -> web.WebSocketResponse:
       "proto": 2,
       "bootstrap": bootstrap_payload(),
     })
-    st = get_state()
-    await ws.send_json({"type": "state", "seq": state_seq(), "data": st})
+    state_json = get_state_json()
+    if state_json:
+      await ws.send_str(state_json)
+    else:
+      await ws.send_json({"type": "state", "seq": state_seq(), "data": get_state()})
     _meta[ws]["last_state_seq"] = state_seq()
-    home = get_home()
-    await ws.send_json({"type": "home", "seq": home_seq(), "data": home})
+    home_json = get_home_json()
+    if home_json:
+      await ws.send_str(home_json)
+    else:
+      await ws.send_json({"type": "home", "seq": home_seq(), "data": get_home()})
     _meta[ws]["last_home_seq"] = home_seq()
 
     async for msg in ws:
@@ -89,6 +117,11 @@ async def ws_opui_handler(request: web.Request) -> web.WebSocketResponse:
       except Exception:
         pass
     _connections.discard(ws)
+    try:
+      from webui.server.bridge.webui_bg_services import note_ws_client_disconnected
+      note_ws_client_disconnected()
+    except Exception:
+      pass
   return ws
 
 
@@ -100,14 +133,24 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
 
   if mtype == "subscribe":
     channels = set(msg.get("channels") or [])
-    meta["state"] = "state" in channels
-    meta["home"] = "home" in channels
-    meta["i18n"] = "i18n" in channels
+    if channels:
+      meta["state"] = "state" in channels
+      meta["home"] = "home" in channels
+      meta["i18n"] = "i18n" in channels
+      meta["stream_health"] = "stream_health" in channels
     if meta["state"]:
-      await ws.send_json({"type": "state", "seq": state_seq(), "data": get_state()})
+      payload = get_state_json()
+      if payload:
+        await ws.send_str(payload)
+      else:
+        await ws.send_json({"type": "state", "seq": state_seq(), "data": get_state()})
       meta["last_state_seq"] = state_seq()
     if meta["home"]:
-      await ws.send_json({"type": "home", "seq": home_seq(), "data": get_home()})
+      payload = get_home_json()
+      if payload:
+        await ws.send_str(payload)
+      else:
+        await ws.send_json({"type": "home", "seq": home_seq(), "data": get_home()})
       meta["last_home_seq"] = home_seq()
     if meta["i18n"]:
       from webui.server.bridge.i18n_api import snapshot_i18n
@@ -131,12 +174,12 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     meta["last_panel_hash"] = ""
     meta["last_custom_hash"] = ""
     if panel_id:
-      data = panel_values(panel_id)
+      data = await asyncio.to_thread(panel_values, panel_id)
       h = _values_hash(data.get("values", {}))
       meta["last_panel_hash"] = h
       _panel_hash[panel_id] = h
       await ws.send_json({"type": "panel", "panel": panel_id, "data": data})
-      custom = custom_panel_data(panel_id)
+      custom = await asyncio.to_thread(custom_panel_data, panel_id)
       if custom:
         ch = _data_hash(custom)
         meta["last_custom_hash"] = ch
@@ -149,16 +192,25 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     h = int(msg.get("h") or 900)
     fps = int(msg.get("fps") or 10)
     fps = max(3, min(20, fps))
+    prev = meta.get("model_overlay")
+    if prev and prev.get("w") == w and prev.get("h") == h and prev.get("fps") == fps:
+      return
     meta["model_overlay"] = {"w": w, "h": h, "fps": fps}
     meta["last_model_hash"] = ""
-    frame = snapshot_model_overlay(w, h)
-    meta["last_model_hash"] = _data_hash(frame)
+    meta["last_geometry_hash"] = ""
+    meta["last_anim_hash"] = ""
+    frame = await asyncio.to_thread(snapshot_model_overlay, w, h)
+    meta["last_model_hash"] = overlay_frame_key(frame)
+    meta["last_geometry_hash"] = overlay_geometry_key(frame)
+    meta["last_anim_hash"] = overlay_anim_key(frame)
     await ws.send_json({"type": "model_overlay", "data": frame})
     return
 
   if mtype == "unwatch_model_overlay":
     meta["model_overlay"] = None
     meta["last_model_hash"] = ""
+    meta["last_geometry_hash"] = ""
+    meta["last_anim_hash"] = ""
     return
 
   if mtype == "rpc":
@@ -171,6 +223,8 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     if result.get("ok") and method == "PUT" and "/api/opui/params/" in path:
       key = path.rsplit("/", 1)[-1].split("?")[0]
       await _broadcast_panel_updates_for_key(key)
+      if key in OVERLAY_PARAM_KEYS:
+        invalidate_overlay_params_cache()
       if key == "LanguageSetting":
         await _broadcast_i18n(force=True)
     if result.get("ok") and method == "POST" and path.rstrip("/").endswith("/api/opui/device/language"):
@@ -182,10 +236,12 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
     key = str(msg.get("key") or "")
     value = str(msg.get("value", ""))
     needs_cycle = bool(msg.get("needs_cycle", False))
-    result = put_param(key, value, needs_cycle=needs_cycle)
+    result = await asyncio.to_thread(put_param, key, value, needs_cycle=needs_cycle)
     await ws.send_json({"type": "put_param_result", "id": req_id, **result})
     if result.get("ok"):
       await _broadcast_panel_updates_for_key(key)
+      if key in OVERLAY_PARAM_KEYS:
+        invalidate_overlay_params_cache()
       if key == "LanguageSetting":
         await _broadcast_i18n(force=True)
     return
@@ -226,13 +282,13 @@ async def _broadcast_panel_updates_for_key(_key: str) -> None:
     if not panel_id:
       continue
     try:
-      data = panel_values(panel_id)
+      data = await asyncio.to_thread(panel_values, panel_id)
       h = _values_hash(data.get("values", {}))
       if h != meta.get("last_panel_hash"):
         meta["last_panel_hash"] = h
         _panel_hash[panel_id] = h
         await ws.send_json({"type": "panel", "panel": panel_id, "data": data})
-      custom = custom_panel_data(panel_id)
+      custom = await asyncio.to_thread(custom_panel_data, panel_id)
       if custom:
         ch = _data_hash(custom)
         if ch != meta.get("last_custom_hash"):
@@ -246,6 +302,75 @@ async def _broadcast_panel_updates_for_key(_key: str) -> None:
     _meta.pop(ws, None)
 
 
+async def _broadcast_model_overlays(now: float) -> None:
+  due: list[tuple[web.WebSocketResponse, dict[str, Any], dict[str, Any]]] = []
+  for ws, meta in list(_meta.items()):
+    ov = meta.get("model_overlay")
+    if not ov:
+      continue
+    fps = int(ov.get("fps") or 10)
+    interval = max(MODEL_INTERVAL_LOW, 1.0 / max(3, min(20, fps)))
+    if now - meta.get("last_model_push_at", 0) < interval:
+      continue
+    meta["last_model_push_at"] = now
+    due.append((ws, meta, ov))
+
+  if not due:
+    return
+
+  sizes = {(int(ov["w"]), int(ov["h"])) for _, _, ov in due}
+  frames: dict[tuple[int, int], dict[str, Any]] = {}
+  for w, h in sizes:
+    frames[(w, h)] = await asyncio.to_thread(snapshot_model_overlay, w, h)
+
+  sends: list[tuple[web.WebSocketResponse, str]] = []
+  dead: list[web.WebSocketResponse] = []
+  for ws, meta, ov in due:
+    wh = (int(ov["w"]), int(ov["h"]))
+    frame = frames[wh]
+    try:
+      gk = overlay_geometry_key(frame)
+      ak = overlay_anim_key(frame)
+      if frame.get("clear"):
+        if gk == meta.get("last_geometry_hash") and meta.get("last_geometry_hash"):
+          continue
+        meta["last_geometry_hash"] = gk
+        meta["last_anim_hash"] = ak
+        meta["last_model_hash"] = overlay_frame_key(frame)
+      elif frame.get("anim_only"):
+        if ak == meta.get("last_anim_hash"):
+          continue
+        meta["last_anim_hash"] = ak
+        meta["last_model_hash"] = overlay_frame_key(frame)
+      else:
+        if gk == meta.get("last_geometry_hash") and ak == meta.get("last_anim_hash"):
+          continue
+        meta["last_geometry_hash"] = gk
+        meta["last_anim_hash"] = ak
+        meta["last_model_hash"] = overlay_frame_key(frame)
+      payload = json.dumps(
+        {"type": "model_overlay", "data": overlay_wire_payload(frame)},
+        separators=(",", ":"),
+        default=str,
+      )
+      sends.append((ws, payload))
+    except Exception:
+      dead.append(ws)
+
+  if sends:
+    results = await asyncio.gather(
+      *[ws.send_str(payload) for ws, payload in sends],
+      return_exceptions=True,
+    )
+    for (ws, _), result in zip(sends, results):
+      if isinstance(result, Exception):
+        dead.append(ws)
+
+  for ws in dead:
+    _connections.discard(ws)
+    _meta.pop(ws, None)
+
+
 async def ws_broadcast_loop() -> None:
   last_state_push = 0.0
   last_panel_push = 0.0
@@ -253,9 +378,10 @@ async def ws_broadcast_loop() -> None:
   last_custom_push = 0.0
   last_model_push = 0.0
   last_i18n_push = 0.0
+  last_stream_push = 0.0
   while True:
     try:
-      await asyncio.sleep(0.05)
+      await asyncio.sleep(0.5 if not _connections else 0.05)
       if not _connections:
         continue
       now = asyncio.get_event_loop().time()
@@ -268,7 +394,11 @@ async def ws_broadcast_loop() -> None:
           if not meta.get("state") or meta.get("last_state_seq") == seq:
             continue
           try:
-            await ws.send_json({"type": "state", "seq": seq, "data": get_state()})
+            payload = get_state_json(seq)
+            if payload:
+              await ws.send_str(payload)
+            else:
+              await ws.send_json({"type": "state", "seq": seq, "data": get_state()})
             meta["last_state_seq"] = seq
           except Exception:
             dead.append(ws)
@@ -280,7 +410,7 @@ async def ws_broadcast_loop() -> None:
         last_panel_push = now
         watched = {m.get("watch_panel") for m in _meta.values() if m.get("watch_panel")}
         for panel_id in watched:
-          data = panel_values(panel_id)
+          data = await asyncio.to_thread(panel_values, panel_id)
           h = _values_hash(data.get("values", {}))
           if _panel_hash.get(panel_id) != h:
             _panel_hash[panel_id] = h
@@ -307,7 +437,7 @@ async def ws_broadcast_loop() -> None:
               maybe_refresh_sunnylink_cache()
             except Exception:
               pass
-          custom = custom_panel_data(panel_id)
+          custom = await asyncio.to_thread(custom_panel_data, panel_id)
           if not custom:
             continue
           ch = _data_hash(custom)
@@ -329,30 +459,7 @@ async def ws_broadcast_loop() -> None:
 
       if now - last_model_push >= MODEL_INTERVAL:
         last_model_push = now
-        dead = []
-        for ws, meta in list(_meta.items()):
-          ov = meta.get("model_overlay")
-          if not ov:
-            continue
-          fps = int(ov.get("fps") or 10)
-          interval = max(MODEL_INTERVAL_LOW, 1.0 / max(3, min(20, fps)))
-          if now - meta.get("last_model_push_at", 0) < interval:
-            continue
-          meta["last_model_push_at"] = now
-          try:
-            frame = snapshot_model_overlay(int(ov["w"]), int(ov["h"]))
-            if frame.get("skipped"):
-              continue
-            fh = _data_hash(frame)
-            if fh == meta.get("last_model_hash"):
-              continue
-            meta["last_model_hash"] = fh
-            await ws.send_json({"type": "model_overlay", "data": frame})
-          except Exception:
-            dead.append(ws)
-        for ws in dead:
-          _connections.discard(ws)
-          _meta.pop(ws, None)
+        await _broadcast_model_overlays(now)
 
       if now - last_home_push >= HOME_INTERVAL:
         last_home_push = now
@@ -362,13 +469,39 @@ async def ws_broadcast_loop() -> None:
           if not meta.get("home") or meta.get("last_home_seq") == seq:
             continue
           try:
-            await ws.send_json({"type": "home", "seq": seq, "data": get_home()})
+            payload = get_home_json(seq)
+            if payload:
+              await ws.send_str(payload)
+            else:
+              await ws.send_json({"type": "home", "seq": seq, "data": get_home()})
             meta["last_home_seq"] = seq
           except Exception:
             dead.append(ws)
         for ws in dead:
           _connections.discard(ws)
           _meta.pop(ws, None)
+
+      if now - last_stream_push >= STREAM_HEALTH_INTERVAL:
+        last_stream_push = now
+        if any(m.get("stream_health") for m in _meta.values()):
+          global _stream_health_hash
+          from webui.server.bridge.stream_health_api import snapshot_stream_health
+          health = await asyncio.to_thread(snapshot_stream_health)
+          ch = _data_hash(health)
+          if ch != _stream_health_hash:
+            _stream_health_hash = ch
+            payload = json.dumps({"type": "stream_health", "data": health}, separators=(",", ":"), default=str)
+            dead = []
+            for ws, meta in list(_meta.items()):
+              if not meta.get("stream_health"):
+                continue
+              try:
+                await ws.send_str(payload)
+              except Exception:
+                dead.append(ws)
+            for ws in dead:
+              _connections.discard(ws)
+              _meta.pop(ws, None)
 
       if now - last_i18n_push >= I18N_INTERVAL:
         last_i18n_push = now

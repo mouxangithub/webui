@@ -27,11 +27,13 @@ def openpilot_root() -> Path:
   return _PKG_ROOT.parent.resolve()
 
 
-def json_response(data: Any, *, status: int = 200) -> web.Response:
+def json_response(data: Any, *, status: int = 200, headers: dict[str, str] | None = None) -> web.Response:
+  hdrs = dict(headers or {})
   return web.Response(
     text=json.dumps(data, ensure_ascii=False),
     content_type="application/json",
     status=status,
+    headers=hdrs,
   )
 
 

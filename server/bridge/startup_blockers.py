@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 # User-facing messages (i18n keys on the client).
@@ -161,8 +162,32 @@ def startup_blockers_from_sm(sm: Any) -> dict[str, Any]:
   }
 
 
+_gate_cache: dict[str, Any] | None = None
+_gate_lock = threading.Lock()
+
+
+def set_startup_gate_cache(gate: dict[str, Any]) -> None:
+  global _gate_cache
+  with _gate_lock:
+    _gate_cache = gate
+
+
+def get_startup_gate() -> dict[str, Any]:
+  with _gate_lock:
+    if _gate_cache is not None:
+      return dict(_gate_cache)
+  return startup_blockers_snapshot()
+
+
 def startup_blockers_snapshot() -> dict[str, Any]:
-  """Cold snapshot without persistent SubMaster (HTTP home API)."""
+  """Snapshot from shared SubMaster when available, else cold poll."""
+  try:
+    from webui.server.bridge.state_hub import get_shared_sm
+    sm = get_shared_sm()
+    if sm is not None:
+      return startup_blockers_from_sm(sm)
+  except Exception:
+    pass
   try:
     import openpilot.cereal.messaging as messaging
     sm = messaging.SubMaster(["deviceState", "pandaStates"], poll="deviceState")

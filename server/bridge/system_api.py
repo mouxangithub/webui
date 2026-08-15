@@ -153,7 +153,7 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
     return {"ok": False, "error": str(exc)}
 
 
-def software_status() -> dict[str, Any]:
+def software_status(*, started: bool | None = None) -> dict[str, Any]:
   try:
     p = _params()
 
@@ -165,15 +165,27 @@ def software_status() -> dict[str, Any]:
 
     is_onroad = False
     is_offroad = True
-    try:
-      import openpilot.cereal.messaging as messaging
-      sm = messaging.SubMaster(["deviceState"], poll="deviceState")
-      sm.update(300)
-      if sm.valid.get("deviceState"):
-        is_onroad = bool(sm["deviceState"].started)
-        is_offroad = not is_onroad
-    except Exception:
-      pass
+    if started is None:
+      try:
+        from webui.server.bridge.state_hub import get_started
+        hub_started = get_started()
+        if hub_started is not None:
+          started = hub_started
+      except Exception:
+        pass
+    if started is not None:
+      is_onroad = bool(started)
+      is_offroad = not is_onroad
+    else:
+      try:
+        import openpilot.cereal.messaging as messaging
+        sm = messaging.SubMaster(["deviceState"], poll="deviceState")
+        sm.update(300)
+        if sm.valid.get("deviceState"):
+          is_onroad = bool(sm["deviceState"].started)
+          is_offroad = not is_onroad
+      except Exception:
+        pass
 
     updater_state = p.get("UpdaterState") or "idle"
     fetch_available = p.get_bool("UpdaterFetchAvailable")

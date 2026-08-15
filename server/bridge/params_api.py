@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
+from webui.server.bridge.model_overlay import OVERLAY_PARAM_KEYS, invalidate_overlay_params_cache
 from webui.server.bridge.panel_catalog import PANELS, get_panel, panel_schema
 
 if TYPE_CHECKING:
@@ -195,6 +196,9 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
 
     if needs_cycle:
       p.put_bool("OnroadCycleRequested", True, block=True)
+
+    if key in OVERLAY_PARAM_KEYS:
+      invalidate_overlay_params_cache()
 
     return {"ok": True, "key": key, "value": _read_param_value(p, key, ptype)}
   except Exception as exc:

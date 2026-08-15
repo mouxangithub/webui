@@ -15,6 +15,54 @@ function t(s) {
   return tr(s);
 }
 
+function panelHelpText(w) {
+  if (w?.desc_i18n) return t(w.desc_i18n);
+  if (w?.desc) return t(w.desc);
+  return "";
+}
+
+function bindPanelHelp(row, w) {
+  const desc = panelHelpText(w);
+  if (desc) bindRowExpand(row, { desc });
+}
+
+export function clearPanelDomCache() {
+  panelDomCache.clear();
+}
+
+const panelDomCache = new Map();
+const panelChromeCache = new Map();
+
+function isPanelLoadingNode(node) {
+  return node?.nodeType === Node.ELEMENT_NODE && node.classList?.contains("opui-panel-loading");
+}
+
+function stashPanelDom(panelId, container) {
+  if (!panelId || !container?.childNodes?.length) return;
+  if (container.childNodes.length === 1 && isPanelLoadingNode(container.firstChild)) return;
+  let hold = panelDomCache.get(panelId);
+  if (!hold) {
+    hold = document.createElement("div");
+    hold.className = "opui-panel-cache-hold";
+    hold.hidden = true;
+    panelDomCache.set(panelId, hold);
+  }
+  while (container.firstChild) {
+    hold.appendChild(container.firstChild);
+  }
+}
+
+function restorePanelDom(panelId, container) {
+  const hold = panelDomCache.get(panelId);
+  if (!hold?.firstChild || !container) return false;
+  disposePanelWidgets(container);
+  while (container.firstChild) container.removeChild(container.firstChild);
+  while (hold.firstChild) {
+    container.appendChild(hold.firstChild);
+  }
+  return true;
+}
+
 function formatTimeAgo(ts) {
   if (ts == null || ts === "") return t("never");
   const sec = typeof ts === "number" ? ts : parseFloat(String(ts));
@@ -870,6 +918,7 @@ export function applyPanelSync(data) {
   panelDataRef = data;
   const hash = panelVisibilityHash(data);
   if (hash !== lastPanelVisibilityHash) {
+    if (currentPanelRef) panelDomCache.delete(currentPanelRef);
     lastPanelVisibilityHash = hash;
     if (data.custom) {
       const container = document.getElementById("panel-content");
@@ -889,7 +938,7 @@ export function applyPanelSync(data) {
       }
     } else {
       const container = document.getElementById("panel-content");
-      if (container) renderGenericPanel(container, data);
+      if (container) renderGenericPanel(container, data, currentPanelRef);
     }
     updateEngagedWidgets();
     updateToggleCapabilities(globalState);
@@ -1053,9 +1102,36 @@ export async function loadPanelList() {
   return [];
 }
 
+function applyPanelTitle(panelId, titleEl, data, options = {}) {
+  if (!titleEl || !data) return;
+  const header = titleEl.closest(".opui-panel-header");
+  if (data.parent && options.showBack !== false) {
+    header?.classList.add("opui-panel-header--subpanel");
+    titleEl.innerHTML = `<button type="button" class="opui-back" data-parent="${escapeAttr(data.parent)}">‹</button> ${escapeHtml(t(data.title))}`;
+    titleEl.querySelector(".opui-back")?.addEventListener("click", () => {
+      if (onNavigateSubpanel) onNavigateSubpanel(data.parent);
+    });
+  } else {
+    header?.classList.remove("opui-panel-header--subpanel");
+    titleEl.textContent = "";
+  }
+  panelChromeCache.set(panelId, { title: data.title, parent: data.parent || null });
+}
+
 export async function renderPanel(panelId, container, titleEl, options = {}) {
+  const prevPanel = currentPanelRef;
+  if (container && prevPanel && prevPanel !== panelId && container.childNodes.length) {
+    stashPanelDom(prevPanel, container);
+  }
   currentPanelRef = panelId;
   notifyPanelWatch(panelId);
+  if (!options.force && container && restorePanelDom(panelId, container)) {
+    const chrome = panelChromeCache.get(panelId);
+    if (chrome && titleEl) {
+      applyPanelTitle(panelId, titleEl, chrome, options);
+    }
+    return;
+  }
   if (container && !container.querySelector(".opui-panel-loading")) {
     container.innerHTML = '<p class="opui-muted opui-panel-loading" style="padding:48px;text-align:center">' + escapeHtml(t("Loading...")) + '</p>';
   }
@@ -1065,17 +1141,7 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
     return;
   }
   if (titleEl) {
-    const header = titleEl.closest(".opui-panel-header");
-    if (data.parent && options.showBack !== false) {
-      header?.classList.add("opui-panel-header--subpanel");
-      titleEl.innerHTML = `<button type="button" class="opui-back" data-parent="${escapeAttr(data.parent)}">‹</button> ${escapeHtml(t(data.title))}`;
-      titleEl.querySelector(".opui-back")?.addEventListener("click", () => {
-        if (onNavigateSubpanel) onNavigateSubpanel(data.parent);
-      });
-    } else {
-      header?.classList.remove("opui-panel-header--subpanel");
-      titleEl.textContent = "";
-    }
+    applyPanelTitle(panelId, titleEl, data, options);
   }
 
   if (data.custom === "device") {
@@ -1119,7 +1185,7 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
     return;
   }
 
-  renderGenericPanel(container, data);
+  renderGenericPanel(container, data, panelId);
   updateDisplayDependencies(data);
   if (panelId === "steering__mads") updateMadsSubpanel(globalState);
   if (panelId === "steering__lane_change") updateLaneChangeSubpanel(globalState);
@@ -1218,7 +1284,25 @@ function prependSubpanelNav(container, data) {
   container.appendChild(nav);
 }
 
-function renderGenericPanel(container, data) {
+function disposePanelWidgets(container) {
+  for (const row of container.querySelectorAll(".opui-stream-diag")) {
+    if (row._streamDiagTimer) {
+      clearInterval(row._streamDiagTimer);
+      row._streamDiagTimer = null;
+    }
+    if (row._streamDiagVisHandler) {
+      document.removeEventListener("visibilitychange", row._streamDiagVisHandler);
+      row._streamDiagVisHandler = null;
+    }
+    if (row._streamHealthOff) {
+      row._streamHealthOff();
+      row._streamHealthOff = null;
+    }
+  }
+}
+
+function renderGenericPanel(container, data, panelId = "") {
+  disposePanelWidgets(container);
   container.innerHTML = "";
   appendPanelWidgets(container, data);
 }
@@ -1279,6 +1363,7 @@ function renderWidget(w, panelData) {
   if (kind === "custom") {
     if (w.custom === "ssh_keys") return renderSshKeysBlock();
     if (w.custom === "device_language") return renderLanguageRow();
+    if (w.custom === "stream_headless_mode") return renderStreamHeadlessModeRow(w);
     if (w.custom === "stream_preview_quality") return renderStreamPreviewQualityRow(w);
     if (w.custom === "stream_webcodecs") return renderStreamWebcodecsRow();
     if (w.custom === "stream_diagnostics") return renderStreamDiagnosticsRow();
@@ -2743,9 +2828,90 @@ async function renderVehiclePanel(container, data) {
 const STREAM_QUALITY_LABELS = {
   auto: "Auto",
   low: "Smooth",
-  med: "Standard",
+  med: "SD",
   high: "HD",
+  off: "Off",
 };
+
+const HEADLESS_MODE_LABELS = { auto: "Auto", on: "Turn on", off: "Off" };
+const HEADLESS_MODE_LEVELS = ["auto", "on", "off"];
+
+function renderStreamHeadlessModeRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--stacked opui-sp-row--segmented opui-stream-settings-block";
+  let cur = window.__OPUI_HEADLESS_MODE || "auto";
+  let canTurnOff = window.__OPUI_HAS_BUILTIN_DISPLAY !== false;
+
+  const text = document.createElement("div");
+  text.className = "opui-sp-row-text";
+  text.innerHTML = `<div class="opui-sp-row-title">${escapeHtml(t("Headless mode"))}</div>`;
+
+  const hint = document.createElement("div");
+  hint.className = "opui-stream-hint opui-stream-hint--muted";
+  hint.hidden = true;
+
+  const group = document.createElement("div");
+  group.className = "opui-multi-btn-group";
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", t("Headless mode"));
+
+  const buttons = new Map();
+
+  function paint() {
+    for (const [mode, btn] of buttons) {
+      btn.classList.toggle("selected", mode === cur);
+      if (mode === "off") {
+        btn.disabled = !canTurnOff;
+        btn.title = canTurnOff ? "" : t("No built-in display — headless cannot be turned off");
+      }
+    }
+    hint.hidden = canTurnOff;
+    if (!canTurnOff) {
+      hint.textContent = t("No built-in display — headless cannot be turned off");
+    }
+  }
+
+  for (const mode of HEADLESS_MODE_LEVELS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = t(HEADLESS_MODE_LABELS[mode] || mode);
+    buttons.set(mode, btn);
+    btn.addEventListener("click", async () => {
+      if (mode === "off" && !canTurnOff) return;
+      const res = await apiPut("/api/opui/headless-mode", { mode });
+      if (!res.ok) {
+        toast(`${t("Headless mode update failed")}: ${res.error || t("Unknown error")}`);
+        return;
+      }
+      cur = res.mode || mode;
+      canTurnOff = res.can_turn_off !== false;
+      paint();
+      toast(t("Headless mode updated"));
+      window.dispatchEvent(new CustomEvent("opui:headless-mode-changed", {
+        detail: {
+          mode: cur,
+          effective_headless: !!res.effective_headless,
+          recommended_overlay_fps: res.effective_headless ? 5 : 10,
+        },
+      }));
+    });
+    group.appendChild(btn);
+  }
+
+  paint();
+  text.appendChild(hint);
+  row.append(text, group);
+  bindPanelHelp(row, w);
+
+  apiGet("/api/opui/headless-mode").then((data) => {
+    if (!data?.ok) return;
+    cur = data.mode || "auto";
+    canTurnOff = data.can_turn_off !== false;
+    paint();
+  }).catch(() => {});
+
+  return row;
+}
 
 function renderStreamPreviewQualityRow(w) {
   const row = document.createElement("div");
@@ -2754,12 +2920,10 @@ function renderStreamPreviewQualityRow(w) {
 
   const text = document.createElement("div");
   text.className = "opui-sp-row-text";
-  text.innerHTML = `
-    <div class="opui-sp-row-title">${escapeHtml(t("Preview quality"))}</div>
-    ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc))}</div>` : ""}`;
+  text.innerHTML = `<div class="opui-sp-row-title">${escapeHtml(t("Preview quality"))}</div>`;
 
   const group = document.createElement("div");
-  group.className = "opui-multi-btn-group opui-multi-btn-group--stream-quality";
+  group.className = "opui-multi-btn-group";
   group.setAttribute("role", "group");
   group.setAttribute("aria-label", t("Preview quality"));
 
@@ -2769,21 +2933,30 @@ function renderStreamPreviewQualityRow(w) {
     btn.classList.toggle("selected", level === cur);
     btn.textContent = t(STREAM_QUALITY_LABELS[level] || level);
     btn.addEventListener("click", async () => {
+      const prev = getQualityPreference();
       setQualityPreference(level);
       group.querySelectorAll("button").forEach((el) => el.classList.remove("selected"));
       btn.classList.add("selected");
       toast(t("Preview quality updated"));
-      const { applyStreamQuality, isRoadStreaming } = await import("./webrtc_stream.js?v=52");
-      if (isRoadStreaming()) await applyStreamQuality(level, { user: true });
+      const { applyStreamQuality, applyPreviewOffUi, isRoadStreaming, startRoadStream, stopRoadStream } = await import("./webrtc_stream.js?v=95");
+      applyPreviewOffUi();
+      if (level === "off") {
+        if (isRoadStreaming()) await stopRoadStream();
+      } else if (prev === "off" && document.getElementById("app")?.dataset.screen === "onroad") {
+        await startRoadStream();
+      } else if (isRoadStreaming()) {
+        await applyStreamQuality(level, { user: true });
+      }
     });
     group.appendChild(btn);
   }
 
   row.append(text, group);
+  bindPanelHelp(row, w);
   return row;
 }
 
-const WEBCODECS_LABELS = { auto: "Auto", on: "On", off: "Off" };
+const WEBCODECS_LABELS = { auto: "Auto", on: "Turn on", off: "Off" };
 
 function renderStreamWebcodecsRow() {
   const row = document.createElement("div");
@@ -2794,9 +2967,7 @@ function renderStreamWebcodecsRow() {
 
   const text = document.createElement("div");
   text.className = "opui-sp-row-text";
-  text.innerHTML = `
-    <div class="opui-sp-row-title">${escapeHtml(t("Hardware decode"))}</div>
-    <div class="opui-sp-row-desc">${escapeHtml(t("Use WebCodecs for lower preview latency when supported."))}</div>`;
+  text.innerHTML = `<div class="opui-sp-row-title">${escapeHtml(t("Hardware decode"))}</div>`;
   if (!capable) {
     const hint = document.createElement("div");
     hint.className = "opui-stream-hint opui-stream-hint--muted";
@@ -2811,7 +2982,7 @@ function renderStreamWebcodecsRow() {
   }
 
   const group = document.createElement("div");
-  group.className = "opui-choice-group opui-choice-group--stream-decode";
+  group.className = "opui-multi-btn-group";
   group.setAttribute("role", "group");
   group.setAttribute("aria-label", t("Hardware decode"));
 
@@ -2831,6 +3002,7 @@ function renderStreamWebcodecsRow() {
   }
 
   row.append(text, group);
+  bindPanelHelp(row, { desc_i18n: "webui_hardware_decode_desc" });
   return row;
 }
 
@@ -2895,33 +3067,59 @@ function renderStreamDiagnosticsRow() {
     el.className = "opui-stream-diag-value" + (tone ? ` ${streamDiagValueClass(tone)}` : "");
   };
 
-  const refresh = async () => {
+  const applyHealth = (h) => {
+    if (!h?.ok) {
+      setCell("live", h?.error || t("Update status unavailable"), "danger");
+      foot.hidden = true;
+      return;
+    }
+    setCell("live", h.livestreaming ? t("On") : t("Off"), h.livestreaming ? "on" : "off");
+    setCell("webrtc", h.webrtcd_listening ? t("On") : t("Off"), h.webrtcd_listening ? "on" : "off");
+    setCell("bitrate", formatBitrate(h.encoder_bitrate));
+    setCell("camera", h.active_camera || "—");
+    setCell("thermal", h.thermal || "—", h.thermal === "ok" ? "on" : "warn");
+    setCell("lag", h.encoder_lagging ? t("Yes") : t("No"), h.encoder_lagging ? "warn" : "on");
+    setCell("memory", h.memory_usage_percent != null ? `${h.memory_usage_percent}%` : null);
+    setCell("cpu", h.cpu_temp != null ? `${h.cpu_temp}°C` : null);
+    const decode = getStreamDecodePath();
+    const decodeLabel = decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)");
+    foot.textContent = `${t("Decode path")}: ${decodeLabel}`;
+    foot.hidden = false;
+  };
+
+  const refreshHttp = async () => {
     try {
-      const h = await apiGet("/api/opui/stream/health");
-      if (!h?.ok) {
-        setCell("live", h?.error || t("Update status unavailable"), "danger");
-        foot.hidden = true;
-        return;
-      }
-      setCell("live", h.livestreaming ? t("On") : t("Off"), h.livestreaming ? "on" : "off");
-      setCell("webrtc", h.webrtcd_listening ? t("On") : t("Off"), h.webrtcd_listening ? "on" : "off");
-      setCell("bitrate", formatBitrate(h.encoder_bitrate));
-      setCell("camera", h.active_camera || "—");
-      setCell("thermal", h.thermal || "—", h.thermal === "ok" ? "on" : "warn");
-      setCell("lag", h.encoder_lagging ? t("Yes") : t("No"), h.encoder_lagging ? "warn" : "on");
-      setCell("memory", h.memory_usage_percent != null ? `${h.memory_usage_percent}%` : null);
-      setCell("cpu", h.cpu_temp != null ? `${h.cpu_temp}°C` : null);
-      const decode = getStreamDecodePath();
-      const decodeLabel = decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)");
-      foot.textContent = `${t("Decode path")}: ${decodeLabel}`;
-      foot.hidden = false;
+      applyHealth(await apiGet("/api/opui/stream/health"));
     } catch {
       setCell("live", t("Update status unavailable"), "danger");
       foot.hidden = true;
     }
   };
-  refresh();
-  row._streamDiagTimer = setInterval(refresh, 3000);
+
+  if (opuiWs.connected) {
+    opuiWs.watchStreamHealth();
+    row._streamHealthOff = opuiWs.on("stream_health", (msg) => {
+      if (msg?.data) applyHealth(msg.data);
+    });
+    if (opuiWs.lastStreamHealth?.data) applyHealth(opuiWs.lastStreamHealth.data);
+    else refreshHttp();
+  } else {
+    refreshHttp();
+    row._streamDiagTimer = setInterval(refreshHttp, 3000);
+  }
+
+  row._streamDiagVisHandler = () => {
+    if (document.hidden) {
+      if (row._streamDiagTimer) {
+        clearInterval(row._streamDiagTimer);
+        row._streamDiagTimer = null;
+      }
+    } else if (!row._streamHealthOff && !row._streamDiagTimer) {
+      refreshHttp();
+      row._streamDiagTimer = setInterval(refreshHttp, 3000);
+    }
+  };
+  document.addEventListener("visibilitychange", row._streamDiagVisHandler);
   return row;
 }
 

@@ -73,14 +73,6 @@ export async function refreshHomeScreen() {
   showHomeLoading();
   try {
     const home = await apiGet("/api/opui/home");
-    if (home?.headless) {
-      try {
-        const err = await apiGet("/api/opui/system/manager_error");
-        if (err?.ok && err.has_error) {
-          home.manager_error = err.text;
-        }
-      } catch (_) { /* ignore */ }
-    }
     updateHomeScreen(home);
   } catch (_) { /* keep skeleton */ }
 }

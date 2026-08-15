@@ -53,21 +53,36 @@ _DEV_PRESET = re.compile(r"^/api/opui/dev/preset/([^/]+)$")
 
 
 def bootstrap_payload() -> dict[str, Any]:
-  from webui.server.bridge.headless_util import is_headless_mode
+  from webui.server.bridge.headless_util import (
+    get_headless_mode_pref,
+    has_builtin_display_hardware,
+    is_headless_mode,
+  )
+  from webui.server.bridge.state_hub import get_home, get_state, home_ready, home_seq, state_ready, state_seq
 
+  headless = is_headless_mode()
+  has_display = has_builtin_display_hardware()
   payload = {
     "ok": True,
     "name": "op-webui",
     "version": read_version(),
     "openpilot_root": str(openpilot_root()),
     "dev_pc": os.environ.get("WEBUI_DEV_PC") == "1",
-    "headless": is_headless_mode(),
+    "headless": headless,
+    "headless_mode": get_headless_mode_pref(),
+    "has_builtin_display": has_display,
+    "can_turn_off_headless": has_display,
+    "recommended_overlay_fps": 5 if headless else 10,
     "design": {"width": 2160, "height": 1080, "variant": "BIG"},
     "webrtc": {"port": 5001},
-    "home": get_home(),
-    "state": get_state(),
+    "state_seq": state_seq(),
+    "home_seq": home_seq(),
     **tokens_payload(),
   }
+  if state_ready():
+    payload["state"] = get_state()
+  if home_ready():
+    payload["home"] = get_home()
   if payload["dev_pc"]:
     schema = panel_schema()
     if schema.get("ok"):
@@ -117,6 +132,14 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "GET" and clean_path == "/api/opui/i18n":
       return snapshot_i18n()
+
+    if method == "GET" and clean_path == "/api/opui/headless-mode":
+      from webui.server.bridge.headless_api import snapshot_headless_mode
+      return snapshot_headless_mode()
+
+    if method == "PUT" and clean_path == "/api/opui/headless-mode":
+      from webui.server.bridge.headless_api import apply_headless_mode
+      return apply_headless_mode(str(body.get("mode", "")))
 
     if method == "GET" and clean_path == "/api/opui/panels":
       return panel_schema()

@@ -1,7 +1,7 @@
 /** Canvas overlay for modelV2 lanes / path / leads (mirrors ModelRenderer). */
 
 import { tr } from "./i18n.js";
-import { initModelWebGL, drawModelWebGL, isModelWebGLReady } from "./model_webgl.js";
+import { initModelWebGL, drawModelWebGL, isModelWebGLReady, clearModelWebGL } from "./model_webgl.js";
 
 let canvas = null;
 let ctx = null;
@@ -233,76 +233,184 @@ function formatMetricLine(line) {
 }
 
 let overlayDrawEnabled = true;
+let lastDrawFrameKey = null;
+let lastDrawAnimKey = null;
+let canvasRainbowRafId = null;
+let pendingOverlayFrame = null;
+let overlayDrawRafId = null;
+
+export function scheduleDrawModelOverlay(data) {
+  pendingOverlayFrame = data;
+  if (overlayDrawRafId != null) return;
+  overlayDrawRafId = requestAnimationFrame(() => {
+    overlayDrawRafId = null;
+    const frame = pendingOverlayFrame;
+    pendingOverlayFrame = null;
+    if (frame) drawModelOverlay(frame);
+  });
+}
+
+function resolveAnimOverlay(data) {
+  if (!data?.anim_only || !lastOverlay) return data;
+  const gk = data.geometry_key || lastOverlay.geometry_key;
+  if (gk && lastOverlay.geometry_key && gk !== lastOverlay.geometry_key) return data;
+  return {
+    ...lastOverlay,
+    path_blend: data.path_blend ?? lastOverlay.path_blend,
+    chevron_alpha: data.chevron_alpha ?? lastOverlay.chevron_alpha,
+    anim_key: data.anim_key,
+    frame_key: data.frame_key,
+    geometry_key: gk,
+    width: data.width ?? lastOverlay.width,
+    height: data.height ?? lastOverlay.height,
+    _animFast: true,
+  };
+}
+
+function stopCanvasRainbowLoop() {
+  if (canvasRainbowRafId != null) {
+    cancelAnimationFrame(canvasRainbowRafId);
+    canvasRainbowRafId = null;
+  }
+  const host = document.getElementById("model-overlay");
+  if (host) host.style.filter = "";
+}
+
+function scheduleCanvasRainbowLoop() {
+  if (canvasRainbowRafId != null) return;
+  const tick = () => {
+    canvasRainbowRafId = null;
+    if (!lastOverlay?.rainbow || isModelWebGLReady()) return;
+    rainbowHue = (rainbowHue + 2) % 360;
+    const host = document.getElementById("model-overlay");
+    if (host) host.style.filter = `hue-rotate(${rainbowHue}deg)`;
+    canvasRainbowRafId = requestAnimationFrame(tick);
+  };
+  canvasRainbowRafId = requestAnimationFrame(tick);
+}
 
 export function setModelOverlayEnabled(enabled) {
   overlayDrawEnabled = !!enabled;
   const host = document.getElementById("model-overlay");
   if (host && !enabled) {
+    stopCanvasRainbowLoop();
+    lastDrawFrameKey = null;
+    lastDrawAnimKey = null;
+    clearModelWebGL();
     ctx?.clearRect(0, 0, canvas?.width || 0, canvas?.height || 0);
   }
 }
 
 export function drawModelOverlay(data) {
   if (!overlayDrawEnabled || !data?.ok) return;
-  if (!data._animate) lastOverlay = data;
+
+  if (data.clear) {
+    stopCanvasRainbowLoop();
+    lastOverlay = null;
+    lastDrawFrameKey = null;
+    lastDrawAnimKey = null;
+    clearModelWebGL();
+    if (ctx && canvas) ctx.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
+    return;
+  }
+
+  const merged = resolveAnimOverlay(data);
+  const frameKey = merged.frame_key || null;
+  const animKey = merged.anim_key || null;
+  const animateOnly = !!merged._animate;
+  const animFast = !!merged._animFast;
+
+  if (!animateOnly) {
+    if (animFast) {
+      if (animKey && animKey === lastDrawAnimKey) return;
+      if (animKey) lastDrawAnimKey = animKey;
+      lastOverlay = merged;
+    } else {
+      lastOverlay = merged;
+      if (frameKey && frameKey === lastDrawFrameKey) {
+        if (merged.rainbow && !isModelWebGLReady()) scheduleCanvasRainbowLoop();
+        else stopCanvasRainbowLoop();
+        return;
+      }
+      if (frameKey) lastDrawFrameKey = frameKey;
+      if (animKey) lastDrawAnimKey = animKey;
+      if (merged.rainbow && !isModelWebGLReady()) scheduleCanvasRainbowLoop();
+      else stopCanvasRainbowLoop();
+    }
+  } else if (!merged.rainbow) {
+    return;
+  }
   const host = document.getElementById("model-overlay");
-  const w = data.width || host?.clientWidth || 1600;
-  const h = data.height || host?.clientHeight || 900;
+  const w = merged.width || host?.clientWidth || 1600;
+  const h = merged.height || host?.clientHeight || 900;
 
   if (isModelWebGLReady()) {
-    drawModelWebGL(data);
+    drawModelWebGL(merged);
     if (ctx && canvas) {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.max(1, Math.floor(w * dpr));
-      canvas.height = Math.max(1, Math.floor(h * dpr));
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const pw = Math.max(1, Math.floor(w * dpr));
+      const ph = Math.max(1, Math.floor(h * dpr));
+      if (canvas.width !== pw || canvas.height !== ph) {
+        canvas.width = pw;
+        canvas.height = ph;
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
       ctx.clearRect(0, 0, w, h);
-      const chevronAlpha = Number(data.chevron_alpha) || 0;
-      for (const lead of data.leads || []) drawLead(lead, chevronAlpha, h);
+      const chevronAlpha = Number(merged.chevron_alpha) || 0;
+      for (const lead of merged.leads || []) drawLead(lead, chevronAlpha, h);
     }
     return;
   }
 
   if (!ctx || !canvas) return;
-  resize(w, h);
-  ctx.clearRect(0, 0, w, h);
+  if (!animFast) {
+    resize(w, h);
+    ctx.clearRect(0, 0, w, h);
 
-  for (const lane of data.lanes || []) drawLane(lane);
-  for (const edge of data.edges || []) {
-    const poly = asPoints(edge.polygon);
-    if (poly.length >= 3) {
-      const std = typeof edge.std === "number" ? edge.std : 0;
-      const alpha = Math.max(0, Math.min(1, 1 - std));
-      drawPoly(poly, `rgba(255, 0, 0, ${alpha * 0.45})`, `rgba(255, 0, 0, ${alpha})`, 2);
+    for (const lane of merged.lanes || []) drawLane(lane);
+    for (const edge of merged.edges || []) {
+      const poly = asPoints(edge.polygon);
+      if (poly.length >= 3) {
+        const std = typeof edge.std === "number" ? edge.std : 0;
+        const alpha = Math.max(0, Math.min(1, 1 - std));
+        drawPoly(poly, `rgba(255, 0, 0, ${alpha * 0.45})`, `rgba(255, 0, 0, ${alpha})`, 2);
+      }
+    }
+  } else {
+    ctx.clearRect(0, 0, w, h);
+    for (const lane of merged.lanes || []) drawLane(lane);
+    for (const edge of merged.edges || []) {
+      const poly = asPoints(edge.polygon);
+      if (poly.length >= 3) {
+        const std = typeof edge.std === "number" ? edge.std : 0;
+        const alpha = Math.max(0, Math.min(1, 1 - std));
+        drawPoly(poly, `rgba(255, 0, 0, ${alpha * 0.45})`, `rgba(255, 0, 0, ${alpha})`, 2);
+      }
     }
   }
   const drewRibbon = drawPathRibbon(
-    data.path_polygon,
-    data.experimental,
-    data.rainbow,
-    data.allow_throttle !== false,
-    data.path_gradient,
-    data.path_blend,
+    merged.path_polygon,
+    merged.experimental,
+    merged.rainbow,
+    merged.allow_throttle !== false,
+    merged.path_gradient,
+    merged.path_blend,
   );
   if (!drewRibbon) {
-    drawPath(data.path, data.experimental, data.rainbow, data.allow_throttle !== false);
+    drawPath(merged.path, merged.experimental, merged.rainbow, merged.allow_throttle !== false);
   }
-  const chevronAlpha = Number(data.chevron_alpha) || 0;
-  for (const lead of data.leads || []) {
+  const chevronAlpha = Number(merged.chevron_alpha) || 0;
+  for (const lead of merged.leads || []) {
     const glow = asPoints(lead.glow);
     const chevron = asPoints(lead.chevron);
     const alpha = (lead.alpha ?? 180) / 255;
-    if (glow.length >= 3) drawPoly(glow, `rgba(255, 196, 0, ${alpha * 0.35})`, null);
-    if (chevron.length >= 3) drawPoly(chevron, LEAD_FILL, "rgba(255, 220, 80, 0.9)", 2);
+    if (!animFast) {
+      if (glow.length >= 3) drawPoly(glow, `rgba(255, 196, 0, ${alpha * 0.35})`, null);
+      if (chevron.length >= 3) drawPoly(chevron, LEAD_FILL, "rgba(255, 220, 80, 0.9)", 2);
+    }
     drawLead(lead, chevronAlpha, h);
   }
 
-  if (data.rainbow) {
-    rainbowHue = (rainbowHue + 2) % 360;
-    requestAnimationFrame(() => {
-      if (lastOverlay?.rainbow) drawModelOverlay({ ...lastOverlay, _animate: true });
-    });
-  }
 }

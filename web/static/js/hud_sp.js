@@ -134,6 +134,12 @@ function updateRoadName(text) {
   }
 }
 
+function stopTurnAnimLoop() {
+  if (!turnAnimId) return;
+  cancelAnimationFrame(turnAnimId);
+  turnAnimId = 0;
+}
+
 function ensureTurnAnimLoop() {
   if (turnAnimId) return;
   let last = performance.now();
@@ -154,9 +160,19 @@ function ensureTurnAnimLoop() {
         el.style.opacity = String(Math.min(1, Math.max(0, state.alpha / 255)));
       }
     }
+    if (!turnSignalsNeedAnim()) {
+      stopTurnAnimLoop();
+      return;
+    }
     turnAnimId = requestAnimationFrame(tick);
   };
   turnAnimId = requestAnimationFrame(tick);
+}
+
+function turnSignalsNeedAnim() {
+  const l = document.getElementById("hud-blinker-l");
+  const r = document.getElementById("hud-blinker-r");
+  return (l && !l.hidden) || (r && !r.hidden);
 }
 
 function updateTurnSignals(st, sp) {
@@ -167,6 +183,7 @@ function updateTurnSignals(st, sp) {
     hideEl("hud-blinker-r");
     hideEl("hud-bsl");
     hideEl("hud-bsr");
+    stopTurnAnimLoop();
     return;
   }
 

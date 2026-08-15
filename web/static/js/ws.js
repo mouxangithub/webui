@@ -2,6 +2,12 @@
 
 const WS_PATH = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/opui`;
 
+function channelsForScreen(screen) {
+  if (screen === "home") return ["state", "home"];
+  if (screen === "onroad") return ["state"];
+  return ["state"];
+}
+
 class OpuiSocket {
   constructor() {
     this._ws = null;
@@ -16,6 +22,11 @@ class OpuiSocket {
     this._helloWaiters = [];
     this._lastHome = null;
     this._lastState = null;
+    this._modelWatch = null;
+    this._watchI18n = false;
+    this._watchStreamHealth = false;
+    this._screen = "home";
+    this._lastStreamHealth = null;
   }
 
   get connected() {
@@ -30,6 +41,10 @@ class OpuiSocket {
     return this._lastState;
   }
 
+  get lastStreamHealth() {
+    return this._lastStreamHealth;
+  }
+
   on(type, fn) {
     if (!this._handlers.has(type)) this._handlers.set(type, new Set());
     this._handlers.get(type).add(fn);
@@ -38,6 +53,9 @@ class OpuiSocket {
     }
     if (type === "state" && this._lastState) {
       try { fn(this._lastState); } catch (_) { /* ignore */ }
+    }
+    if (type === "stream_health" && this._lastStreamHealth) {
+      try { fn(this._lastStreamHealth); } catch (_) { /* ignore */ }
     }
     return () => this._handlers.get(type)?.delete(fn);
   }
@@ -55,6 +73,18 @@ class OpuiSocket {
     pending.resolve(msg);
   }
 
+  _subscribeChannels() {
+    const channels = [...channelsForScreen(this._screen)];
+    if (this._watchI18n) channels.push("i18n");
+    if (this._watchStreamHealth) channels.push("stream_health");
+    this._send({ type: "subscribe", channels });
+  }
+
+  syncScreen(screen) {
+    this._screen = screen || "home";
+    if (this._connected) this._subscribeChannels();
+  }
+
   connect() {
     this._shouldRun = true;
     if (this._ws && (this._ws.readyState === WebSocket.OPEN || this._ws.readyState === WebSocket.CONNECTING)) {
@@ -65,12 +95,13 @@ class OpuiSocket {
     ws.onopen = () => {
       this._connected = true;
       this._reconnectMs = 500;
-      this._send({
-        type: "subscribe",
-        channels: ["state", "home", "i18n"],
-      });
+      this._subscribeChannels();
       if (this._watchPanel) {
         this._send({ type: "watch_panel", panel: this._watchPanel });
+      }
+      if (this._modelWatch) {
+        const { w, h, fps } = this._modelWatch;
+        this._send({ type: "watch_model_overlay", w, h, fps });
       }
       this._emit("open", null);
     };
@@ -105,6 +136,9 @@ class OpuiSocket {
 
       if (type === "home") this._lastHome = msg;
       if (type === "state") this._lastState = msg;
+      if (type === "stream_health") {
+        this._lastStreamHealth = msg;
+      }
 
       this._emit(type, msg);
     };
@@ -149,13 +183,42 @@ class OpuiSocket {
   }
 
   watchModelOverlay(w, h, fps = 10) {
-    if (!this._connected) return;
+    if (!this._connected) return false;
+    const prev = this._modelWatch;
+    if (prev && prev.w === w && prev.h === h && prev.fps === fps) return false;
+    this._modelWatch = { w, h, fps };
     this._send({ type: "watch_model_overlay", w, h, fps });
+    return true;
   }
 
   unwatchModelOverlay() {
+    this._modelWatch = null;
     if (!this._connected) return;
     this._send({ type: "unwatch_model_overlay" });
+  }
+
+  watchStreamHealth() {
+    if (this._watchStreamHealth) return;
+    this._watchStreamHealth = true;
+    if (this._connected) this._subscribeChannels();
+  }
+
+  unwatchStreamHealth() {
+    if (!this._watchStreamHealth) return;
+    this._watchStreamHealth = false;
+    if (this._connected) this._subscribeChannels();
+  }
+
+  watchI18n() {
+    if (this._watchI18n) return;
+    this._watchI18n = true;
+    if (this._connected) this._subscribeChannels();
+  }
+
+  unwatchI18n() {
+    if (!this._watchI18n) return;
+    this._watchI18n = false;
+    if (this._connected) this._subscribeChannels();
   }
 
   rpc(method, path, body = null) {

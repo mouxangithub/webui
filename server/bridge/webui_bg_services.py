@@ -9,6 +9,8 @@ from typing import Any
 
 _running = False
 _thread: threading.Thread | None = None
+_ws_clients = 0
+_ws_clients_lock = threading.Lock()
 _sunnylink_watchers = 0
 _sunnylink_lock = threading.Lock()
 _last_sunnylink_refresh = 0.0
@@ -56,6 +58,24 @@ def maybe_refresh_sunnylink_cache(force: bool = False) -> None:
   threading.Thread(target=_refresh_sunnylink_once, name="sunnylink-refresh", daemon=True).start()
 
 
+def note_ws_client_connected() -> None:
+  global _ws_clients
+  with _ws_clients_lock:
+    _ws_clients += 1
+    should_start = _ws_clients == 1
+  if should_start:
+    start_webui_bg_services()
+
+
+def note_ws_client_disconnected() -> None:
+  global _ws_clients
+  with _ws_clients_lock:
+    _ws_clients = max(0, _ws_clients - 1)
+    should_stop = _ws_clients == 0
+  if should_stop:
+    stop_webui_bg_services()
+
+
 def start_webui_bg_services() -> None:
   global _running, _thread
   if _running:
@@ -97,6 +117,16 @@ def _worker() -> None:
 
   while _running:
     try:
+      from webui.server.bridge.ws_handler import ws_connection_count
+      has_clients = ws_connection_count() > 0
+    except Exception:
+      has_clients = True
+
+    if not has_clients:
+      time.sleep(1.0)
+      continue
+
+    try:
       sm.update(500)
       started = bool(sm.valid.get("deviceState") and sm["deviceState"].started)
       now = time.monotonic()
@@ -128,7 +158,7 @@ def _refresh_sunnylink_cache(params, SunnylinkApi, unregistered_id: str) -> None
     for path, key in (("roles", "SunnylinkCache_Roles"), ("users", "SunnylinkCache_Users")):
       resp = api.api_get(f"device/{sl_dongle}/{path}", method="GET", access_token=token, session=session)
       if resp.status_code == 200:
-        params.put(key, resp.text, block=True)
+        params.put(key, resp.text, block=False)
   except Exception:
     pass
 

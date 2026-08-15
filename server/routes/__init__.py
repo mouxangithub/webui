@@ -51,16 +51,27 @@ async def api_bootstrap(_request: web.Request) -> web.Response:
 
 
 async def api_state(_request: web.Request) -> web.Response:
-  return json_response(snapshot_ui_state())
+  from webui.server.bridge.state_hub import state_ready
+  for _ in range(15):
+    if state_ready():
+      break
+    await asyncio.sleep(0.1)
+  if not state_ready():
+    raise web.HTTPServiceUnavailable(
+      text=json.dumps({"ok": False, "error": "state_not_ready"}),
+      content_type="application/json",
+      headers={"Retry-After": "1"},
+    )
+  return json_response(await asyncio.to_thread(snapshot_ui_state))
 
 
 async def api_panels_schema(_request: web.Request) -> web.Response:
-  return json_response(panel_schema())
+  return json_response(await asyncio.to_thread(panel_schema))
 
 
 async def api_panel_get(request: web.Request) -> web.Response:
   panel_id = request.match_info.get("panel_id", "")
-  return json_response(panel_values(panel_id))
+  return json_response(await asyncio.to_thread(panel_values, panel_id))
 
 
 async def api_param_get(request: web.Request) -> web.Response:
@@ -76,7 +87,7 @@ async def api_param_put(request: web.Request) -> web.Response:
     needs_cycle = bool(body.get("needs_cycle", False))
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
-  return json_response(put_param(key, value, needs_cycle=needs_cycle))
+  return json_response(await asyncio.to_thread(put_param, key, value, needs_cycle=needs_cycle))
 
 
 async def api_param_delete(request: web.Request) -> web.Response:
@@ -247,7 +258,13 @@ async def api_model_overlay(request: web.Request) -> web.Response:
     h = int(request.query.get("h", "900"))
   except ValueError:
     w, h = 1600, 900
-  return json_response(snapshot_model_overlay(w, h))
+  static_mock = request.query.get("static") == "1"
+  frame = await asyncio.to_thread(snapshot_model_overlay, w, h, static_mock=static_mock)
+  etag = frame.get("frame_key") or ""
+  if_none = request.headers.get("If-None-Match")
+  if if_none and etag and if_none == etag:
+    return web.Response(status=304, headers={"ETag": etag})
+  return json_response(frame, headers={"ETag": etag} if etag else None)
 
 
 async def api_ssh_status(_request: web.Request) -> web.Response:
@@ -421,8 +438,25 @@ async def api_webui_update_apply(_request: web.Request) -> web.Response:
   return json_response(apply_webui_update())
 
 
+async def api_headless_mode_get(_request: web.Request) -> web.Response:
+  from webui.server.bridge.headless_api import snapshot_headless_mode
+  return json_response(await asyncio.to_thread(snapshot_headless_mode))
+
+
+async def api_headless_mode_put(request: web.Request) -> web.Response:
+  from webui.server.bridge.headless_api import apply_headless_mode
+  try:
+    body = await request.json()
+    mode = str(body.get("mode", ""))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(await asyncio.to_thread(apply_headless_mode, mode))
+
+
 def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/bootstrap", api_bootstrap)
+  app.router.add_get("/api/opui/headless-mode", api_headless_mode_get)
+  app.router.add_put("/api/opui/headless-mode", api_headless_mode_put)
   app.router.add_get("/api/opui/state", api_state)
   app.router.add_get("/api/opui/home", api_home)
   app.router.add_get("/api/opui/onboarding", api_onboarding)

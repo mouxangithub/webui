@@ -11,9 +11,11 @@ import {
   getOverlayFpsHint,
   initStreamAdaptive,
   isOverlayAllowed,
+  isPreviewStreamEnabled,
   onDocumentVisibilityChange,
   registerWebrtcNotify,
   setQualityPreference,
+  shouldDrawModelOverlay,
   updateStreamDeviceState,
 } from "./webrtc_stream_adaptive.js";
 import { tryAttachWebCodecsDecode, stopWebCodecsDecode, tuneVideoReceiver } from "./webrtc_webcodecs.js";
@@ -44,10 +46,28 @@ const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
 
 
+let roadDisableTimer = null;
+const ROAD_DISABLE_IDLE_MS = 5000;
+
+function cancelRoadDisableTimer() {
+  if (roadDisableTimer != null) {
+    clearTimeout(roadDisableTimer);
+    roadDisableTimer = null;
+  }
+}
+
+function scheduleRoadDisable() {
+  cancelRoadDisableTimer();
+  roadDisableTimer = setTimeout(() => {
+    roadDisableTimer = null;
+    if (!roadStreaming && !driverViewActive) {
+      apiPost("/api/opui/action/webrtc_disable").catch(() => {});
+    }
+  }, ROAD_DISABLE_IDLE_MS);
+}
+
 let roadPc = null;
-
 let roadStreaming = false;
-
 let roadCamera = CAM.ROAD;
 
 let driverViewActive = false;
@@ -197,19 +217,14 @@ async function wakeWebrtcd() {
 
 
 async function waitWebrtcdReady() {
-
-  for (let i = 0; i < 40; i++) {
-
+  let delayMs = 200;
+  for (let i = 0; i < 20; i++) {
     const schema = await apiGet("/api/opui/webrtc/schema");
-
     if (schema.ok) return true;
-
-    await sleep(500);
-
+    await sleep(delayMs);
+    delayMs = Math.min(2000, Math.round(delayMs * 1.5));
   }
-
   return false;
-
 }
 
 
@@ -246,9 +261,11 @@ async function ensureWebrtcd() {
 
 export function prewarmWebrtc() {
 
-  if (!window.__OPUI_HEADLESS) return null;
+  if (!isPreviewStreamEnabled()) return null;
 
   if (prewarmPromise || roadStreaming) return prewarmPromise;
+
+  if (window.__OPUI_DEV_PC) return null;
 
   prewarmPromise = (async () => {
 
@@ -471,8 +488,10 @@ export {
   getOverlayFpsHint,
   initStreamAdaptive,
   isOverlayAllowed,
+  isPreviewStreamEnabled,
   onDocumentVisibilityChange,
   setQualityPreference,
+  shouldDrawModelOverlay,
   updateStreamDeviceState,
 };
 
@@ -486,7 +505,22 @@ export function isRoadStreaming() {
 
 
 
+export function applyPreviewOffUi(wrapEl) {
+  const wrap = wrapEl || document.getElementById("camera-wrap");
+  if (!wrap) return;
+  const off = !isPreviewStreamEnabled();
+  wrap.classList.toggle("preview-off", off);
+  if (off) {
+    wrap.classList.remove("is-playing");
+    const fb = document.getElementById("camera-fallback");
+    if (fb) fb.hidden = true;
+    setCameraStatus("");
+  }
+}
+
 export async function startRoadStream(videoEl, wrapEl) {
+
+  cancelRoadDisableTimer();
 
   const video = videoEl || document.getElementById("road-video");
 
@@ -499,6 +533,15 @@ export async function startRoadStream(videoEl, wrapEl) {
   }
 
   bindRoadVideoPlayback(video, wrap);
+
+  if (!isPreviewStreamEnabled()) {
+    wrap?.classList.add("streaming");
+    applyPreviewOffUi(wrap);
+    notifyCameraReady(false);
+    return;
+  }
+
+  wrap?.classList.remove("preview-off");
 
 
 
@@ -589,7 +632,7 @@ export async function stopRoadStream(videoEl, wrapEl) {
 
   setCameraStatus("");
 
-  await apiPost("/api/opui/action/webrtc_disable");
+  scheduleRoadDisable();
 
 }
 

@@ -14,7 +14,7 @@ import {
   prewarmWebrtc,
   isRoadStreaming,
   isCameraPlaying,
-} from "./webrtc_stream.js?v=52";
+} from "./webrtc_stream.js?v=95";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -28,6 +28,8 @@ let bottomFadeFiltered = 0;
 let expHeldMode = null;
 let expHoldUntil = 0;
 let lastOnroadState = null;
+let lastHudDigest = "";
+let lastDriverFaceKey = "";
 
 export async function startRoadStream() {
   const video = document.getElementById("road-video");
@@ -52,6 +54,46 @@ export async function stopRoadStream() {
   const video = document.getElementById("road-video");
   const wrap = document.getElementById("camera-wrap");
   await stopRoadWebrtc(video, wrap);
+}
+
+function hudDigest(st) {
+  const alert = st.alert || {};
+  const sp = st.sp_hud || {};
+  return [
+    st.started,
+    st.ui_status,
+    st.speed,
+    st.hide_v_ego_ui,
+    st.is_metric,
+    st.unit,
+    st.is_cruise_available,
+    st.is_cruise_set,
+    st.set_speed,
+    st.experimental_mode,
+    st.experimental_mode_confirmed,
+    st.has_longitudinal_control,
+    st.engageable,
+    st.engaged,
+    st.car_control_enabled,
+    sp.speed_limit_assist_active,
+    sp.long_override,
+    sp.pcm_cruise_speed,
+    sp.cluster_speed,
+    alert.text1,
+    alert.text2,
+    alert.size,
+    alert.status,
+    alert.height_px,
+    st.developer_ui,
+    st.torque_bar ? 1 : 0,
+  ].join("|");
+}
+
+function driverFaceKey(st) {
+  const df = st?.driver_face;
+  if (!df?.visible || !df.box) return "";
+  const b = df.box;
+  return `${b.x}|${b.y}|${b.size}|${df.alpha}|${df.source_size?.w}|${df.source_size?.h}`;
 }
 
 function applyCruiseStyle(st) {
@@ -142,6 +184,10 @@ export function updateOnroadHud(st) {
   lastOnroadState = st;
   updateRoadCameraForState(st);
 
+  const digest = hudDigest(st);
+  const staticChanged = digest !== lastHudDigest;
+  if (staticChanged) lastHudDigest = digest;
+
   const hud = document.getElementById("hud");
   const speedEl = document.getElementById("hud-speed");
   const unitEl = document.getElementById("hud-unit");
@@ -154,54 +200,55 @@ export function updateOnroadHud(st) {
   const cameraWrap = document.getElementById("camera-wrap");
   const app = document.getElementById("app");
 
-  if (app) app.dataset.metric = st.is_metric === false ? "0" : "1";
-  const activeDrive = ["engaged", "lat_only", "long_only"].includes(st.ui_status);
-  if (hud) {
-    hud.classList.toggle("is-engaged", activeDrive);
-    hud.classList.toggle("is-torque-fade", activeDrive && !!st.torque_bar);
-  }
-  cameraWrap?.classList.toggle("is-onroad", !!st.started);
-
-  const hideSpeed = !!st.hide_v_ego_ui;
-  if (speedEl) {
-    if (hideSpeed || st.speed == null) {
-      speedEl.textContent = "";
-      speedEl.hidden = true;
-    } else {
-      speedEl.hidden = false;
-      speedEl.textContent = String(st.speed);
+  if (staticChanged) {
+    if (app) app.dataset.metric = st.is_metric === false ? "0" : "1";
+    const activeDrive = ["engaged", "lat_only", "long_only"].includes(st.ui_status);
+    if (hud) {
+      hud.classList.toggle("is-engaged", activeDrive);
+      hud.classList.toggle("is-torque-fade", activeDrive && !!st.torque_bar);
     }
-  }
-  if (unitEl) {
-    if (hideSpeed) {
-      unitEl.hidden = true;
-    } else {
-      unitEl.hidden = false;
-      unitEl.textContent = st.unit || (st.is_metric === false ? "mph" : "km/h");
+    cameraWrap?.classList.toggle("is-onroad", !!st.started);
+
+    const hideSpeed = !!st.hide_v_ego_ui;
+    if (speedEl) {
+      if (hideSpeed || st.speed == null) {
+        speedEl.textContent = "";
+        speedEl.hidden = true;
+      } else {
+        speedEl.hidden = false;
+        speedEl.textContent = String(st.speed);
+      }
     }
-  }
-
-  const cruiseAvailable = st.is_cruise_available !== false;
-  if (st.started && setSpeedWrap && setSpeedVal && cruiseAvailable) {
-    setSpeedWrap.hidden = false;
-    setSpeedVal.textContent = st.is_cruise_set && st.set_speed != null
-      ? String(st.set_speed) : "–";
-  } else if (setSpeedWrap) {
-    setSpeedWrap.hidden = true;
-  }
-
-  applyCruiseStyle(st);
-  applyCruiseRadius();
-  applyExperimentalButton(st);
-
-  if (border) {
-    const inner = border.querySelector(".opui-border__inner");
-    if (inner) {
-      inner.className = `opui-border__inner opui-border--${st.ui_status || "disengaged"}`;
+    if (unitEl) {
+      if (hideSpeed) {
+        unitEl.hidden = true;
+      } else {
+        unitEl.hidden = false;
+        unitEl.textContent = st.unit || (st.is_metric === false ? "mph" : "km/h");
+      }
     }
-  }
 
-  if (alertBar && alertT1) {
+    const cruiseAvailable = st.is_cruise_available !== false;
+    if (st.started && setSpeedWrap && setSpeedVal && cruiseAvailable) {
+      setSpeedWrap.hidden = false;
+      setSpeedVal.textContent = st.is_cruise_set && st.set_speed != null
+        ? String(st.set_speed) : "–";
+    } else if (setSpeedWrap) {
+      setSpeedWrap.hidden = true;
+    }
+
+    applyCruiseStyle(st);
+    applyCruiseRadius();
+    applyExperimentalButton(st);
+
+    if (border) {
+      const inner = border.querySelector(".opui-border__inner");
+      if (inner) {
+        inner.className = `opui-border__inner opui-border--${st.ui_status || "disengaged"}`;
+      }
+    }
+
+    if (alertBar && alertT1) {
     const t1 = st.alert?.text1 || "";
     const t2 = st.alert?.text2 || "";
     const size = (st.alert?.size || "").toLowerCase();
@@ -256,15 +303,22 @@ export function updateOnroadHud(st) {
       alertBar.style.right = "";
       alertBar.style.bottom = "";
     }
+    }
+
+    updateSpHud(st);
+    updateDevUi(st);
+    updateCircularAlert(st);
+    updateConfidenceBall(st);
   }
 
-  updateSpHud(st);
-  updateDevUi(st);
-  updateCircularAlert(st);
-  updateConfidenceBall(st);
   updateTorqueBar(st, Number(st.developer_ui) || 0);
   updateCameraBottomFade(st);
-  updateDriverCameraOverlay(st);
+
+  const faceKey = driverFaceKey(st);
+  if (faceKey !== lastDriverFaceKey) {
+    lastDriverFaceKey = faceKey;
+    updateDriverCameraOverlay(st);
+  }
 }
 
 function updateDriverCameraOverlay(st) {
@@ -356,14 +410,16 @@ export function bindDriverCameraDialog() {
   });
 }
 
-export { prewarmWebrtc, isRoadStreaming, isCameraPlaying } from "./webrtc_stream.js?v=52";
+export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=95";
 export {
   applyStreamQuality,
   getQualityPreference,
   getEffectiveQuality,
   getOverlayFpsHint,
   isOverlayAllowed,
+  isPreviewStreamEnabled,
+  shouldDrawModelOverlay,
   onDocumentVisibilityChange,
   setQualityPreference,
   updateStreamDeviceState,
-} from "./webrtc_stream.js?v=52";
+} from "./webrtc_stream.js?v=95";

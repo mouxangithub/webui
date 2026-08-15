@@ -1,14 +1,15 @@
 import { apiGet, apiPost } from "./api.js";
 import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
-  applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom,
-} from "./panels.js";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, getOverlayFpsHint } from "./onroad.js";
+  applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
+} from "./panels.js?v=96";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi } from "./onroad.js";
+import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
-import { initModelCanvas, showModelOverlay, drawModelOverlay, setModelOverlayEnabled } from "./model_canvas.js";
+import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOverlayEnabled } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
 import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
@@ -34,6 +35,23 @@ let devPc = false;
 let onroadSidebarVisible = false;
 let cameraPreview = false;
 let panelIconMap = {};
+let roadStreamPromise = null;
+
+function ensureRoadStream() {
+  if (devPc) return Promise.resolve();
+  if (!isPreviewStreamEnabled()) {
+    applyPreviewOffUi();
+    return Promise.resolve();
+  }
+  if (isRoadStreaming()) return Promise.resolve();
+  if (roadStreamPromise) return roadStreamPromise;
+  roadStreamPromise = startRoadStream()
+    .catch(() => {})
+    .finally(() => {
+      roadStreamPromise = null;
+    });
+  return roadStreamPromise;
+}
 
 function assetUrl(rel) {
   if (!rel) return "";
@@ -106,6 +124,40 @@ function fitOpuiScale() {
   root.style.setProperty("--opui-scale", String(scale));
 }
 
+/** Portrait phones rotate the canvas 90° — map horizontal swipes to vertical scroll. */
+function setupPortraitTouchScroll() {
+  if (window.__opuiPortraitScrollBound) return;
+  window.__opuiPortraitScrollBound = true;
+  const state = { el: null, startX: 0, startScroll: 0 };
+
+  const scrollSelector = ".opui-nav, .opui-panel, .opui-modal-scroll";
+
+  document.addEventListener("touchstart", (e) => {
+    if (!document.documentElement.classList.contains("opui-portrait-host")) return;
+    const el = e.target.closest(scrollSelector);
+    if (!el || e.touches.length !== 1) return;
+    if (el.scrollHeight <= el.clientHeight + 1) return;
+    state.el = el;
+    state.startX = e.touches[0].clientX;
+    state.startScroll = el.scrollTop;
+  }, { passive: true, capture: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!state.el) return;
+    if (!document.documentElement.classList.contains("opui-portrait-host")) {
+      state.el = null;
+      return;
+    }
+    const max = state.el.scrollHeight - state.el.clientHeight;
+    if (max <= 0) return;
+    const delta = e.touches[0].clientX - state.startX;
+    state.el.scrollTop = Math.max(0, Math.min(max, state.startScroll + delta));
+  }, { passive: true, capture: true });
+
+  document.addEventListener("touchend", () => { state.el = null; }, { passive: true, capture: true });
+  document.addEventListener("touchcancel", () => { state.el = null; }, { passive: true, capture: true });
+}
+
 function applySidebarAssets() {
   const settingsBtn = $("#btn-sidebar-settings");
   const bottomBtn = $("#btn-sidebar-bottom");
@@ -127,16 +179,39 @@ function applySidebarAssets() {
   }
 }
 
+let lastModelWatch = null;
+const OVERLAY_SIZE_THRESHOLD = 8;
+let refitTimer = null;
+let overlayStartupTimer = null;
+
+function scheduleOverlaySync() {
+  if (overlayStartupTimer) clearTimeout(overlayStartupTimer);
+  const delay = window.__OPUI_HEADLESS ? 500 : 200;
+  overlayStartupTimer = setTimeout(() => {
+    overlayStartupTimer = null;
+    syncModelOverlayWatch();
+  }, delay);
+}
+
+function cancelOverlaySync() {
+  if (overlayStartupTimer) {
+    clearTimeout(overlayStartupTimer);
+    overlayStartupTimer = null;
+  }
+}
+
 function syncModelOverlayWatch() {
   if (app.dataset.screen !== "onroad") {
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
+    lastModelWatch = null;
     return;
   }
   if (!isCameraPlaying() || !isOverlayAllowed()) {
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
     setModelOverlayEnabled(false);
+    lastModelWatch = null;
     return;
   }
   setModelOverlayEnabled(true);
@@ -144,38 +219,60 @@ function syncModelOverlayWatch() {
   const w = wrap?.clientWidth || 1600;
   const h = wrap?.clientHeight || 900;
   const fps = getOverlayFpsHint();
+  const watch = { w, h, fps };
   if (opuiWs.connected) {
-    opuiWs.watchModelOverlay(w, h, fps);
+    const same = lastModelWatch
+      && Math.abs(lastModelWatch.w - watch.w) < OVERLAY_SIZE_THRESHOLD
+      && Math.abs(lastModelWatch.h - watch.h) < OVERLAY_SIZE_THRESHOLD
+      && lastModelWatch.fps === watch.fps;
+    if (!same) {
+      opuiWs.watchModelOverlay(w, h, fps);
+      lastModelWatch = watch;
+    }
     stopModelOverlayPoll();
     return;
   }
+  lastModelWatch = watch;
   startModelOverlayPoll(w, h);
 }
 
 let modelOverlayPollTimer = null;
+let lastOverlayEtag = null;
+
+async function fetchModelOverlay(width, height) {
+  const headers = {};
+  if (lastOverlayEtag) headers["If-None-Match"] = lastOverlayEtag;
+  const r = await fetch(`/api/opui/model/overlay?w=${width}&h=${height}`, { headers });
+  if (r.status === 304) return null;
+  const data = await r.json();
+  const etag = r.headers.get("ETag");
+  if (etag) lastOverlayEtag = etag;
+  return data;
+}
+
+function startModelOverlayPoll(w, h) {
+  stopModelOverlayPoll();
+  if (opuiWs.connected || document.hidden) return;
+  const poll = async () => {
+    if (app.dataset.screen !== "onroad" || !isCameraPlaying() || !shouldDrawModelOverlay()) return;
+    const wrap = document.getElementById("camera-wrap");
+    const width = wrap?.clientWidth || w;
+    const height = wrap?.clientHeight || h;
+    try {
+      const data = await fetchModelOverlay(width, height);
+      if (data?.ok) scheduleDrawModelOverlay(data);
+    } catch (_) { /* WS may already deliver frames */ }
+  };
+  modelOverlayPollTimer = setInterval(poll, Math.max(200, Math.round(1000 / getOverlayFpsHint())));
+  poll();
+}
 
 function stopModelOverlayPoll() {
   if (modelOverlayPollTimer) {
     clearInterval(modelOverlayPollTimer);
     modelOverlayPollTimer = null;
   }
-}
-
-function startModelOverlayPoll(w, h) {
-  stopModelOverlayPoll();
-  if (opuiWs.connected) return;
-  const poll = async () => {
-    if (app.dataset.screen !== "onroad" || !isCameraPlaying() || !isOverlayAllowed()) return;
-    const wrap = document.getElementById("camera-wrap");
-    const width = wrap?.clientWidth || w;
-    const height = wrap?.clientHeight || h;
-    try {
-      const data = await apiGet(`/api/opui/model/overlay?w=${width}&h=${height}`);
-      if (data?.ok) drawModelOverlay(data);
-    } catch (_) { /* WS may already deliver frames */ }
-  };
-  modelOverlayPollTimer = setInterval(poll, Math.max(200, Math.round(1000 / getOverlayFpsHint())));
-  poll();
+  lastOverlayEtag = null;
 }
 
 function updateCameraPreviewUi() {
@@ -190,6 +287,7 @@ function updateCameraPreviewUi() {
 function setScreen(name) {
   const prevScreen = app.dataset.screen;
   app.dataset.screen = name;
+  opuiWs.syncScreen(name);
   $("#screen-home").hidden = name !== "home";
   $("#screen-settings").hidden = name !== "settings";
   $("#screen-onroad").hidden = name !== "onroad";
@@ -200,6 +298,7 @@ function setScreen(name) {
     metricsSidebar.hidden = false;
     app.classList.remove("opui--onroad-sidebar-hidden");
     notifyPanelWatch(null);
+    cancelOverlaySync();
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
     if (opuiWs.lastHome?.data) {
@@ -213,19 +312,21 @@ function setScreen(name) {
     metricsSidebar.hidden = !onroadSidebarVisible;
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
     notifyPanelWatch(null);
-    syncModelOverlayWatch();
     if (!devPc) {
-      startRoadStream().catch(() => {});
+      ensureRoadStream();
     }
+    scheduleOverlaySync();
   } else {
     metricsSidebar.hidden = true;
     app.classList.remove("opui--onroad-sidebar-hidden");
+    opuiWs.unwatchI18n();
     notifyPanelWatch(currentPanel);
+    cancelOverlaySync();
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
   }
 
-  showModelOverlay(name === "onroad");
+  showModelOverlay(name === "onroad" && isPreviewStreamEnabled());
   updateCameraPreviewUi();
 
   if (prevScreen === "onroad" && name !== "onroad" && !lastStarted) {
@@ -243,6 +344,7 @@ function toggleOnroadSidebar() {
 function openSettings(panelId = "device") {
   currentPanel = panelId;
   setScreen("settings");
+  opuiWs.watchI18n();
   renderNav();
   loadCurrentPanel();
 }
@@ -273,42 +375,61 @@ function setIconWithFallback(img, rel) {
 }
 
 function renderNav() {
-  nav.innerHTML = "";
+  if (!nav) return;
+  const existing = new Map([...nav.querySelectorAll("button[data-panel]")].map((b) => [b.dataset.panel, b]));
   for (const p of panels) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.classList.toggle("active", p.id === currentPanel);
-    btn.dataset.panel = p.id;
-
-    const iconPath = p.icon || panelIconMap[p.id] || "";
-    if (iconPath) {
-      const img = document.createElement("img");
-      img.className = "opui-nav-icon";
-      img.alt = "";
-      setIconWithFallback(img, iconPath);
-      btn.appendChild(img);
+    let btn = existing.get(p.id);
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.panel = p.id;
+      const iconPath = p.icon || panelIconMap[p.id] || "";
+      if (iconPath) {
+        const img = document.createElement("img");
+        img.className = "opui-nav-icon";
+        img.alt = "";
+        setIconWithFallback(img, iconPath);
+        btn.appendChild(img);
+      }
+      const span = document.createElement("span");
+      btn.appendChild(span);
+      btn.addEventListener("click", () => {
+        currentPanel = p.id;
+        renderNav();
+        loadCurrentPanel();
+      });
+      nav.appendChild(btn);
     }
-    const span = document.createElement("span");
-    span.textContent = translatePanelTitle(p.title);
-    btn.appendChild(span);
-
-    btn.addEventListener("click", () => {
-      currentPanel = p.id;
-      renderNav();
-      loadCurrentPanel();
-    });
-    nav.appendChild(btn);
+    existing.delete(p.id);
+    btn.classList.toggle("active", p.id === currentPanel);
+    const span = btn.querySelector("span");
+    if (span) span.textContent = translatePanelTitle(p.title);
   }
+  for (const orphan of existing.values()) orphan.remove();
 }
 
-async function loadCurrentPanel() {
-  if (panelContent) {
-    panelContent.innerHTML = `<p class="opui-muted" style="padding:48px;text-align:center">${tr("Loading...")}</p>`;
-  }
-  await renderPanel(currentPanel, panelContent, panelTitle);
+async function loadCurrentPanel(options = {}) {
+  await renderPanel(currentPanel, panelContent, panelTitle, options);
 }
 
 const HEADLESS_BANNER_KEY = "opui-headless-banner-dismissed";
+const BANNER_AUTO_HIDE_MS = 3000;
+let bannerAutoHideTimer = null;
+
+function clearBannerAutoHide() {
+  if (bannerAutoHideTimer) {
+    clearTimeout(bannerAutoHideTimer);
+    bannerAutoHideTimer = null;
+  }
+}
+
+function scheduleBannerAutoHide() {
+  clearBannerAutoHide();
+  bannerAutoHideTimer = setTimeout(() => {
+    bannerAutoHideTimer = null;
+    showBootstrapBanner("");
+  }, BANNER_AUTO_HIDE_MS);
+}
 
 function showHeadlessBanner() {
   if (devPc || !window.__OPUI_HEADLESS) return;
@@ -332,6 +453,7 @@ function showHeadlessBanner() {
   close.setAttribute("aria-label", tr("Close"));
   close.textContent = "×";
   close.addEventListener("click", () => {
+    clearBannerAutoHide();
     try {
       localStorage.setItem(HEADLESS_BANNER_KEY, "1");
     } catch {
@@ -341,11 +463,13 @@ function showHeadlessBanner() {
     el.classList.remove("opui-bootstrap-banner--dismissible");
   });
   el.append(text, close);
+  scheduleBannerAutoHide();
 }
 
 function showBootstrapBanner(message, tone = "warn") {
   const el = document.getElementById("bootstrap-banner");
   if (!el) return;
+  clearBannerAutoHide();
   if (!message) {
     el.hidden = true;
     el.textContent = "";
@@ -357,6 +481,57 @@ function showBootstrapBanner(message, tone = "warn") {
   el.dataset.tone = tone;
   el.classList.remove("opui-bootstrap-banner--dismissible");
   el.textContent = message;
+  if (tone === "info") scheduleBannerAutoHide();
+}
+
+async function waitWsBootstrapPayload(timeoutMs = 600) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (opuiWs.lastHome?.data?.ok || opuiWs.lastState?.data != null) break;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+}
+
+function mergeBootstrapPayload(raw) {
+  if (!raw) return raw;
+  const merged = { ...raw };
+  if (!merged.home?.ok && opuiWs.lastHome?.data?.ok) merged.home = opuiWs.lastHome.data;
+  if (merged.state == null && opuiWs.lastState?.data != null) merged.state = opuiWs.lastState.data;
+  return merged;
+}
+
+function applyBootstrapPayload(bootstrapData) {
+  devPc = !!bootstrapData.dev_pc;
+  window.__OPUI_DEV_PC = devPc;
+  window.__OPUI_HEADLESS = !!(bootstrapData.headless || bootstrapData.state?.headless);
+  window.__OPUI_HEADLESS_MODE = bootstrapData.headless_mode || "auto";
+  window.__OPUI_HAS_BUILTIN_DISPLAY = bootstrapData.has_builtin_display !== false;
+  if (typeof bootstrapData.recommended_overlay_fps === "number") {
+    setRecommendedOverlayFps(bootstrapData.recommended_overlay_fps);
+  }
+  applyDesignTokens(bootstrapData);
+
+  const home = bootstrapData.home;
+  if (home?.ok) {
+    updateHomeScreen(home);
+    setHomeState(home);
+  } else if (home?.error) {
+    showBootstrapBanner(`${tr("Home data failed to load")}: ${home.error}`);
+    refreshHomeScreen();
+  } else if (!home) {
+    refreshHomeScreen();
+  }
+
+  const st = bootstrapData.state;
+  if (st?.ok) handleState(st);
+  if (devPc) {
+    document.getElementById("camera-wrap")?.classList.add("is-dev-pc");
+    showBootstrapBanner(tr("PC preview — some data is mocked and may differ from the device"), "info");
+  } else if (st?.ok === false) {
+    showBootstrapBanner(`${tr("Driving state unavailable")}: ${st.error || tr("Unknown error")}`, "warn");
+  } else if (window.__OPUI_HEADLESS) {
+    showHeadlessBanner();
+  }
 }
 
 async function bootstrap() {
@@ -367,47 +542,21 @@ async function bootstrap() {
   const httpPromise = apiGet("/api/opui/bootstrap").catch(() => null);
   const wsHelloPromise = opuiWs.waitHello(2500);
   const [httpMeta] = await Promise.all([httpPromise, wsHelloPromise]);
+  await waitWsBootstrapPayload();
 
-  let bootstrapData = opuiWs.bootstrap || httpMeta;
+  let bootstrapData = mergeBootstrapPayload(opuiWs.bootstrap || httpMeta);
   if (bootstrapData) {
-    devPc = !!bootstrapData.dev_pc;
-    window.__OPUI_DEV_PC = devPc;
-    window.__OPUI_HEADLESS = !!(bootstrapData.headless || bootstrapData.state?.headless);
-    applyDesignTokens(bootstrapData);
-    const home = bootstrapData.home;
-    if (home?.ok) {
-      updateHomeScreen(home);
-      setHomeState(home);
-    } else if (home?.error) {
-      showBootstrapBanner(`${tr("Home data failed to load")}: ${home.error}`);
-      refreshHomeScreen();
-    }
-    const st = bootstrapData.state;
-    if (st?.ok) handleState(st);
-    if (devPc) {
-      document.getElementById("camera-wrap")?.classList.add("is-dev-pc");
-      showBootstrapBanner(tr("PC preview — some data is mocked and may differ from the device"), "info");
-    } else if (st?.ok === false) {
-      showBootstrapBanner(`${tr("Driving state unavailable")}: ${st.error || tr("Unknown error")}`, "warn");
-    } else {
-      showHeadlessBanner();
-    }
+    applyBootstrapPayload(bootstrapData);
   } else {
     try {
-      const fallback = await apiGet("/api/opui/bootstrap");
+      const fallback = mergeBootstrapPayload(await apiGet("/api/opui/bootstrap"));
       bootstrapData = fallback;
-      devPc = !!fallback.dev_pc;
-      window.__OPUI_DEV_PC = devPc;
-      window.__OPUI_HEADLESS = !!(fallback.headless || fallback.state?.headless);
-      applyDesignTokens(fallback);
-      if (fallback.home?.ok) {
-        updateHomeScreen(fallback.home);
-        setHomeState(fallback.home);
+      if (fallback) {
+        applyBootstrapPayload(fallback);
       } else {
-        showBootstrapBanner(`${tr("WebSocket and HTTP bootstrap failed")}: ${fallback.home?.error || tr("No response")}`);
+        showBootstrapBanner(`${tr("WebSocket and HTTP bootstrap failed")}: ${tr("No response")}`);
         refreshHomeScreen();
       }
-      if (fallback.state?.ok) handleState(fallback.state);
     } catch (_) {
       showBootstrapBanner(tr("WebUI not ready — run py -3 webui/dev/run_pc.py for local preview"));
       refreshHomeScreen();
@@ -454,14 +603,13 @@ function handleState(st) {
   }
 
   if (st.started) {
-    if (!lastStarted && !devPc) {
-      startRoadStream().catch(() => {});
-    }
     if (!lastStarted) {
       onroadSidebarVisible = false;
     }
     if (app.dataset.screen === "home") {
       setScreen("onroad");
+    } else if (app.dataset.screen === "onroad" && !devPc) {
+      ensureRoadStream();
     }
     updateOnroadHud(st);
   } else {
@@ -505,15 +653,18 @@ function setupWebSocket() {
     applyPanelCustom(msg.panel, msg.data);
   });
   opuiWs.on("model_overlay", (msg) => {
-    if (app.dataset.screen === "onroad" && msg?.data && isOverlayAllowed()) drawModelOverlay(msg.data);
+    if (app.dataset.screen !== "onroad" || !msg?.data || !shouldDrawModelOverlay()) return;
+    scheduleDrawModelOverlay(msg.data);
   });
   opuiWs.on("i18n", async (msg) => {
     if (msg?.data?.ok) {
       const { applyI18nPayload } = await import("./i18n.js");
       if (applyI18nPayload(msg.data, true)) {
+        clearPanelDomCache();
         renderNav();
         refreshWebUiUpdateI18n();
-        if (app.dataset.screen === "settings") loadCurrentPanel();
+        syncStaticUiStrings();
+        if (app.dataset.screen === "settings") loadCurrentPanel({ force: true });
       }
     }
   });
@@ -564,6 +715,8 @@ window.addEventListener("opui:language-changed", () => {
   syncStaticUiStrings();
   refreshWebUiUpdateI18n();
   renderNav();
+  clearPanelDomCache();
+  if (app.dataset.screen === "settings") loadCurrentPanel({ force: true });
   if (lastUiState?.ok) updateSidebarMetrics(lastUiState);
 });
 
@@ -573,6 +726,39 @@ window.addEventListener("opui:refresh-panel", () => {
 
 window.addEventListener("opui:dev-state", (ev) => {
   if (ev.detail) handleState(ev.detail);
+});
+
+window.addEventListener("opui:preview-stream-changed", (ev) => {
+  applyPreviewOffUi();
+  if (!ev.detail?.enabled) {
+    stopRoadStream().catch(() => {});
+    cancelOverlaySync();
+    opuiWs.unwatchModelOverlay();
+    stopModelOverlayPoll();
+    setModelOverlayEnabled(false);
+    if (lastUiState?.ok && app.dataset.screen === "onroad") updateOnroadHud(lastUiState);
+  } else if (app.dataset.screen === "onroad" && !devPc && (lastStarted || cameraPreview)) {
+    ensureRoadStream();
+    scheduleOverlaySync();
+  }
+});
+
+window.addEventListener("opui:headless-mode-changed", (ev) => {
+  const detail = ev.detail || {};
+  window.__OPUI_HEADLESS = !!detail.effective_headless;
+  window.__OPUI_HEADLESS_MODE = detail.mode || "auto";
+  if (typeof detail.recommended_overlay_fps === "number") {
+    setRecommendedOverlayFps(detail.recommended_overlay_fps);
+  }
+  if (window.__OPUI_HEADLESS) showHeadlessBanner();
+  else {
+    const el = document.getElementById("bootstrap-banner");
+    if (el && !devPc) {
+      el.hidden = true;
+      el.textContent = "";
+    }
+  }
+  if (app.dataset.screen === "settings") loadCurrentPanel();
 });
 
 window.addEventListener("opui:headless-sim", (ev) => {
@@ -637,11 +823,17 @@ bootstrap().then(() => {
   initWebUiUpdate();
   refreshWebUiUpdateI18n();
   initOnboarding();
+  setupPortraitTouchScroll();
   fitOpuiScale();
-  prewarmWebrtc();
+  applyPreviewOffUi();
+  if (isPreviewStreamEnabled()) prewarmWebrtc();
   const refit = () => {
-    fitOpuiScale();
-    syncModelOverlayWatch();
+    if (refitTimer) clearTimeout(refitTimer);
+    refitTimer = setTimeout(() => {
+      refitTimer = null;
+      fitOpuiScale();
+      syncModelOverlayWatch();
+    }, 200);
   };
   window.addEventListener("resize", refit);
   window.addEventListener("orientationchange", refit);

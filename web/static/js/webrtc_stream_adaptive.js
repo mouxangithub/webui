@@ -4,7 +4,7 @@ import { toast } from "./api.js";
 import { tr } from "./i18n.js";
 
 export const QUALITY_PREF_KEY = "opui-preview-quality";
-export const QUALITY_LEVELS = ["auto", "low", "med", "high"];
+export const QUALITY_LEVELS = ["auto", "low", "med", "high", "off"];
 
 const CPU_WARM_C = 80;
 const CPU_HOT_C = 92;
@@ -17,6 +17,7 @@ let lastDowngradeToastAt = 0;
 let thermalHot = false;
 let deviceWarm = false;
 let forcedLowReason = null;
+let recommendedOverlayFps = null;
 let notifyFn = null;
 
 export function registerWebrtcNotify(fn) {
@@ -39,18 +40,32 @@ export function getEffectiveQuality() {
   return effectiveQuality;
 }
 
+export function isPreviewStreamEnabled() {
+  return getQualityPreference() !== "off";
+}
+
 export function isOverlayAllowed() {
-  return overlayAllowed;
+  return overlayAllowed && isPreviewStreamEnabled();
 }
 
 export function shouldDrawModelOverlay() {
-  return overlayAllowed && !document.hidden;
+  return isPreviewStreamEnabled() && overlayAllowed && !document.hidden;
 }
 
 export function getOverlayFpsHint() {
-  if (!overlayAllowed || effectiveQuality === "low" || thermalHot || forcedLowReason) return 5;
-  if (effectiveQuality === "med" || deviceWarm) return 10;
-  return 15;
+  if (!isPreviewStreamEnabled() || effectiveQuality === "off") return 0;
+  let fps = 15;
+  if (!overlayAllowed || effectiveQuality === "low" || thermalHot || forcedLowReason) fps = 5;
+  else if (effectiveQuality === "med" || deviceWarm) fps = 10;
+  if (typeof recommendedOverlayFps === "number" && recommendedOverlayFps > 0) {
+    fps = Math.min(fps, recommendedOverlayFps);
+  }
+  if (window.__OPUI_HEADLESS) fps = Math.min(fps, 5);
+  return fps;
+}
+
+export function setRecommendedOverlayFps(fps) {
+  if (typeof fps === "number" && fps > 0) recommendedOverlayFps = fps;
 }
 
 function weakClientNetwork() {
@@ -136,6 +151,19 @@ function updateOverlayPolicy() {
 }
 
 export async function applyStreamQuality(pref = getQualityPreference(), opts = {}) {
+  if (pref === "off") {
+    effectiveQuality = "off";
+    overlayAllowed = false;
+    window.dispatchEvent(new CustomEvent("opui:overlay-policy", { detail: { allowed: false } }));
+    window.dispatchEvent(new CustomEvent("opui:stream-quality-applied", { detail: { quality: "off" } }));
+    window.dispatchEvent(new CustomEvent("opui:preview-stream-changed", { detail: { enabled: false } }));
+    return "off";
+  }
+
+  if (effectiveQuality === "off") {
+    overlayAllowed = true;
+  }
+
   const prev = effectiveQuality;
   const q = resolveNotifyQuality(pref);
   effectiveQuality = q;
@@ -145,6 +173,7 @@ export async function applyStreamQuality(pref = getQualityPreference(), opts = {
     maybeToastDowngrade(opts.reason || forcedLowReason);
   }
   window.dispatchEvent(new CustomEvent("opui:stream-quality-applied", { detail: { quality: q } }));
+  window.dispatchEvent(new CustomEvent("opui:preview-stream-changed", { detail: { enabled: true } }));
   return q;
 }
 

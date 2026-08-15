@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,6 +46,22 @@ class WebuiCarContext:
 
 _ctx = WebuiCarContext()
 _prev_started = False
+_driver_view_clear_scheduled = False
+_driver_view_lock = threading.Lock()
+
+
+def _clear_driver_view_async() -> None:
+  global _driver_view_clear_scheduled
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    if p.get_bool("IsDriverViewEnabled"):
+      p.put_bool("IsDriverViewEnabled", False, block=False)
+  except Exception:
+    pass
+  finally:
+    with _driver_view_lock:
+      _driver_view_clear_scheduled = False
 
 
 def get_car_context() -> WebuiCarContext:
@@ -72,7 +89,6 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
     from webui.server.bridge.headless_util import is_headless_mode
     if is_headless_mode() and sm.valid.get("pandaStates") and sm["pandaStates"]:
       from openpilot.cereal import log
-      from openpilot.common.params import Params
 
       ignition = any(
         ps.ignitionLine or ps.ignitionCan
@@ -80,9 +96,10 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
         if ps.pandaType != log.PandaState.PandaType.unknown
       )
       if ignition:
-        p = Params()
-        if p.get_bool("IsDriverViewEnabled"):
-          p.put_bool("IsDriverViewEnabled", False)
+        with _driver_view_lock:
+          if not _driver_view_clear_scheduled:
+            _driver_view_clear_scheduled = True
+            threading.Thread(target=_clear_driver_view_async, name="clear-driver-view", daemon=True).start()
   except Exception:
     pass
 

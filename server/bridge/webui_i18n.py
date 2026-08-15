@@ -115,6 +115,36 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Memory": "Memory",
     "On": "On",
     "Off": "Off",
+    "Turn on": "Turn on",
+    "SD": "SD",
+    "webui_headless_mode_desc": (
+      "Headless mode uses Web UI as the primary interface. Auto detects the built-in screen. "
+      "Turn on forces headless and skips detection at startup. Off requires a built-in display."
+    ),
+    "webui_preview_quality_desc": (
+      "Camera preview quality for Web UI livestream. Off disables camera preview and lane overlay "
+      "but keeps speed and HUD. Auto lowers bitrate on weak network or when the device is warm. "
+      "Does not affect driving recordings."
+    ),
+    "webui_hardware_decode_desc": "Use WebCodecs for lower preview latency when supported.",
+    "Headless mode": "Headless mode",
+    "Headless mode updated": "Headless mode updated",
+    "Headless mode update failed": "Headless mode update failed",
+    "No built-in display — headless cannot be turned off": (
+      "No built-in display — headless cannot be turned off"
+    ),
+    "No built-in display — use this Web UI as your primary interface.": (
+      "No built-in display — use this Web UI as your primary interface."
+    ),
+    "Headless mode uses Web UI as the primary interface. Auto detects the built-in screen. On forces headless and skips detection at startup. Off requires a built-in display.": (
+      "Headless mode uses Web UI as the primary interface. Auto detects the built-in screen. On forces headless and skips detection at startup. Off requires a built-in display."
+    ),
+    "Camera preview quality for Web UI livestream. Off disables camera preview and lane overlay but keeps speed and HUD. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings.": (
+      "Camera preview quality for Web UI livestream. Off disables camera preview and lane overlay but keeps speed and HUD. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings."
+    ),
+    "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
+      "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI."
+    ),
     "Camera preview quality for Web UI livestream. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings.": (
       "Camera preview quality for Web UI livestream. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings."
     ),
@@ -329,8 +359,34 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Thermal": "温度",
     "CPU temp": "CPU 温度",
     "Memory": "内存",
-    "On": "开",
+    "On": "开启",
     "Off": "关",
+    "Turn on": "开启",
+    "SD": "标清",
+    "webui_headless_mode_desc": (
+      "无屏模式将 Web UI 作为主界面。自动会检测内置屏幕；开启强制无屏并在启动时跳过检测；关闭需要内置屏幕。"
+    ),
+    "webui_preview_quality_desc": (
+      "Web UI 相机预览画质。关闭时不显示相机预览和车道线，仍保留时速和 HUD。"
+      "自动模式在弱网或设备发热时降低码率，不影响行车录像。"
+    ),
+    "webui_hardware_decode_desc": "浏览器支持时使用 WebCodecs 降低预览延迟。",
+    "Headless mode": "无屏模式",
+    "Headless mode updated": "无屏模式已更新",
+    "Headless mode update failed": "无屏模式更新失败",
+    "No built-in display — headless cannot be turned off": "无内置屏幕 — 无法关闭无屏模式",
+    "No built-in display — use this Web UI as your primary interface.": (
+      "无内置屏幕 — 请将此 Web UI 作为主界面。"
+    ),
+    "Headless mode uses Web UI as the primary interface. Auto detects the built-in screen. On forces headless and skips detection at startup. Off requires a built-in display.": (
+      "无屏模式将 Web UI 作为主界面。自动会检测内置屏幕；开强制无屏并在启动时跳过检测；关需要内置屏幕。"
+    ),
+    "Camera preview quality for Web UI livestream. Off disables camera preview and lane overlay but keeps speed and HUD. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings.": (
+      "Web UI 相机预览画质。关闭时不显示相机预览和车道线，仍保留时速和 HUD。自动模式在弱网或设备发热时降低码率，不影响行车录像。"
+    ),
+    "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
+      "无内置屏幕 — 亮度与屏保设置不适用。下方为 Web UI 使用的相机流设置。"
+    ),
     "Camera preview quality for Web UI livestream. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings.": (
       "Web UI 相机预览画质。自动模式会在弱网或设备发热时降低码率，不影响行车录像。"
     ),
@@ -545,8 +601,34 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Thermal": "溫度",
     "CPU temp": "CPU 溫度",
     "Memory": "記憶體",
-    "On": "開",
+    "On": "開啟",
     "Off": "關",
+    "Turn on": "開啟",
+    "SD": "標清",
+    "webui_headless_mode_desc": (
+      "無螢幕模式將 Web UI 作為主介面。自動會偵測內建螢幕；開啟強制無螢幕並在啟動時跳過偵測；關閉需要內建螢幕。"
+    ),
+    "webui_preview_quality_desc": (
+      "Web UI 相機預覽畫質。關閉時不顯示相機預覽和車道線，仍保留時速和 HUD。"
+      "自動模式在弱網或裝置發熱時降低碼率，不影響行車錄影。"
+    ),
+    "webui_hardware_decode_desc": "瀏覽器支援時使用 WebCodecs 降低預覽延遲。",
+    "Headless mode": "無螢幕模式",
+    "Headless mode updated": "無螢幕模式已更新",
+    "Headless mode update failed": "無螢幕模式更新失敗",
+    "No built-in display — headless cannot be turned off": "無內建螢幕 — 無法關閉無螢幕模式",
+    "No built-in display — use this Web UI as your primary interface.": (
+      "無內建螢幕 — 請將此 Web UI 作為主介面。"
+    ),
+    "Headless mode uses Web UI as the primary interface. Auto detects the built-in screen. On forces headless and skips detection at startup. Off requires a built-in display.": (
+      "無螢幕模式將 Web UI 作為主介面。自動會偵測內建螢幕；開強制無螢幕並在啟動時跳過偵測；關需要內建螢幕。"
+    ),
+    "Camera preview quality for Web UI livestream. Off disables camera preview and lane overlay but keeps speed and HUD. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings.": (
+      "Web UI 相機預覽畫質。關閉時不顯示相機預覽和車道線，仍保留時速和 HUD。自動模式在弱網或裝置發熱時降低碼率，不影響行車錄影。"
+    ),
+    "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
+      "無內建螢幕 — 亮度與螢幕保護設定不適用。下方為 Web UI 使用的相機串流設定。"
+    ),
     "Camera preview quality for Web UI livestream. Auto lowers bitrate on weak network or when the device is warm. Does not affect driving recordings.": (
       "Web UI 相機預覽畫質。自動模式會在弱網或裝置發熱時降低碼率，不影響行車錄影。"
     ),
@@ -621,11 +703,12 @@ def webui_extra_strings(po_code: str, po_strings: dict[str, str] | None = None) 
   manual = _WEBUI_STRINGS.get(po_code, {})
   out: dict[str, str] = {}
   for key, en_val in en.items():
-    if (po_strings.get(key) or "").strip():
-      continue
+    po_val = (po_strings.get(key) or "").strip()
     manual_val = (manual.get(key) or "").strip()
+    if po_val and po_val != en_val:
+      continue
     if manual_val and manual_val != en_val:
-      out[key] = manual[key]
+      out[key] = manual_val
     else:
       out[key] = en_val
   return out

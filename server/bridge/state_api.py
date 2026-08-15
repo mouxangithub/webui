@@ -642,34 +642,5 @@ def snapshot_ui_state() -> dict[str, Any]:
     from webui.dev.mock_runtime import snapshot_dev_ui_state
     return snapshot_dev_ui_state()
 
-  try:
-    from webui.server.bridge.state_hub import get_state
-    return get_state()
-  except Exception:
-    pass
-
-  try:
-    import openpilot.cereal.messaging as messaging
-
-    services = [
-      "deviceState", "selfdriveState", "carState", "controlsState", "carControl",
-      "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-      "longitudinalPlanSP", "liveMapDataSP", "radarState", "liveParameters",
-      "liveTorqueParameters", "gpsLocationExternal", "gpsLocation", "carOutput",
-    ]
-    try:
-      services.append("selfdriveStateSP")
-    except Exception:
-      pass
-
-    sm = messaging.SubMaster(services, poll="deviceState")
-    sm.update(300)
-    return build_state_from_sm(sm)
-  except Exception as exc:
-    return {
-      "ok": False,
-      "error": str(exc),
-      "started": False,
-      "engaged": False,
-      "ui_status": "disengaged",
-    }
+  from webui.server.bridge.state_hub import get_state
+  return get_state()
