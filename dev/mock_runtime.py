@@ -74,6 +74,12 @@ SIM: dict[str, Any] = {
   "torque_utilization": 0.42,
   "pcm_cruise_speed": False,
   "headless": False,
+  "agnos_update_required": True,
+  "agnos_current_version": "11.9.9",
+  "agnos_target_version": "12.0.0",
+  "agnos_ready_to_reboot": False,
+  "agnos_sim_rebooting": False,
+  "agnos_sim_reboot_until": 0.0,
 }
 
 

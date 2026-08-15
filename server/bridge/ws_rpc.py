@@ -168,6 +168,19 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "GET" and clean_path == "/api/opui/software":
       return software_status()
+
+    if method == "GET" and clean_path == "/api/opui/agnos":
+      from webui.server.bridge.agnos_api import agnos_snapshot
+      return agnos_snapshot()
+
+    if method == "POST" and clean_path == "/api/opui/agnos/install":
+      from webui.server.bridge.agnos_api import start_agnos_install
+      return start_agnos_install()
+
+    if method == "POST" and clean_path == "/api/opui/agnos/reboot":
+      from webui.server.bridge.agnos_api import agnos_reboot
+      return agnos_reboot()
+
     if method == "GET" and clean_path == "/api/opui/system/manager_error":
       return manager_last_error()
 

@@ -5,10 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/opui.css?v=96" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=99" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
+  <div id="system-wait-overlay" class="opui-system-wait" hidden aria-live="polite" aria-busy="true">
+    <div class="opui-system-wait-card">
+      <div class="opui-system-wait-spinner" aria-hidden="true"></div>
+      <h2 id="system-wait-title" class="opui-system-wait-title"></h2>
+      <p id="system-wait-message" class="opui-system-wait-message"></p>
+      <div id="system-wait-progress-wrap" class="opui-system-wait-progress" hidden>
+        <div class="opui-system-wait-progress-head">
+          <span id="system-wait-progress-label" class="opui-system-wait-progress-label">0%</span>
+        </div>
+        <div class="opui-system-wait-progress-track">
+          <div id="system-wait-progress-bar" class="opui-system-wait-progress-bar"></div>
+        </div>
+      </div>
+      <p id="system-wait-hint" class="opui-system-wait-hint"></p>
+      <button type="button" id="system-wait-dismiss" class="opui-btn opui-btn--dialog" hidden>Close</button>
+    </div>
+  </div>
   <div id="opui-viewport">
   <div id="app" class="opui" data-screen="home">
     <!-- Offroad / settings sidebar (left 500px when settings) -->
@@ -315,15 +332,17 @@
       <button type="button" data-preset="confidence_low">Confidence · low</button>
       <button type="button" data-preset="confidence_high">Confidence · high</button>
       <button type="button" data-preset="onroad_overlay">On road · overlay</button>
+      <button type="button" data-preset="software_agnos">Software · AGNOS</button>
     </div>
     <label class="opui-dev-row"><input type="checkbox" id="dev-headless" /> <span id="dev-label-headless">Headless (no display)</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-started" /> <span id="dev-label-started">On road</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-engaged" /> <span id="dev-label-engaged">Engaged</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-experimental" /> <span id="dev-label-experimental">Experimental</span></label>
     <label class="opui-dev-row"><input type="checkbox" id="dev-recording" /> <span id="dev-label-recording">Recording microphone</span></label>
+    <label class="opui-dev-row"><input type="checkbox" id="dev-agnos-pending" checked /> <span id="dev-label-agnos">AGNOS update pending</span></label>
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=96"></script>
+  <script type="module" src="/static/js/app.js?v=99"></script>
 </body>
 </html>

@@ -31,10 +31,10 @@ def has_builtin_display_hardware() -> bool:
   if os.environ.get("WEBUI_DEV_PC") == "1":
     return True
   try:
-    from openpilot.common.hardware import TICI
-    if not TICI:
+    from openpilot.common.hardware import COMMA_HARDWARE
+    if not COMMA_HARDWARE:
       return True
-    from openpilot.common.hardware.tici.hardware import probe_builtin_display
+    from openpilot.common.hardware.comma.hardware import probe_builtin_display
     return probe_builtin_display()
   except Exception:
     return True
@@ -58,7 +58,7 @@ def set_headless_mode_pref(mode: str) -> dict[str, object]:
     from openpilot.common.params import Params
     Params().put(HEADLESS_MODE_PARAM, mode, block=True)
     try:
-      from openpilot.common.hardware.tici.hardware import invalidate_display_probe_cache
+      from openpilot.common.hardware.comma.hardware import invalidate_display_probe_cache
       invalidate_display_probe_cache()
     except Exception:
       pass
@@ -87,8 +87,8 @@ def is_headless_mode() -> bool:
     return not has_builtin_display_hardware()
 
   try:
-    from openpilot.common.hardware import TICI, HARDWARE
-    if not TICI:
+    from openpilot.common.hardware import COMMA_HARDWARE, HARDWARE
+    if not COMMA_HARDWARE:
       return False
     return not HARDWARE.has_builtin_display()
   except Exception:

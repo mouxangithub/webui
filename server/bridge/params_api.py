@@ -174,6 +174,10 @@ def remove_param(key: str) -> dict[str, Any]:
 
 def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, Any]:
   try:
+    from webui.server.bridge.lite_util import LITE_UNAVAILABLE_PARAMS, is_lite_hw
+    if is_lite_hw() and key in LITE_UNAVAILABLE_PARAMS:
+      return {"ok": False, "error": f"param unavailable on Lite hardware: {key}"}
+
     _, ParamKeyType, _ = _op_params()
     p = _params()
     ptype_enum = _param_type(p, key)
@@ -238,7 +242,8 @@ def panel_values(panel_id: str) -> dict[str, Any]:
   for w in panel.get("widgets", []):
     if w.get("custom") == "webui_update":
       continue
-    if os.getenv("LITE") is not None and w.get("param") == "RecordAudio":
+    from webui.server.bridge.lite_util import should_hide_widget
+    if should_hide_widget(w):
       continue
     for dep_key in ("visible_if", "advanced_if"):
       dep = w.get(dep_key)

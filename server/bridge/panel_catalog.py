@@ -105,6 +105,9 @@ PANELS: list[dict[str, Any]] = [
       {"type": "bool", "param": "RecordAudio", "label": "Record and Upload Microphone Audio", "needs_cycle": True,
        "icon": "selfdrive/assets/icons/microphone.png",
        "desc": "Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."},
+      {"type": "bool", "param": "SpDevBeep", "label": "Beeper Feedback", "lite_only": True, "needs_cycle": True,
+       "icon": "selfdrive/assets/icons/warning.png",
+       "desc": "Use the GPIO beeper for engage/disengage sounds on Lite hardware without a speaker."},
       {"type": "bool", "param": "IsMetric", "label": "Use Metric System",
        "icon": "selfdrive/assets/icons/metric.png",
        "desc": "Display speed in km/h instead of mph."},
@@ -420,19 +423,21 @@ def get_panel(panel_id: str) -> dict[str, Any] | None:
 def panel_schema() -> dict[str, Any]:
   from webui.server.bridge.design_tokens import PANEL_ICONS, tokens_payload
   from webui.server.bridge.headless_util import is_headless_mode
+  from webui.server.bridge.lite_util import is_lite_hw, should_hide_widget
 
   headless = is_headless_mode()
+  lite = is_lite_hw()
   headless_hide_params = {
     "OnroadScreenOffBrightness", "OnroadScreenOffTimer",
     "InteractivityTimeout", "ScreenSaverEnabled", "ScreenSaverTimeout",
   }
 
   def _filter_widgets(widgets: list[dict]) -> list[dict]:
-    if not headless:
-      return widgets
     out = []
     for w in widgets:
-      if w.get("param") in headless_hide_params:
+      if should_hide_widget(w):
+        continue
+      if headless and w.get("param") in headless_hide_params:
         continue
       if w.get("type") == "separator" and out and out[-1].get("type") == "separator":
         continue
@@ -442,22 +447,22 @@ def panel_schema() -> dict[str, Any]:
   panels_out = []
   for p in PANELS:
     entry = {**p, "icon": PANEL_ICONS.get(p["id"], "")}
+    widgets = _filter_widgets(list(entry.get("widgets") or []))
     if headless and p.get("id") == "display":
       entry["headless_note"] = "Built-in display settings are hidden on headless devices."
-      widgets = _filter_widgets(list(entry.get("widgets") or []))
-      if headless:
-        widgets.insert(0, {
-          "type": "html",
-          "i18n_key": "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.",
-        })
-        widgets.insert(1, {"type": "separator"})
-      entry["widgets"] = widgets
+      widgets.insert(0, {
+        "type": "html",
+        "i18n_key": "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.",
+      })
+      widgets.insert(1, {"type": "separator"})
+    entry["widgets"] = widgets
     panels_out.append(entry)
   return {
     "ok": True,
     "panels": panels_out,
     "subpanels": list(SUBPANELS.keys()),
     "headless": headless,
+    "lite": lite,
     **tokens_payload(),
   }
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 from aiohttp import web
 
@@ -46,6 +47,14 @@ from webui.server.bridge.ws_handler import ws_opui_handler
 
 
 async def api_bootstrap(_request: web.Request) -> web.Response:
+  if os.environ.get("WEBUI_DEV_PC") == "1":
+    from webui.dev.agnos_sim import dev_bootstrap_blocked
+    if dev_bootstrap_blocked():
+      raise web.HTTPServiceUnavailable(
+        text=json.dumps({"ok": False, "error": "dev_agnos_rebooting"}),
+        content_type="application/json",
+        headers={"Retry-After": "1"},
+      )
   from webui.server.bridge.ws_rpc import bootstrap_payload
   return json_response(bootstrap_payload())
 
@@ -438,6 +447,21 @@ async def api_webui_update_apply(_request: web.Request) -> web.Response:
   return json_response(apply_webui_update())
 
 
+async def api_agnos(_request: web.Request) -> web.Response:
+  from webui.server.bridge.agnos_api import agnos_snapshot
+  return json_response(await asyncio.to_thread(agnos_snapshot))
+
+
+async def api_agnos_install(_request: web.Request) -> web.Response:
+  from webui.server.bridge.agnos_api import start_agnos_install
+  return json_response(await asyncio.to_thread(start_agnos_install))
+
+
+async def api_agnos_reboot(_request: web.Request) -> web.Response:
+  from webui.server.bridge.agnos_api import agnos_reboot
+  return json_response(await asyncio.to_thread(agnos_reboot))
+
+
 async def api_headless_mode_get(_request: web.Request) -> web.Response:
   from webui.server.bridge.headless_api import snapshot_headless_mode
   return json_response(await asyncio.to_thread(snapshot_headless_mode))
@@ -514,6 +538,9 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/webui-update", api_webui_update)
   app.router.add_post("/api/opui/webui-update/dismiss", api_webui_update_dismiss)
   app.router.add_post("/api/opui/webui-update/apply", api_webui_update_apply)
+  app.router.add_get("/api/opui/agnos", api_agnos)
+  app.router.add_post("/api/opui/agnos/install", api_agnos_install)
+  app.router.add_post("/api/opui/agnos/reboot", api_agnos_reboot)
   app.router.add_get("/api/opui/webrtc/schema", api_webrtc_schema)
   app.router.add_post("/api/opui/webrtc/offer", api_webrtc_offer)
   app.router.add_post("/api/opui/webrtc/notify", api_webrtc_notify)

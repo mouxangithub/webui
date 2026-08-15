@@ -62,6 +62,14 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       p.put_bool("DoReboot", True, block=True)
       return {"ok": True, "action": action}
 
+    if action == "agnos_install":
+      from webui.server.bridge.agnos_api import start_agnos_install
+      return start_agnos_install()
+
+    if action == "agnos_reboot":
+      from webui.server.bridge.agnos_api import agnos_reboot
+      return agnos_reboot()
+
     if action == "sunnylink_backup":
       p.put_bool("BackupManager_CreateBackup", True, block=True)
       return {"ok": True, "action": action}

@@ -145,6 +145,15 @@ async def api_dev_presets(request: web.Request) -> web.Response:
       "torque_bar": True, "torque_utilization": 0.5, "developer_ui": 3,
       "confidence_target": 0.7, "alert_size": "none",
     },
+    "software_agnos": {
+      "started": False, "engaged": False, "ui_status": "disengaged",
+      "agnos_update_required": True,
+      "agnos_ready_to_reboot": False,
+      "agnos_current_version": "11.9.9",
+      "agnos_target_version": "12.0.0",
+      "agnos_sim_rebooting": False,
+      "agnos_sim_reboot_until": 0.0,
+    },
   }
   if preset not in presets:
     return json_response({"ok": False, "error": f"unknown preset: {preset}"}, status=400)

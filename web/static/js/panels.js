@@ -5,6 +5,7 @@ import {
   getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, webCodecsCapability, getStreamDecodePath,
 } from "./webrtc_webcodecs.js";
 import { renderWebUiUpdateRow, fetchWebUiUpdate, syncWebUiUpdateRow } from "./webui_update.js";
+import { runAgnosUpdateFlow, runSoftwareInstallFlow, runRebootFlow } from "./system_wait_overlay.js";
 import { opuiWs } from "./ws.js";
 import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption, showQrPair,
@@ -1424,7 +1425,7 @@ function renderBoolRow(w) {
       });
       if (!ok) return false;
       const res = await putParam("DisableUpdates", checked ? "1" : "0");
-      if (res.ok) await apiPost("/api/opui/action/reboot");
+      if (res.ok) await runRebootFlow();
       else toast(res.error || t("Save failed"));
       return "handled";
     };
@@ -1750,6 +1751,8 @@ async function runDualSideAction(side) {
         return;
       }
       if (!(await showConfirm({ message: t("Are you sure you want to reboot?"), confirmText: t("Reboot") }))) return;
+      await runRebootFlow();
+      return;
     }
     if (side.action === "shutdown") {
       if (globalState.engaged) {
@@ -3492,6 +3495,87 @@ async function renderSoftwarePanel(container, data) {
   });
   container.appendChild(version);
 
+  const agnos = await apiGet("/api/opui/agnos").catch(() => ({ ok: false }));
+  if (panelRenderStale(gen)) return;
+  if (agnos.ok && agnos.available && agnos.update_required) {
+    const agnosBlock = document.createElement("div");
+    agnosBlock.className = "opui-agnos-block";
+    const agnosRow = document.createElement("div");
+    agnosRow.id = "software-agnos-row";
+    agnosRow.className = "opui-sp-row opui-sp-row--has-action opui-sp-row--warn";
+    const agnosTitle = t("AGNOS Update");
+    const agnosDesc = `${agnos.current_version || "?"} → ${agnos.target_version || "?"}`;
+    agnosRow.innerHTML = `
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(agnosTitle)}</div>
+        <div class="opui-sp-row-desc">${escapeHtml(t("Operating system update required (~1GB download)."))}</div>
+      </div>
+      <div class="opui-sp-row-value" id="software-agnos-value">${escapeHtml(agnosDesc)}</div>
+      <button type="button" class="opui-btn opui-btn--action" id="software-agnos-btn">${escapeHtml(agnos.ready_to_reboot ? t("REBOOT") : t("INSTALL"))}</button>`;
+    const agnosProgWrap = document.createElement("div");
+    agnosProgWrap.className = "opui-agnos-progress-wrap";
+    agnosProgWrap.id = "software-agnos-progress";
+    agnosProgWrap.hidden = true;
+    agnosProgWrap.innerHTML = `
+      <div class="opui-agnos-progress-head">
+        <span class="opui-agnos-progress-status" id="software-agnos-progress-status"></span>
+        <span class="opui-agnos-progress-label" id="software-agnos-progress-label">0%</span>
+      </div>
+      <div class="opui-agnos-progress-track">
+        <div class="opui-agnos-progress-bar" id="software-agnos-progress-bar"></div>
+      </div>`;
+    agnosBlock.appendChild(agnosRow);
+    agnosBlock.appendChild(agnosProgWrap);
+    const agnosBtn = agnosRow.querySelector("#software-agnos-btn");
+    const agnosVal = agnosRow.querySelector("#software-agnos-value");
+    const agnosProgBar = agnosProgWrap.querySelector("#software-agnos-progress-bar");
+    const agnosProgLabel = agnosProgWrap.querySelector("#software-agnos-progress-label");
+    const agnosProgStatus = agnosProgWrap.querySelector("#software-agnos-progress-status");
+    const setAgnosProgress = (st) => {
+      const running = st?.install_running || st?.job?.status === "running";
+      const pct = typeof st?.job?.progress === "number"
+        ? st.job.progress
+        : (typeof st?.progress === "number" ? st.progress : null);
+      if (agnosProgWrap) agnosProgWrap.hidden = !running;
+      if (!running) return;
+      if (agnosProgStatus && st?.job?.message) agnosProgStatus.textContent = st.job.message;
+      if (typeof pct === "number") {
+        const rounded = Math.min(100, Math.max(0, Math.round(pct)));
+        if (agnosProgBar) agnosProgBar.style.width = `${rounded}%`;
+        if (agnosProgLabel) agnosProgLabel.textContent = `${rounded}%`;
+      }
+    };
+    const refreshAgnosUi = (st) => {
+      if (!st?.ok) return;
+      setAgnosProgress(st);
+      if (st.job?.message && agnosVal && !(st.install_running || st.job?.status === "running")) {
+        const pct = st.job.progress ? ` (${st.job.progress}%)` : "";
+        agnosVal.textContent = `${st.job.message}${pct}`;
+      } else if (agnosVal && !st.install_running && st.job?.status !== "running") {
+        agnosVal.textContent = agnosDesc;
+      }
+      if (agnosBtn) {
+        agnosBtn.disabled = st.install_running;
+        agnosBtn.textContent = t(st.ready_to_reboot ? "REBOOT" : "INSTALL");
+      }
+    };
+    refreshAgnosUi(agnos);
+    agnosBtn?.addEventListener("click", async () => {
+      if (agnosBtn) agnosBtn.disabled = true;
+      await runAgnosUpdateFlow({ readyToReboot: !!agnos.ready_to_reboot });
+      if (agnosBtn) agnosBtn.disabled = false;
+    });
+    if (agnos.install_running || agnos.job?.status === "running") {
+      const poll = setInterval(async () => {
+        const st = await apiGet("/api/opui/agnos").catch(() => null);
+        refreshAgnosUi(st);
+        if (!st?.install_running && st?.job?.status !== "running") clearInterval(poll);
+      }, 2000);
+      runAgnosUpdateFlow({ readyToReboot: false });
+    }
+    container.appendChild(agnosBlock);
+  }
+
   const download = document.createElement("div");
   download.className = "opui-sp-row opui-sp-row--has-action";
   download.innerHTML = `
@@ -3523,9 +3607,10 @@ async function renderSoftwarePanel(container, data) {
     <div class="opui-sp-row-value" id="software-install-value"></div>
     <button type="button" class="opui-btn opui-btn--action" id="software-install-btn">${escapeHtml(t("INSTALL"))}</button>`;
   install.querySelector("#software-install-btn")?.addEventListener("click", async () => {
-    const res = await apiPost("/api/opui/action/updater_install");
-    if (res.ok) toast(t("Install Update"));
-    else toast(res.error || t("Failed"));
+    const btn = install.querySelector("#software-install-btn");
+    if (btn) btn.disabled = true;
+    await runSoftwareInstallFlow();
+    if (btn) btn.disabled = false;
   });
   container.appendChild(install);
 

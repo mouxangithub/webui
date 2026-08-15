@@ -3346,6 +3346,144 @@ body.opui-modal-open {
   border: 1px solid #da6f25;
 }
 
+.opui-system-wait {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+}
+.opui-system-wait[hidden] {
+  display: none !important;
+}
+body.opui-system-wait-open {
+  overflow: hidden;
+}
+.opui-system-wait-card {
+  width: min(920px, 92vw);
+  padding: 56px 64px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(36, 38, 46, 0.98), rgba(22, 24, 30, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+.opui-system-wait-spinner {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 36px;
+  border: 5px solid rgba(255, 255, 255, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  animation: opui-spin 0.9s linear infinite;
+}
+.opui-system-wait-title {
+  margin: 0 0 20px;
+  font-size: 52px;
+  font-weight: 600;
+  color: #fff;
+}
+.opui-system-wait-message {
+  margin: 0 0 16px;
+  font-size: 36px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.9);
+}
+.opui-system-wait-hint {
+  margin: 0;
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.opui-system-wait-hint[hidden] {
+  display: none !important;
+}
+.opui-system-wait-progress {
+  margin: 28px 0 8px;
+}
+.opui-system-wait-progress[hidden] {
+  display: none !important;
+}
+.opui-system-wait-progress-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.opui-system-wait-progress-label {
+  font-size: 32px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  font-variant-numeric: tabular-nums;
+}
+.opui-system-wait-progress-track {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.opui-system-wait-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4da3ff, #7ec8ff);
+  transition: width 0.35s ease;
+}
+#system-wait-dismiss {
+  margin-top: 36px;
+  min-width: 220px;
+}
+
+.opui-agnos-block {
+  border-bottom: 1px solid #3a3a3a;
+}
+.opui-agnos-block .opui-sp-row {
+  border-bottom: none;
+}
+.opui-agnos-progress-wrap {
+  margin: 0 28px 24px;
+  padding: 0 8px;
+}
+.opui-agnos-progress-wrap[hidden] {
+  display: none !important;
+}
+.opui-agnos-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.opui-agnos-progress-status {
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opui-agnos-progress-label {
+  font-size: 28px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.opui-agnos-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.opui-agnos-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #4da3ff, #7ec8ff);
+  transition: width 0.35s ease;
+}
+
 .opui-modal-card--webui-update {
   width: min(960px, calc(100% - 120px));
   max-height: calc(100% - 140px);

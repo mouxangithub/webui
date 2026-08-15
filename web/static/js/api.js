@@ -3,7 +3,7 @@
 import { opuiWs } from "./ws.js";
 
 const ASSET_RE = /^\/api\/opui\/assets\//;
-const HTTP_FIRST_RE = /^\/api\/opui\/(panels|dev|i18n|device|bootstrap)/;
+const HTTP_FIRST_RE = /^\/api\/opui\/(panels|dev|i18n|device|bootstrap|agnos)/;
 const HTTP_TIMEOUT_MS = 8000;
 const WEBRTC_TIMEOUT_MS = 45000;
 
@@ -15,6 +15,7 @@ function useHttp(path) {
   if (isWebrtcPath(path)) return true;
   if (ASSET_RE.test(path)) return true;
   if (/^\/api\/opui\/bootstrap/.test(path)) return true;
+  if (/^\/api\/opui\/agnos/.test(path)) return true;
   if (window.__OPUI_DEV_PC && HTTP_FIRST_RE.test(path)) return true;
   return false;
 }

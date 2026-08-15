@@ -18,6 +18,7 @@ const PRESET_I18N = {
   confidence_low: "Confidence · low",
   confidence_high: "Confidence · high",
   onroad_overlay: "On road · overlay",
+  software_agnos: "Software · AGNOS",
 };
 
 function syncDevPanelI18n() {
@@ -36,6 +37,7 @@ function syncDevPanelI18n() {
     "dev-label-experimental": "Experimental",
     "dev-label-recording": "Recording microphone",
     "dev-label-speed": "Speed",
+    "dev-label-agnos": "AGNOS update pending",
   };
   for (const [id, key] of Object.entries(map)) {
     const el = document.getElementById(id);
@@ -116,6 +118,7 @@ export async function initDevPanel() {
   const engaged = document.getElementById("dev-engaged");
   const experimental = document.getElementById("dev-experimental");
   const recording = document.getElementById("dev-recording");
+  const agnosPending = document.getElementById("dev-agnos-pending");
   const speed = document.getElementById("dev-speed");
   const speedVal = document.getElementById("dev-speed-val");
   let speedTimer = null;
@@ -127,6 +130,7 @@ export async function initDevPanel() {
     if (engaged) engaged.checked = !!s.engaged;
     if (experimental) experimental.checked = !!s.experimental_mode;
     if (recording) recording.checked = !!s.recording_audio;
+    if (agnosPending) agnosPending.checked = !!s.agnos_update_required;
     if (speed) speed.value = String(s.speed_kmh ?? 72);
     if (speedVal) speedVal.textContent = String(s.speed_kmh ?? 72);
   }
@@ -171,6 +175,7 @@ export async function initDevPanel() {
       if (r.ok) {
         syncFormFromSim(r.simulation);
         if (r.state) dispatchDevState(r.state);
+        window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
       }
     });
   });
@@ -194,6 +199,14 @@ export async function initDevPanel() {
   });
   recording?.addEventListener("change", () => {
     pushPatch({ recording_audio: recording.checked });
+  });
+  agnosPending?.addEventListener("change", () => {
+    pushPatch({
+      agnos_update_required: agnosPending.checked,
+      agnos_ready_to_reboot: false,
+    }).then(() => {
+      window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
+    });
   });
   speed?.addEventListener("input", () => {
     const val = parseInt(speed.value, 10);

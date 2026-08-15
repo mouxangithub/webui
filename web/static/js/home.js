@@ -2,6 +2,7 @@
 
 import { tr, trn } from "./i18n.js";
 import { apiGet, apiPost } from "./api.js";
+import { runSoftwareInstallFlow } from "./system_wait_overlay.js";
 
 function assetUrl(rel) {
   return `/api/opui/assets/${rel.replace(/^\//, "")}`;
@@ -162,7 +163,7 @@ function renderHomeView(home) {
     actions.appendChild(close);
     if (home.update_available) {
       actions.appendChild(actionBtn(tr("Reboot and Update"), async () => {
-        await apiPost("/api/opui/action/updater_install");
+        await runSoftwareInstallFlow();
       }, "primary"));
     } else {
       actions.appendChild(actionBtn(tr("CHECK"), async () => {

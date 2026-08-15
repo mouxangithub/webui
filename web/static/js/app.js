@@ -2,7 +2,7 @@ import { apiGet, apiPost } from "./api.js";
 import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
-} from "./panels.js?v=96";
+} from "./panels.js?v=99";
 import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi } from "./onroad.js";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
@@ -13,6 +13,7 @@ import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOv
 import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
 import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
+import { initSystemWaitOverlay } from "./system_wait_overlay.js";
 import { opuiWs } from "./ws.js";
 import { clientToOpui } from "./opui_coords.js";
 
@@ -821,6 +822,7 @@ setupWebSocket();
 bootstrap().then(() => {
   initDevPanel();
   initWebUiUpdate();
+  initSystemWaitOverlay();
   refreshWebUiUpdateI18n();
   initOnboarding();
   setupPortraitTouchScroll();
