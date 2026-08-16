@@ -28,8 +28,16 @@ def ensure_runtime() -> bool:
   root = str(_openpilot_root())
   if root not in sys.path:
     sys.path.insert(0, root)
+  venv_site = "/usr/local/venv/lib/python3.12/site-packages"
+  if os.path.isdir(venv_site) and venv_site not in sys.path:
+    sys.path.append(venv_site)
+  pydeps = os.path.join(root, ".pydeps")
+  if os.path.isdir(pydeps) and pydeps not in sys.path:
+    sys.path.append(pydeps)
   try:
-    from openpilot.common.params_pyx import Params  # noqa: F401
+    from openpilot.common.params import Params
+
+    Params()
     return False
   except Exception:
     pass
