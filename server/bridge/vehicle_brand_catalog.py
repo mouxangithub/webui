@@ -1,9 +1,10 @@
-"""Per-brand vehicle settings widgets (mirrors SP BrandSettingsFactory)."""
+"""Per-brand vehicle settings widgets (mirrors SP BrandSettingsFactory BIG UI)."""
 
 from __future__ import annotations
 
 from typing import Any
 
+# Only brands with non-empty native BIG UI layouts (vehicle/brands/*.py items).
 BRAND_WIDGETS: dict[str, list[dict[str, Any]]] = {
   "toyota": [
     {"type": "bool", "param": "ToyotaEnforceStockLongitudinal", "label": "Enforce Factory Longitudinal Control",
@@ -27,30 +28,6 @@ BRAND_WIDGETS: dict[str, list[dict[str, Any]]] = {
     {"type": "bool", "param": "SubaruStopAndGoManualParkingBrake", "label": "Stop and Go Manual Parking Brake",
      "visible_if": {"param": "SubaruStopAndGo", "eq": "1"}, "needs_cycle": True},
   ],
-  "honda": [
-    {"type": "bool", "param": "HondaEnableBsmPolling", "label": "Enable BSM Polling"},
-  ],
-  "ford": [
-    {"type": "bool", "param": "FordLaneChangeCanfd", "label": "Lane Change CAN-FD"},
-  ],
-  "gm": [
-    {"type": "bool", "param": "GmStopAndGo", "label": "GM Stop and Go"},
-  ],
-  "chrysler": [
-    {"type": "bool", "param": "ChryslerStopAndGo", "label": "Chrysler Stop and Go"},
-  ],
-  "nissan": [
-    {"type": "bool", "param": "NissanStopAndGo", "label": "Nissan Stop and Go"},
-  ],
-  "mazda": [
-    {"type": "bool", "param": "MazdaStopAndGo", "label": "Mazda Stop and Go"},
-  ],
-  "volkswagen": [
-    {"type": "bool", "param": "VolkswagenStockLong", "label": "VW Stock Longitudinal"},
-  ],
-  "rivian": [],
-  "psa": [],
-  "body": [],
 }
 
 

@@ -11,6 +11,7 @@ import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption, showQrPair,
   createSpToggle, createProgressRow, createDualButton, bindRowExpand,
 } from "./components.js";
+import { reopenOnboarding } from "./onboarding.js";
 
 function t(s) {
   return tr(s);
@@ -1695,6 +1696,15 @@ function renderOptionRow(w, panelData) {
 }
 
 async function showTrainingGuide() {
+  const full = await showConfirm({
+    message: t("Open the full step-by-step training guide? This satisfies the training requirement when completed."),
+    confirmText: t("Open"),
+    cancelText: t("Quick review"),
+  });
+  if (full) {
+    await reopenOnboarding("training");
+    return;
+  }
   const pages = [
     `<h2>${t("Training Guide")}</h2><p>${t("Review the rules, features, and limitations of sunnypilot")}</p>`,
     `<h3>${t("Driver Monitoring")}</h3><p>${t("Keep your hands on the wheel and eyes on the road at all times.")}</p>`,
@@ -3335,6 +3345,15 @@ async function renderSunnylinkPanel(container, data) {
   container.appendChild(backupSlot);
 
   const dualDisabled = childDisabled || !offroad;
+  let backupBtnEl = null;
+  let restoreBtnEl = null;
+  let backupBusy = false;
+  let restoreBusy = false;
+  let notifiedBackupDone = false;
+  let notifiedRestoreDone = false;
+  let notifiedRestoreFail = false;
+  let slPollTimer = null;
+
   const dual = createDualButton(
     { label: t("Backup Settings"), disabled: dualDisabled },
     { label: t("Restore Settings"), primary: true, disabled: dualDisabled },
@@ -3345,8 +3364,13 @@ async function renderSunnylinkPanel(container, data) {
         cancelText: t("Cancel"),
       }))) return;
       const res = await apiPost("/api/opui/action/sunnylink_backup");
-      if (res.ok) toast(t("Backup started"));
-      else toast(res.error || t("Failed"));
+      if (res.ok) {
+        backupBusy = true;
+        restoreBusy = false;
+        notifiedBackupDone = false;
+        toast(t("Backup started"));
+        startSunnylinkPoll();
+      } else toast(res.error || t("Failed"));
     },
     async () => {
       if (!(await showConfirm({
@@ -3355,14 +3379,40 @@ async function renderSunnylinkPanel(container, data) {
         cancelText: t("Cancel"),
       }))) return;
       const res = await apiPost("/api/opui/action/sunnylink_restore");
-      if (res.ok) toast(t("Restore started"));
-      else toast(res.error || t("Failed"));
+      if (res.ok) {
+        restoreBusy = true;
+        backupBusy = false;
+        notifiedRestoreDone = false;
+        notifiedRestoreFail = false;
+        toast(t("Restore started"));
+        startSunnylinkPoll();
+      } else toast(res.error || t("Failed"));
     },
   );
+  [backupBtnEl, restoreBtnEl] = dual.querySelectorAll("button");
   dual.dataset.slDual = "1";
   container.appendChild(dual);
 
-  const applySunnylinkStatus = (status) => {
+  const stopSunnylinkPoll = () => {
+    if (slPollTimer) {
+      clearInterval(slPollTimer);
+      slPollTimer = null;
+    }
+  };
+
+  const startSunnylinkPoll = () => {
+    if (slPollTimer) return;
+    slPollTimer = setInterval(async () => {
+      if (panelRenderStale(gen)) {
+        stopSunnylinkPoll();
+        return;
+      }
+      const st = await apiGet("/api/opui/sunnylink/status").catch(() => null);
+      if (st?.ok) applySunnylinkStatus(st);
+    }, 1500);
+  };
+
+  const applySunnylinkStatus = async (status) => {
     if (!status?.ok) return;
     const dongleId = status.dongle_id || values.SunnylinkDongleId || t("N/A");
     const dongleEl = enabledRow.querySelector(".opui-sunnylink-dongle");
@@ -3379,16 +3429,94 @@ async function renderSunnylinkPanel(container, data) {
     const pairBtn = pairRow.querySelector("button");
     if (pairBtn) pairBtn.textContent = status.is_paired ? t("Paired") : t("Not Paired");
 
+    const bm = status.backup || {};
+    const phase = bm.phase || bm.status || "idle";
+    const progress = Math.round(bm.progress || 0);
+    const canUse = slEnabled && offroad && !globalState.started;
+
     backupSlot.innerHTML = "";
-    if (status.backup?.status && status.backup.status !== "idle") {
-      backupSlot.appendChild(createProgressRow(`${t("Backup")} ${status.backup.status}`, status.backup.progress || 0));
+    if (phase === "backing_up" || phase === "restoring") {
+      const label = phase === "restoring"
+        ? `${t("Restoring")} ${progress}%`
+        : `${t("Backing up")} ${progress}%`;
+      backupSlot.appendChild(createProgressRow(label, progress));
       appendSpSeparator(backupSlot);
+    }
+
+    if (backupBtnEl) {
+      if (phase === "backing_up") {
+        backupBtnEl.disabled = true;
+        backupBtnEl.textContent = `${t("Backing up")} ${progress}%`;
+      } else if (phase === "backup_failed") {
+        backupBtnEl.disabled = !canUse;
+        backupBtnEl.textContent = t("Backup Failed");
+        backupBusy = false;
+      } else {
+        backupBtnEl.disabled = !canUse || phase === "restoring";
+        backupBtnEl.textContent = t("Backup Settings");
+        if (phase !== "backing_up") backupBusy = false;
+      }
+    }
+
+    if (restoreBtnEl) {
+      if (phase === "restoring") {
+        restoreBtnEl.disabled = true;
+        restoreBtnEl.textContent = `${t("Restoring")} ${progress}%`;
+      } else if (phase === "restore_failed") {
+        restoreBtnEl.disabled = !canUse;
+        restoreBtnEl.textContent = t("Restore Failed");
+        restoreBusy = false;
+        if (!notifiedRestoreFail) {
+          notifiedRestoreFail = true;
+          await showConfirm({
+            message: t("Unable to restore the settings, try again later."),
+            confirmText: t("OK"),
+            single: true,
+          });
+        }
+      } else {
+        restoreBtnEl.disabled = !canUse || phase === "backing_up";
+        restoreBtnEl.textContent = t("Restore Settings");
+        if (phase !== "restoring") restoreBusy = false;
+      }
+    }
+
+    if (phase === "backup_done" && backupBusy && !notifiedBackupDone) {
+      notifiedBackupDone = true;
+      backupBusy = false;
+      await showConfirm({
+        message: t("Settings backup completed."),
+        confirmText: t("OK"),
+        single: true,
+      });
+    }
+
+    if (phase === "restore_done" && restoreBusy && !notifiedRestoreDone) {
+      notifiedRestoreDone = true;
+      restoreBusy = false;
+      const ok = await showConfirm({
+        message: t("Settings restored. Confirm to restart the interface."),
+        confirmText: t("OK"),
+        single: true,
+      });
+      if (ok) window.location.reload();
+    }
+
+    if (!backupBusy && !restoreBusy && phase === "idle") {
+      stopSunnylinkPoll();
+    } else if (phase === "backing_up" || phase === "restoring") {
+      startSunnylinkPoll();
     }
   };
 
   Object.assign(sl, await slStatusPromise);
   if (panelRenderStale(gen)) return;
-  applySunnylinkStatus(sl);
+  await applySunnylinkStatus(sl);
+  if (sl.backup?.phase === "backing_up" || sl.backup?.phase === "restoring") {
+    backupBusy = sl.backup.phase === "backing_up";
+    restoreBusy = sl.backup.phase === "restoring";
+    startSunnylinkPoll();
+  }
 }
 
 async function renderFirehosePanel(container) {
