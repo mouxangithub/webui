@@ -127,10 +127,9 @@ def _dev_agnos_snapshot() -> dict[str, Any]:
   job = _read_state()
   current = str(sim.get("agnos_current_version") or "11.9.9")
   target = _dev_target_version()
-  update_required = bool(sim.get("agnos_update_required", False))
+  version_mismatch = bool(sim.get("agnos_update_required", False))
   ready_to_reboot = bool(sim.get("agnos_ready_to_reboot")) or job.get("status") == "done"
-  if not update_required:
-    ready_to_reboot = False
+  update_required = version_mismatch or ready_to_reboot
   log_tail = ""
   try:
     lp = _log_path()
@@ -147,6 +146,7 @@ def _dev_agnos_snapshot() -> dict[str, Any]:
     "target_version": target,
     "update_required": update_required,
     "ready_to_reboot": ready_to_reboot,
+    "version_mismatch": version_mismatch,
     "manifest": "dev-simulation",
     "verify_error": "",
     "job": job,
@@ -156,26 +156,67 @@ def _dev_agnos_snapshot() -> dict[str, Any]:
   }
 
 
-def agnos_snapshot() -> dict[str, Any]:
+def _agnos_pending_status() -> dict[str, Any]:
+  """Shared AGNOS update detection for /api/opui/agnos and home screen."""
   if _is_dev_pc():
-    return _dev_agnos_snapshot()
+    snap = _dev_agnos_snapshot()
+    return {
+      "available": bool(snap.get("available")),
+      "update_required": bool(snap.get("update_required")),
+      "ready_to_reboot": bool(snap.get("ready_to_reboot")),
+      "current_version": snap.get("current_version", ""),
+      "target_version": snap.get("target_version", ""),
+      "verify_error": snap.get("verify_error", ""),
+      "version_mismatch": bool(snap.get("version_mismatch", snap.get("update_required"))),
+    }
+
   if not os.path.isfile("/AGNOS"):
-    return {"ok": True, "available": False}
+    return {
+      "available": False,
+      "update_required": False,
+      "ready_to_reboot": False,
+      "current_version": "",
+      "target_version": "",
+      "verify_error": "",
+      "version_mismatch": False,
+    }
 
   current = _read_version("/VERSION")
   target = _target_agnos_version()
-  update_required = bool(target) and current != target
   manifest = resolve_agnos_manifest()
   ready_to_reboot = False
   verify_error = ""
 
-  if update_required and os.path.isfile(manifest):
+  if os.path.isfile(manifest):
     try:
       from openpilot.common.hardware.comma.agnos import get_target_slot_number, verify_agnos_update
       ready_to_reboot = verify_agnos_update(manifest, get_target_slot_number())
     except Exception as exc:
       verify_error = str(exc)
 
+  version_mismatch = bool(target) and current != target
+  # Show UI when the OS version lags, or when the inactive slot is flashed and needs reboot.
+  update_required = version_mismatch or ready_to_reboot
+
+  return {
+    "available": True,
+    "update_required": update_required,
+    "ready_to_reboot": ready_to_reboot,
+    "current_version": current,
+    "target_version": target,
+    "verify_error": verify_error,
+    "version_mismatch": version_mismatch,
+  }
+
+
+def agnos_snapshot() -> dict[str, Any]:
+  if _is_dev_pc():
+    return _dev_agnos_snapshot()
+  pending = _agnos_pending_status()
+  if not pending["available"]:
+    return {"ok": True, "available": False}
+
+  manifest = resolve_agnos_manifest()
   job = _read_state()
   log_tail = ""
   try:
@@ -188,12 +229,13 @@ def agnos_snapshot() -> dict[str, Any]:
   return {
     "ok": True,
     "available": True,
-    "current_version": current,
-    "target_version": target,
-    "update_required": update_required,
-    "ready_to_reboot": ready_to_reboot,
+    "current_version": pending["current_version"],
+    "target_version": pending["target_version"],
+    "update_required": pending["update_required"],
+    "ready_to_reboot": pending["ready_to_reboot"],
+    "version_mismatch": pending["version_mismatch"],
     "manifest": manifest,
-    "verify_error": verify_error,
+    "verify_error": pending["verify_error"],
     "job": job,
     "log_tail": log_tail,
     "install_running": job.get("status") == "running",
@@ -432,4 +474,24 @@ def agnos_reboot() -> dict[str, Any]:
     return {"ok": True}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
+
+
+def agnos_home_fields() -> dict[str, Any]:
+  """Lightweight AGNOS fields for the offroad home screen."""
+  pending = _agnos_pending_status()
+  if not pending.get("available"):
+    return {
+      "agnos_available": False,
+      "agnos_update_required": False,
+      "agnos_ready_to_reboot": False,
+      "agnos_current_version": "",
+      "agnos_target_version": "",
+    }
+  return {
+    "agnos_available": True,
+    "agnos_update_required": pending["update_required"],
+    "agnos_ready_to_reboot": pending["ready_to_reboot"],
+    "agnos_current_version": pending["current_version"],
+    "agnos_target_version": pending["target_version"],
+  }
 

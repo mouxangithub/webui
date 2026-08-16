@@ -2,7 +2,7 @@
 
 import { tr, trn } from "./i18n.js";
 import { apiGet, apiPost } from "./api.js";
-import { runSoftwareInstallFlow } from "./system_wait_overlay.js";
+import { runSoftwareInstallFlow, runAgnosUpdateFlow } from "./system_wait_overlay.js";
 
 function assetUrl(rel) {
   return `/api/opui/assets/${rel.replace(/^\//, "")}`;
@@ -91,7 +91,8 @@ function renderStartupBlockers(home) {
 
   const blockers = home.startup_blockers || [];
   const mgrErr = home.manager_error;
-  if (!blockers.length && !mgrErr) {
+  const agnosPending = !!home.agnos_update_required;
+  if (!blockers.length && !mgrErr && !agnosPending) {
     el.hidden = true;
     el.innerHTML = "";
     return;
@@ -99,6 +100,18 @@ function renderStartupBlockers(home) {
 
   el.hidden = false;
   let html = "";
+  if (agnosPending) {
+    const fromVer = home.agnos_current_version || "?";
+    const toVer = home.agnos_target_version || "?";
+    const actionLabel = home.agnos_ready_to_reboot ? tr("REBOOT") : tr("INSTALL");
+    html += `
+      <div class="opui-setup-card opui-setup-card--warn" id="home-agnos-card">
+        <h3 class="opui-setup-title">${escapeHtml(tr("AGNOS Update"))}</h3>
+        <p class="opui-setup-desc">${escapeHtml(tr("Operating system update required (~1GB download)."))}</p>
+        <p class="opui-setup-desc">${escapeHtml(`${fromVer} → ${toVer}`)}</p>
+        <button type="button" class="opui-btn opui-btn--primary opui-setup-btn" id="home-agnos-action">${escapeHtml(actionLabel)}</button>
+      </div>`;
+  }
   if (mgrErr) {
     html += `
       <div class="opui-setup-card opui-setup-card--danger">
@@ -116,6 +129,13 @@ function renderStartupBlockers(home) {
       </div>`;
   }
   el.innerHTML = html;
+  document.getElementById("home-agnos-action")?.addEventListener("click", async () => {
+    const btn = document.getElementById("home-agnos-action");
+    if (btn) btn.disabled = true;
+    await runAgnosUpdateFlow({ readyToReboot: !!home.agnos_ready_to_reboot });
+    if (btn) btn.disabled = false;
+    await refreshHomeScreen();
+  });
 }
 
 function renderHomePills(home) {

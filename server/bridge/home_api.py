@@ -109,6 +109,8 @@ def snapshot_home_core(*, started: bool | None = None) -> dict[str, Any]:
     headless = is_headless_mode()
     slow = ensure_home_slow_cache(headless=headless)
 
+    from webui.server.bridge.agnos_api import agnos_home_fields
+
     return {
       "ok": True,
       "paired": prime_info["paired"],
@@ -128,6 +130,7 @@ def snapshot_home_core(*, started: bool | None = None) -> dict[str, Any]:
       "ignition": bool(gate.get("ignition")),
       "can_start": bool(gate.get("can_start", True)),
       "manager_error": slow.get("manager_error") if headless else None,
+      **agnos_home_fields(),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -147,6 +150,7 @@ def snapshot_home() -> dict[str, Any]:
 
 def _mock_home() -> dict[str, Any]:
   from webui.dev.mock_runtime import SIM
+  from webui.server.bridge.agnos_api import agnos_home_fields
 
   paired = bool(SIM.get("paired", False))
   alerts = SIM.get("offroad_alerts") or []
@@ -167,6 +171,7 @@ def _mock_home() -> dict[str, Any]:
     "dongle_id": "dev-preview-0000",
     "headless": bool(SIM.get("headless")),
     "startup_blockers": _mock_startup_blockers(SIM),
+    **agnos_home_fields(),
   }
 
 
