@@ -59,6 +59,20 @@ export async function fetchOnboardingStatus() {
   };
 }
 
+export async function reopenOnboarding(phase) {
+  const dlg = document.getElementById("onboarding-dialog");
+  if (!dlg) return false;
+
+  syncOnboardingI18n();
+  const status = await fetchOnboardingStatus();
+  const step = phase || status.phase || "terms";
+  if (step === "done" && status.completed) return false;
+
+  showOnboardingStep(step === "done" ? (status.phase || "terms") : step);
+  if (!dlg.open) dlg.showModal();
+  return true;
+}
+
 export async function initOnboarding() {
   if (bound) return;
   bound = true;
@@ -69,11 +83,7 @@ export async function initOnboarding() {
   const status = await fetchOnboardingStatus();
   if (status.completed) return;
 
-  syncOnboardingI18n();
-  let phase = status.phase || "terms";
-  if (phase === "done") return;
-  showOnboardingStep(phase);
-  if (!dlg.open) dlg.showModal();
+  await reopenOnboarding(status.phase || "terms");
 }
 
 function showOnboardingStep(phase) {

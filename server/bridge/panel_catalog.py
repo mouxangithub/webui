@@ -17,7 +17,7 @@ PANELS: list[dict[str, Any]] = [
       {"type": "readonly", "param": "HardwareSerial", "label": "Serial"},
       {"type": "separator"},
       {"type": "action", "action": "pair_device", "label": "Pair Device", "button": "PAIR",
-       "desc": "Pair your device with Sunnylink and claim your Prime offer.",
+       "desc": "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer.",
        "hide_when_paired": True},
       {"type": "separator"},
       {"type": "action", "action": "reset_calibration", "label": "Reset Calibration", "button": "RESET",

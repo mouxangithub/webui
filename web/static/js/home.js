@@ -3,6 +3,7 @@
 import { tr, trn } from "./i18n.js";
 import { apiGet, apiPost } from "./api.js";
 import { runSoftwareInstallFlow, runAgnosUpdateFlow } from "./system_wait_overlay.js";
+import { reopenOnboarding } from "./onboarding.js";
 
 function assetUrl(rel) {
   return `/api/opui/assets/${rel.replace(/^\//, "")}`;
@@ -120,15 +121,25 @@ function renderStartupBlockers(home) {
       </div>`;
   }
   if (blockers.length) {
+    const onboardingIds = new Set(["accepted_terms", "accepted_terms_sp", "completed_training"]);
+    const needsOnboarding = blockers.some((b) => onboardingIds.has(b.id));
     html += `
       <div class="opui-setup-card opui-setup-card--warn">
         <h3 class="opui-setup-title">${escapeHtml(tr("Cannot start driving"))}</h3>
         <ul class="opui-blocker-list">
           ${blockers.map((b) => `<li>${escapeHtml(tr(b.message) || b.message)}</li>`).join("")}
         </ul>
+        ${needsOnboarding ? `<button type="button" class="opui-btn opui-btn--primary opui-setup-btn" id="home-onboarding-action">${escapeHtml(tr("Continue setup"))}</button>` : ""}
       </div>`;
   }
   el.innerHTML = html;
+  document.getElementById("home-onboarding-action")?.addEventListener("click", async () => {
+    const blockers = home.startup_blockers || [];
+    const phase = blockers.some((b) => b.id === "completed_training") && !blockers.some((b) => b.id === "accepted_terms" || b.id === "accepted_terms_sp")
+      ? "training"
+      : undefined;
+    await reopenOnboarding(phase);
+  });
   document.getElementById("home-agnos-action")?.addEventListener("click", async () => {
     const btn = document.getElementById("home-agnos-action");
     if (btn) btn.disabled = true;
