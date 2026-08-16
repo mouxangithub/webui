@@ -236,6 +236,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   personality = str(ss.personality).split(".")[-1].lower() if hasattr(ss, "personality") else ""
 
   experimental_confirmed = False
+  screensaver_enabled = False
+  screensaver_timeout_sec = 300
   recording_audio = car_ctx.recording_audio
   developer_ui = int(car_ctx.developer_ui or 0)
   torque_bar = car_ctx.torque_bar
@@ -247,6 +249,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     from openpilot.common.params import Params
     p = Params()
     experimental_confirmed = p.get_bool("ExperimentalModeConfirmed")
+    screensaver_enabled = p.get_bool("ScreenSaverEnabled")
+    screensaver_timeout_sec = int(p.get("ScreenSaverTimeout", return_default=True) or 300)
     speed_limit_mode = int(p.get("SpeedLimitMode", return_default=True) or 0)
   except Exception:
     pass
@@ -423,6 +427,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "car_control_enabled": car_control_enabled,
     "experimental_mode": experimental,
     "experimental_mode_confirmed": experimental_confirmed,
+    "screensaver_enabled": screensaver_enabled,
+    "screensaver_timeout_sec": screensaver_timeout_sec,
     "engageable": bool(getattr(ss, "engageable", False) or engaged),
     "personality": personality,
     "personality_index": _personality_index(personality),

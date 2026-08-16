@@ -7,6 +7,18 @@ import { showConfirm } from "./components.js";
 const TRAINING_STEPS = 18;
 
 let bound = false;
+let sunnylinkWarnStep = false;
+
+const SUNNYLINK_STEP0_DESC = (
+  "sunnylink enables secured remote access to your comma device from anywhere, "
+  + "including settings management, remote monitoring, real-time dashboard, etc."
+);
+
+const SUNNYLINK_STEP1_DESC = (
+  "sunnylink is designed to be enabled as part of sunnypilot's core functionality. "
+  + "If sunnylink is disabled, features such as settings management, remote monitoring, "
+  + "real-time dashboards will be unavailable."
+);
 
 function syncOnboardingI18n() {
   const welcome = document.getElementById("onboarding-welcome-title");
@@ -14,6 +26,7 @@ function syncOnboardingI18n() {
   const declineText = document.getElementById("onboarding-decline-text");
   const sunnyTitle = document.getElementById("onboarding-sunnylink-title");
   const sunnyDesc = document.getElementById("onboarding-sunnylink-desc");
+  const sunnyWarn = document.getElementById("onboarding-sunnylink-warn-desc");
   if (welcome) welcome.textContent = tr("Welcome to sunnypilot");
   if (termsDesc) {
     termsDesc.textContent = tr(
@@ -24,16 +37,15 @@ function syncOnboardingI18n() {
     declineText.textContent = tr("You must accept the Terms of Service in order to use sunnypilot.");
   }
   if (sunnyTitle) sunnyTitle.textContent = tr("sunnylink");
-  if (sunnyDesc) {
-    sunnyDesc.textContent = tr(
-      "sunnylink enables secured remote access to your comma device. You may accept to enable sunnylink or decline to continue without it.",
-    );
-  }
+  if (sunnyDesc) sunnyDesc.textContent = tr(SUNNYLINK_STEP0_DESC);
+  if (sunnyWarn) sunnyWarn.textContent = tr(SUNNYLINK_STEP1_DESC);
   const map = [
     ["onboarding-decline-btn", "Decline"],
     ["onboarding-accept", "Agree"],
-    ["onboarding-sunnylink-decline", "Decline"],
-    ["onboarding-sunnylink-accept", "Agree"],
+    ["onboarding-sunnylink-decline", "Disable"],
+    ["onboarding-sunnylink-accept", "Enable"],
+    ["onboarding-sunnylink-back", "Back"],
+    ["onboarding-sunnylink-disable-confirm", "Disable"],
     ["onboarding-training-skip", "Skip"],
     ["onboarding-training-next", "Next"],
     ["onboarding-decline-back", "Back"],
@@ -43,6 +55,14 @@ function syncOnboardingI18n() {
     const el = document.getElementById(id);
     if (el) el.textContent = tr(key);
   }
+}
+
+function showSunnylinkOnboardingStep(step) {
+  sunnylinkWarnStep = step === 1;
+  const step0 = document.getElementById("onboarding-sunnylink-step0");
+  const step1 = document.getElementById("onboarding-sunnylink-step1");
+  if (step0) step0.hidden = sunnylinkWarnStep;
+  if (step1) step1.hidden = !sunnylinkWarnStep;
 }
 
 export async function fetchOnboardingStatus() {
@@ -98,6 +118,9 @@ function showOnboardingStep(phase) {
   training.hidden = phase !== "training";
   decline.hidden = phase !== "decline";
 
+  if (phase === "sunnylink") {
+    showSunnylinkOnboardingStep(0);
+  }
   if (phase === "training") {
     bindTrainingNav();
   }
@@ -167,7 +190,15 @@ export function bindOnboardingDialog() {
     await afterOnboardingStep(res);
   });
 
-  document.getElementById("onboarding-sunnylink-decline")?.addEventListener("click", async () => {
+  document.getElementById("onboarding-sunnylink-decline")?.addEventListener("click", () => {
+    showSunnylinkOnboardingStep(1);
+  });
+
+  document.getElementById("onboarding-sunnylink-back")?.addEventListener("click", () => {
+    showSunnylinkOnboardingStep(0);
+  });
+
+  document.getElementById("onboarding-sunnylink-disable-confirm")?.addEventListener("click", async () => {
     const res = await apiPut("/api/opui/onboarding/sunnylink", { accept: false });
     await afterOnboardingStep(res);
   });

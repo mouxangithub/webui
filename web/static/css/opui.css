@@ -3639,3 +3639,25 @@ body.opui-system-wait-open {
   padding: 0 24px;
   font-size: 30px;
 }
+
+.opui-screensaver {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: #000;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.opui-screensaver__logo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: "Audiowide", "Inter", sans-serif;
+  font-size: clamp(48px, 8vw, 160px);
+  font-weight: 700;
+  color: hsl(150 100% 50%);
+  text-shadow: 0 0 24px rgba(0, 255, 128, 0.35);
+  user-select: none;
+  pointer-events: none;
+}

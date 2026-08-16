@@ -26,6 +26,8 @@ STATE_HUB_SERVICES: tuple[str, ...] = (
   "selfdriveState",
   "longitudinalPlan",
   "gpsLocationExternal",
+  "testJoystick",
+  "rawAudioData",
   "carOutput",
   "carControl",
   "vehicleParameters",

@@ -167,6 +167,8 @@ def remove_param(key: str) -> dict[str, Any]:
   try:
     p = _params()
     p.remove(key)
+    from webui.server.bridge.param_constraints import enforce_param_constraints
+    enforce_param_constraints(p)
     return {"ok": True, "key": key}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
@@ -203,6 +205,9 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
 
     if key in OVERLAY_PARAM_KEYS:
       invalidate_overlay_params_cache()
+
+    from webui.server.bridge.param_constraints import enforce_param_constraints
+    enforce_param_constraints(p)
 
     return {"ok": True, "key": key, "value": _read_param_value(p, key, ptype)}
   except Exception as exc:

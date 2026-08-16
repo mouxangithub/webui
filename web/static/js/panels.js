@@ -305,6 +305,10 @@ async function applyParamSideEffects(key, value) {
     await off("NeuralNetworkLateralControl", "0");
   } else if (key === "NeuralNetworkLateralControl" && value === "1") {
     await off("EnforceTorqueControl", "0");
+  } else if (key === "LateralJerkTorqueController" && value === "1") {
+    await off("NeuralNetworkLateralControl", "0");
+  } else if (key === "NeuralNetworkLateralControl" && value === "1") {
+    await off("LateralJerkTorqueController", "0");
   }
   requestPanelRefresh();
 }
@@ -349,8 +353,6 @@ function updateToggleCapabilities(st) {
   const expInput = expRow?.querySelector("input[type=checkbox]");
   const expDesc = expRow?.querySelector(".opui-sp-row-desc");
   const longRow = document.querySelector('[data-param="LongitudinalPersonality"]');
-  const accelEn = document.querySelector('[data-param="AccelPersonalityEnabled"]');
-  const accelProf = document.querySelector('[data-param="AccelPersonality"]');
 
   if (expInput) {
     const disable = !hasLong;
@@ -382,12 +384,6 @@ function updateToggleCapabilities(st) {
     }
   }
   longRow?.querySelectorAll("button").forEach((b) => { b.disabled = !hasLong; });
-  accelEn?.querySelector("input")?.toggleAttribute("disabled", !hasLong);
-
-  const accelOn = panelDataRef?.values?.AccelPersonalityEnabled === "1";
-  accelProf?.querySelectorAll("button").forEach((b) => {
-    b.disabled = !hasLong || !accelOn;
-  });
 }
 
 function setPanelRowDesc(row, text) {

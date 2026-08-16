@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/opui.css?v=100" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=101" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -283,10 +283,19 @@
       </div>
       <div id="onboarding-sunnylink" hidden>
         <h2 class="opui-onboarding-title" id="onboarding-sunnylink-title">sunnylink</h2>
-        <p class="opui-onboarding-desc" id="onboarding-sunnylink-desc"></p>
-        <div class="opui-dialog-actions">
-          <button type="button" id="onboarding-sunnylink-decline" class="opui-btn">Decline</button>
-          <button type="button" id="onboarding-sunnylink-accept" class="opui-btn opui-btn--primary">Agree</button>
+        <div id="onboarding-sunnylink-step0">
+          <p class="opui-onboarding-desc" id="onboarding-sunnylink-desc"></p>
+          <div class="opui-dialog-actions">
+            <button type="button" id="onboarding-sunnylink-decline" class="opui-btn">Disable</button>
+            <button type="button" id="onboarding-sunnylink-accept" class="opui-btn opui-btn--primary">Enable</button>
+          </div>
+        </div>
+        <div id="onboarding-sunnylink-step1" hidden>
+          <p class="opui-onboarding-desc" id="onboarding-sunnylink-warn-desc"></p>
+          <div class="opui-dialog-actions">
+            <button type="button" id="onboarding-sunnylink-back" class="opui-btn">Back</button>
+            <button type="button" id="onboarding-sunnylink-disable-confirm" class="opui-btn opui-btn--danger">Disable</button>
+          </div>
         </div>
       </div>
       <div id="onboarding-training" hidden>
@@ -343,6 +352,6 @@
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=99"></script>
+  <script type="module" src="/static/js/app.js?v=101"></script>
 </body>
 </html>

@@ -14,6 +14,7 @@ import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.j
 import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
 import { initSystemWaitOverlay } from "./system_wait_overlay.js";
+import { initScreenSaver, updateScreenSaverState } from "./screensaver.js";
 import { opuiWs } from "./ws.js";
 import { clientToOpui } from "./opui_coords.js";
 
@@ -594,6 +595,7 @@ function handleState(st) {
   updateSidebarMetrics(st);
   updateSidebarMode(!!st.started);
   updateSidebarRecording(st);
+  updateScreenSaverState(st);
 
   if (!st.ok) return;
 
@@ -823,6 +825,7 @@ bootstrap().then(() => {
   initDevPanel();
   initWebUiUpdate();
   initSystemWaitOverlay();
+  initScreenSaver();
   refreshWebUiUpdateI18n();
   initOnboarding();
   setupPortraitTouchScroll();

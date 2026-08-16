@@ -21,10 +21,11 @@ def webrtc_schema() -> dict[str, Any]:
 def webrtc_offer(sdp: str, init_camera: str = "road") -> dict[str, Any]:
   camera = _normalize_camera(init_camera)
   try:
-    from openpilot.system.webrtc.helpers import StreamRequestBody, post_stream_request
+    from openpilot.system.webrtc.helpers import StreamRequestBody, post_stream_request, wait_for_webrtcd
+    wait_for_webrtcd()
     body = StreamRequestBody(
       sdp=sdp,
-      init_camera=camera,
+      cameras=[camera],
       enabled=True,
       bridge_services_in=[],
       bridge_services_out=[],
