@@ -377,6 +377,8 @@ html.opui-portrait-host .opui-modal-scroll {
 }
 
 .opui-screen--home {
+  --home-header-h: 96px;
+  --home-header-gap: 44px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -387,13 +389,13 @@ html.opui-portrait-host .opui-modal-scroll {
 }
 
 .opui-home-header {
-  height: 80px;
+  height: var(--home-header-h);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 24px;
-  margin-bottom: 25px;
+  margin-bottom: var(--home-header-gap);
 }
 
 .opui-home-pills {
@@ -434,7 +436,7 @@ html.opui-portrait-host .opui-modal-scroll {
   position: absolute;
   left: 40px;
   right: 40px;
-  top: 105px;
+  top: calc(var(--home-header-h) + var(--home-header-gap));
   bottom: 40px;
   z-index: 12;
 }
@@ -502,11 +504,12 @@ html.opui-portrait-host .opui-modal-scroll {
 
 .opui-home-version {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: flex-end;
   gap: 16px;
-  padding: 12px 24px 0;
+  padding: 0 8px;
   text-align: right;
+  min-height: 60px;
 }
 .opui-home-brand {
   font-family: Audiowide, Inter, sans-serif;
