@@ -29,9 +29,42 @@ _OVERLAY_SERVICES = (
   "modelV2",
   "liveCalibration",
   "roadCameraState",
+  "wideRoadCameraState",
   "longitudinalPlan",
   "carParams",
 )
+
+_MINIMAL_SERVICES = (
+  "deviceState",
+  "selfdriveState",
+  "carState",
+  "controlsState",
+  "pandaStates",
+  "managerState",
+)
+
+
+def _filter_known_services(services: list[str]) -> list[str]:
+  """Drop cereal services missing from this fork's SERVICE_LIST (SubMaster KeyError)."""
+  try:
+    from openpilot.cereal.services import SERVICE_LIST
+    known = SERVICE_LIST
+  except Exception:
+    return services
+  return [s for s in services if s in known]
+
+
+def _make_submaster(services: list[str]):
+  import openpilot.cereal.messaging as messaging
+
+  filtered = _filter_known_services(services)
+  if "deviceState" not in filtered:
+    filtered = ["deviceState", *filtered]
+  try:
+    return messaging.SubMaster(filtered, poll="deviceState")
+  except Exception:
+    minimal = _filter_known_services(list(_MINIMAL_SERVICES))
+    return messaging.SubMaster(minimal, poll="deviceState")
 
 
 def start_state_hub() -> None:
@@ -176,7 +209,7 @@ def _extend_services(services: list[str]) -> list[str]:
   for svc in _OVERLAY_SERVICES:
     if svc not in out:
       out.append(svc)
-  return out
+  return _filter_known_services(out)
 
 
 def refresh_dev_state() -> None:
@@ -209,7 +242,6 @@ def _cold_state_snapshot() -> dict[str, Any]:
     from webui.dev.mock_runtime import snapshot_dev_ui_state
     return snapshot_dev_ui_state()
   try:
-    import openpilot.cereal.messaging as messaging
     services = _extend_services([
       "deviceState", "selfdriveState", "carState", "controlsState",
       "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
@@ -220,7 +252,7 @@ def _cold_state_snapshot() -> dict[str, Any]:
       services.append("selfdriveStateSP")
     except Exception:
       pass
-    sm = messaging.SubMaster(services, poll="deviceState")
+    sm = _make_submaster(services)
     sm.update(300)
     started = bool(sm.valid.get("deviceState") and sm["deviceState"].started)
     refresh_car_context(sm, started)
@@ -263,8 +295,6 @@ def _dev_loop() -> None:
 
 
 def _device_loop() -> None:
-  import openpilot.cereal.messaging as messaging
-
   try:
     from webui.server.bridge.headless_util import is_headless_mode
     headless = is_headless_mode()
@@ -283,7 +313,17 @@ def _device_loop() -> None:
   except Exception:
     pass
 
-  sm = messaging.SubMaster(services, poll="deviceState")
+  try:
+    sm = _make_submaster(services)
+  except Exception as exc:
+    _set_state({
+      "ok": False,
+      "error": str(exc),
+      "started": False,
+      "engaged": False,
+      "ui_status": "disengaged",
+    })
+    return
   _publish_shared_sm(sm)
   home_ticks = 0
   home_slow_ticks = 0
