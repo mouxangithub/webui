@@ -36,14 +36,16 @@ def resolve_onroad_alert(sm: Any, ss: Any, started: bool) -> dict[str, str] | No
     return None
 
   try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
+    from webui.server.bridge.car_context import get_car_context
     from openpilot.common.hardware import TICI
-  except Exception:
-    ui_state = None
-    TICI = False
 
-  started_frame = int(getattr(ui_state, "started_frame", 0) or 0) if ui_state else 0
-  started_time = float(getattr(ui_state, "started_time", 0) or 0) if ui_state else 0.0
+    car_ctx = get_car_context()
+    started_frame = int(car_ctx.started_frame or 0)
+    started_time = float(car_ctx.started_time or 0.0)
+  except Exception:
+    started_frame = 0
+    started_time = 0.0
+    TICI = False
 
   updated = True
   try:
@@ -53,7 +55,7 @@ def resolve_onroad_alert(sm: Any, ss: Any, started: bool) -> dict[str, str] | No
 
   recv_frame = int(sm.recv_frame.get("selfdriveState", 0) if hasattr(sm, "recv_frame") else 0)
 
-  if not updated and ui_state is not None:
+  if not updated and started_time > 0:
     time_since_onroad = time.monotonic() - started_time if started_time > 0 else 0.0
     waiting_for_startup = recv_frame < started_frame
     if waiting_for_startup and time_since_onroad > 5:

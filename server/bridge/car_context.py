@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -12,6 +13,7 @@ class WebuiCarContext:
   CP: Any = None
   CP_SP: Any = None
   started_frame: int = 0
+  started_time: float = 0.0
   started: bool = False
   recording_audio: bool = False
   developer_ui: Any = 0
@@ -19,6 +21,12 @@ class WebuiCarContext:
   turn_signals: bool = False
   blindspot: bool = False
   rocket_fuel_enabled: bool = False
+  rainbow_path: bool = False
+  enforce_torque_control: bool = False
+  custom_torque_params: bool = False
+  torque_override_enabled: bool = False
+  torque_override_friction: float = 0.0
+  torque_override_lat_accel_factor: float = 0.0
   has_longitudinal_control: bool = False
   has_icbm: bool = False
   is_sp_release: bool = False
@@ -78,10 +86,12 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
   if started and not _prev_started:
     try:
       ctx.started_frame = int(sm.recv_frame.get("deviceState", 0) or 0)
+      ctx.started_time = time.monotonic()
     except Exception:
       pass
   if not started:
     ctx.started_frame = 0
+    ctx.started_time = 0.0
 
   _prev_started = started
 
@@ -162,6 +172,12 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
     ctx.turn_signals = p.get_bool("ShowTurnSignals")
     ctx.blindspot = p.get_bool("BlindSpot")
     ctx.rocket_fuel_enabled = p.get_bool("RocketFuel")
+    ctx.rainbow_path = p.get_bool("RainbowMode")
+    ctx.enforce_torque_control = p.get_bool("EnforceTorqueControl")
+    ctx.custom_torque_params = p.get_bool("CustomTorqueParams")
+    ctx.torque_override_enabled = p.get_bool("TorqueParamsOverrideEnabled")
+    ctx.torque_override_friction = float(p.get("TorqueParamsOverrideFriction", return_default=True) or 0.0)
+    ctx.torque_override_lat_accel_factor = float(p.get("TorqueParamsOverrideLatAccelFactor", return_default=True) or 0.0)
     ctx.lateral_jerk_torque = p.get_bool("LateralJerkTorqueController")
     ctx.disable_updates = p.get_bool("DisableUpdates")
     ctx.is_release_branch = p.get_bool("IsReleaseSpBranch")

@@ -8,6 +8,7 @@ import threading
 import time
 from typing import Any
 
+from webui.server.bridge.cereal_services import STATE_HUB_SERVICES, filter_known_services, make_submaster
 from webui.server.bridge.home_api import refresh_home_slow_cache, snapshot_home, snapshot_home_core
 from webui.server.bridge.state_api import build_state_from_sm
 from webui.server.bridge.car_context import refresh_car_context
@@ -24,47 +25,6 @@ _cached_state_json: dict[int, str] = {}
 _cached_home_json: dict[int, str] = {}
 _running = False
 _thread: threading.Thread | None = None
-
-_OVERLAY_SERVICES = (
-  "modelV2",
-  "liveCalibration",
-  "roadCameraState",
-  "wideRoadCameraState",
-  "longitudinalPlan",
-  "carParams",
-)
-
-_MINIMAL_SERVICES = (
-  "deviceState",
-  "selfdriveState",
-  "carState",
-  "controlsState",
-  "pandaStates",
-  "managerState",
-)
-
-
-def _filter_known_services(services: list[str]) -> list[str]:
-  """Drop cereal services missing from this fork's SERVICE_LIST (SubMaster KeyError)."""
-  try:
-    from openpilot.cereal.services import SERVICE_LIST
-    known = SERVICE_LIST
-  except Exception:
-    return services
-  return [s for s in services if s in known]
-
-
-def _make_submaster(services: list[str]):
-  import openpilot.cereal.messaging as messaging
-
-  filtered = _filter_known_services(services)
-  if "deviceState" not in filtered:
-    filtered = ["deviceState", *filtered]
-  try:
-    return messaging.SubMaster(filtered, poll="deviceState")
-  except Exception:
-    minimal = _filter_known_services(list(_MINIMAL_SERVICES))
-    return messaging.SubMaster(minimal, poll="deviceState")
 
 
 def start_state_hub() -> None:
@@ -204,14 +164,6 @@ def _update_shared_sm(sm: Any) -> None:
     _shared_sm = sm
 
 
-def _extend_services(services: list[str]) -> list[str]:
-  out = list(services)
-  for svc in _OVERLAY_SERVICES:
-    if svc not in out:
-      out.append(svc)
-  return _filter_known_services(out)
-
-
 def refresh_dev_state() -> None:
   """PC dev only — push mock state immediately after simulation changes."""
   if os.environ.get("WEBUI_DEV_PC") != "1":
@@ -237,22 +189,11 @@ def _set_home(home: dict[str, Any]) -> None:
 
 
 def _cold_state_snapshot() -> dict[str, Any]:
-  import os
   if os.environ.get("WEBUI_DEV_PC") == "1":
     from webui.dev.mock_runtime import snapshot_dev_ui_state
     return snapshot_dev_ui_state()
   try:
-    services = _extend_services([
-      "deviceState", "selfdriveState", "carState", "controlsState",
-      "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-      "longitudinalPlanSP", "radarState", "liveParameters", "liveTorqueParameters",
-      "gpsLocationExternal", "gpsLocation", "carControl", "carOutput",
-    ])
-    try:
-      services.append("selfdriveStateSP")
-    except Exception:
-      pass
-    sm = _make_submaster(services)
+    sm = make_submaster(list(STATE_HUB_SERVICES))
     sm.update(300)
     started = bool(sm.valid.get("deviceState") and sm["deviceState"].started)
     refresh_car_context(sm, started)
@@ -302,19 +243,9 @@ def _device_loop() -> None:
     headless = False
   home_interval = 50 if headless else 25
 
-  services = _extend_services([
-    "deviceState", "selfdriveState", "carState", "controlsState", "carControl",
-    "pandaStates", "managerState", "driverMonitoringState", "driverStateV2",
-    "longitudinalPlanSP", "liveMapDataSP", "radarState", "liveParameters",
-    "liveTorqueParameters", "gpsLocationExternal", "gpsLocation", "carOutput",
-  ])
+  services = filter_known_services(list(STATE_HUB_SERVICES))
   try:
-    services.append("selfdriveStateSP")
-  except Exception:
-    pass
-
-  try:
-    sm = _make_submaster(services)
+    sm = make_submaster(services)
   except Exception as exc:
     _set_state({
       "ok": False,

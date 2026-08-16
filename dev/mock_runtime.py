@@ -116,6 +116,8 @@ def _seed_params() -> dict[str, bytes | str]:
     "OnroadUploads": b"1",
     "OffroadMode": b"0",
     "HasAcceptedTerms": b"2",
+    "HasAcceptedTermsSP": b"1.0",
+    "CompletedSunnylinkConsentVersion": b"1.0",
     "CompletedTrainingVersion": b"0.2.0",
     "AutoLaneChangeTimer": b"0",
     "AutoLaneChangeBsmDelay": b"0",

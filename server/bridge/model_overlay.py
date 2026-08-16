@@ -13,17 +13,10 @@ _projector: Any = None
 _overlay_sm = None
 _cache_lock = threading.Lock()
 
-_OVERLAY_SERVICES = [
-  "modelV2",
-  "liveCalibration",
-  "radarState",
-  "deviceState",
-  "roadCameraState",
-  "selfdriveState",
-  "longitudinalPlan",
-  "carParams",
-  "carState",
-]
+from webui.server.bridge.cereal_services import OVERLAY_SERVICES, make_submaster
+from webui.server.bridge.model_projection import ModelProjector
+
+_OVERLAY_SERVICES = list(OVERLAY_SERVICES)
 
 OVERLAY_PARAM_KEYS = frozenset({
   "ChevronInfo",
@@ -299,7 +292,6 @@ def _finalize_overlay(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _get_projector(width: int, height: int):
   global _projector
-  from openpilot.selfdrive.ui.onroad.model_projection import ModelProjector
 
   if _projector is None:
     _projector = ModelProjector(width, height)
@@ -311,8 +303,7 @@ def _get_projector(width: int, height: int):
 def _get_overlay_sm():
   global _overlay_sm
   if _overlay_sm is None:
-    import openpilot.cereal.messaging as messaging
-    _overlay_sm = messaging.SubMaster(_OVERLAY_SERVICES, poll="modelV2")
+    _overlay_sm = make_submaster(_OVERLAY_SERVICES, poll="modelV2")
   return _overlay_sm
 
 
@@ -325,8 +316,8 @@ def _resolve_sm():
 
 def _geom_input_key(sm, width: int, height: int) -> tuple[Any, ...]:
   mono = int(sm["modelV2"].logMonoTime) if sm.valid.get("modelV2") else 0
-  calib_frame = int(sm.recv_frame.get("liveCalibration", 0) or 0)
-  road_frame = int(sm.recv_frame.get("roadCameraState", 0) or 0)
+  calib_frame = int(sm.recv_frame.get("extrinsicsCalibration", 0) or 0)
+  road_frame = int(sm.recv_frame.get("narrowRoadCameraState", 0) or 0)
   return (mono, width, height, _overlay_params.cache_key(), calib_frame, road_frame)
 
 

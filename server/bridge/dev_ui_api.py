@@ -84,9 +84,11 @@ def _bearing_value(gps_data) -> str:
 
 
 def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
+  from webui.server.bridge.car_context import get_car_context
+
+  car_ctx = get_car_context()
   try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
-    mode = int(ui_state.developer_ui or 0)
+    mode = int(car_ctx.developer_ui or 0)
   except Exception:
     return None
 
@@ -94,7 +96,7 @@ def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
     return None
 
   try:
-    if sm.recv_frame["carState"] < getattr(ui_state, "started_frame", 0):
+    if sm.recv_frame["carState"] < int(car_ctx.started_frame or 0):
       return None
   except Exception:
     pass
@@ -115,7 +117,7 @@ def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
   lat_active = bool(cc.latActive)
   steer_override = bool(cs.steeringPressed)
   angle_steers = float(cs.steeringAngleDeg)
-  roll = float(sm["liveParameters"].roll) if sm.valid.get("liveParameters") else 0.0
+  roll = float(sm["vehicleParameters"].roll) if sm.valid.get("vehicleParameters") else 0.0
   curvature = float(ctrl.curvature)
   actual_la = (curvature * v_ego ** 2) - (roll * 9.81)
 
@@ -195,26 +197,22 @@ def snapshot_dev_ui(sm: Any, is_metric: bool) -> dict[str, Any] | None:
   ]
 
   if lat_which == "torqueState":
-    override_active = False
-    try:
-      override_active = (
-        ui_state.enforce_torque_control
-        and ui_state.custom_torque_params
-        and ui_state.torque_override_enabled
-      )
-    except Exception:
-      pass
-    if sm.valid.get("liveTorqueParameters") or override_active:
+    override_active = (
+      car_ctx.enforce_torque_control
+      and car_ctx.custom_torque_params
+      and car_ctx.torque_override_enabled
+    )
+    if sm.valid.get("lateralTorqueParameters") or override_active:
       if override_active:
-        fric_val = f"{ui_state.torque_override_friction:.3f}"
-        laf_val = f"{ui_state.torque_override_lat_accel_factor:.3f}"
+        fric_val = f"{car_ctx.torque_override_friction:.3f}"
+        laf_val = f"{car_ctx.torque_override_lat_accel_factor:.3f}"
         fric_color = "#ffffff"
         laf_color = "#ffffff"
       else:
-        ltp = sm["liveTorqueParameters"]
+        ltp = sm["lateralTorqueParameters"]
         fric_val = f"{ltp.frictionCoefficientFiltered:.3f}"
         laf_val = f"{ltp.latAccelFactorFiltered:.3f}"
-        live_valid = bool(getattr(ltp, "liveValid", False))
+        live_valid = bool(getattr(ltp, "valid", getattr(ltp, "liveValid", False)))
         fric_color = "#00ff00" if live_valid else "#ffffff"
         laf_color = fric_color
       bottom.extend([

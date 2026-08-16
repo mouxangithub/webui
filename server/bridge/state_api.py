@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-UI_STATUS = ("disengaged", "engaged", "override", "lat_only", "long_only")
+from webui.server.bridge.ui_status import derive_engaged, derive_ui_status
 
 NETWORK_TYPES = {
   0: "--",
@@ -105,22 +105,8 @@ def _network_strength(ds) -> int:
   return max(0, min(5, raw + 1)) if raw > 0 else 0
 
 
-def _derive_ui_status(ss, cs, mads_enabled: bool) -> str:
-  if getattr(ss, "state", None) is not None:
-    state_name = str(ss.state).lower()
-    if "override" in state_name:
-      return "override"
-  if not ss.active:
-    return "disengaged"
-  if mads_enabled:
-    lat_active = bool(getattr(cs, "latActive", True))
-    cruise = getattr(cs, "cruiseState", None)
-    long_active = bool(getattr(cruise, "enabled", True)) if cruise is not None else True
-    if lat_active and not long_active:
-      return "lat_only"
-    if long_active and not lat_active:
-      return "long_only"
-  return "engaged"
+def _derive_ui_status(sm) -> str:
+  return derive_ui_status(sm)
 
 
 KM_TO_MILE = 0.621371
@@ -195,7 +181,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       reset_dm_state()
     except Exception:
       pass
-  engaged = bool(ss.active)
+  engaged = derive_engaged(sm, started)
   ui_params = _ui_params()
   is_metric = False
   try:
@@ -237,14 +223,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   except Exception:
     pass
 
-  mads = False
-  try:
-    from openpilot.common.params import Params
-    mads = Params().get_bool("Mads")
-  except Exception:
-    pass
-
-  ui_status = _derive_ui_status(ss, cs, mads)
+  ui_status = _derive_ui_status(sm)
 
   panda_unknown, panda_online = _panda_state(sm)
 
@@ -294,8 +273,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   standstill = bool(getattr(cs, "standstill", False))
   standstill_timer_enabled = ui_params["standstill_timer"]
   try:
-    if sm.valid.get("liveDelay"):
-      live_lateral_delay = float(getattr(sm["liveDelay"], "lateralDelay", 0) or 0)
+    if sm.valid.get("lateralDelay"):
+      live_lateral_delay = float(getattr(sm["lateralDelay"], "lateralDelay", 0) or 0)
   except Exception:
     pass
 
@@ -594,8 +573,8 @@ def _torque_utilization(sm: Any, ctrl: Any, cs: Any) -> float:
       desired_la = float(ctrl.desiredCurvature) * v_ego ** 2
       accel_diff = desired_la - actual_la
       roll = 0.0
-      if sm.valid.get("liveParameters"):
-        roll = float(sm["liveParameters"].roll)
+      if sm.valid.get("vehicleParameters"):
+        roll = float(sm["vehicleParameters"].roll)
       roll_comp = roll * 9.81 * _clamp((v_ego - 5.0) / 10.0, 0.0, 1.0)
       lateral_acceleration = actual_la - roll_comp
       max_la = 3.0

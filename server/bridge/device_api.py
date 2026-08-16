@@ -117,7 +117,7 @@ def device_extras() -> dict[str, Any]:
     from openpilot.common.params import Params
 
     p = Params()
-    sm = messaging.SubMaster(["liveCalibration"], poll="liveCalibration")
+    sm = messaging.SubMaster(["extrinsicsCalibration"], poll="extrinsicsCalibration")
     sm.update(300)
     cal = {
       "valid": False,
@@ -126,8 +126,8 @@ def device_extras() -> dict[str, Any]:
       "roll": 0,
       "desc_html": "<p>Calibration unknown</p>",
     }
-    if sm.valid.get("liveCalibration"):
-      lc = sm["liveCalibration"]
+    if sm.valid.get("extrinsicsCalibration"):
+      lc = sm["extrinsicsCalibration"]
       pitch = round(float(getattr(lc, "rpyCalib", [0, 0, 0])[0]), 3)
       yaw = round(float(getattr(lc, "rpyCalib", [0, 0, 0])[1]), 3)
       roll = round(float(getattr(lc, "rpyCalib", [0, 0, 0])[2]), 3)

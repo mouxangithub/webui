@@ -38,8 +38,10 @@ def webrtc_offer(sdp: str, init_camera: str = "road") -> dict[str, Any]:
 def _normalize_camera(init_camera: str) -> str:
   aliases = {
     "roadCameraState": "road",
+    "narrowRoadCameraState": "road",
     "wideRoadCameraState": "wideRoad",
     "driverCameraState": "driver",
+    "cabinCameraState": "driver",
   }
   cam = aliases.get(init_camera, init_camera)
   if cam not in ("road", "wideRoad", "driver"):
