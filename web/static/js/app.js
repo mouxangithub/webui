@@ -2,7 +2,7 @@ import { apiGet, apiPost } from "./api.js";
 import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
-} from "./panels.js?v=99";
+} from "./panels.js?v=106";
 import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { getOverlayProjectionSize, syncModelOverlayViewport } from "./model_viewport.js";
@@ -41,9 +41,16 @@ let panelIconMap = {};
 let roadStreamPromise = null;
 
 function ensureRoadStream() {
-  if (devPc) return Promise.resolve();
+  if (devPc) {
+    const wrap = document.getElementById("camera-wrap");
+    wrap?.classList.add("is-dev-pc");
+    applyPreviewOffUi(wrap);
+    scheduleOverlaySync();
+    return Promise.resolve();
+  }
   if (!isPreviewStreamEnabled()) {
     applyPreviewOffUi();
+    scheduleOverlaySync();
     return Promise.resolve();
   }
   if (isRoadStreaming()) return Promise.resolve();
@@ -127,13 +134,18 @@ function fitOpuiScale() {
   root.style.setProperty("--opui-scale", String(scale));
 }
 
-/** Portrait phones rotate the canvas 90° — map horizontal swipes to vertical scroll. */
+/** Portrait phones rotate the canvas 90° — map touch drags to vertical scroll (scale-aware). */
+function getOpuiScale() {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--opui-scale")) || 1;
+}
+
 function setupPortraitTouchScroll() {
   if (window.__opuiPortraitScrollBound) return;
   window.__opuiPortraitScrollBound = true;
-  const state = { el: null, startX: 0, startScroll: 0 };
+  const state = { el: null, startX: 0, startY: 0, startScroll: 0, axis: null };
 
   const scrollSelector = ".opui-nav, .opui-panel, .opui-modal-scroll";
+  const TOUCH_SLOP = 6;
 
   document.addEventListener("touchstart", (e) => {
     if (!document.documentElement.classList.contains("opui-portrait-host")) return;
@@ -142,7 +154,9 @@ function setupPortraitTouchScroll() {
     if (el.scrollHeight <= el.clientHeight + 1) return;
     state.el = el;
     state.startX = e.touches[0].clientX;
+    state.startY = e.touches[0].clientY;
     state.startScroll = el.scrollTop;
+    state.axis = null;
   }, { passive: true, capture: true });
 
   document.addEventListener("touchmove", (e) => {
@@ -153,12 +167,26 @@ function setupPortraitTouchScroll() {
     }
     const max = state.el.scrollHeight - state.el.clientHeight;
     if (max <= 0) return;
-    const delta = e.touches[0].clientX - state.startX;
-    state.el.scrollTop = Math.max(0, Math.min(max, state.startScroll + delta));
-  }, { passive: true, capture: true });
 
-  document.addEventListener("touchend", () => { state.el = null; }, { passive: true, capture: true });
-  document.addEventListener("touchcancel", () => { state.el = null; }, { passive: true, capture: true });
+    const dx = e.touches[0].clientX - state.startX;
+    const dy = e.touches[0].clientY - state.startY;
+    if (!state.axis) {
+      if (Math.abs(dx) < TOUCH_SLOP && Math.abs(dy) < TOUCH_SLOP) return;
+      state.axis = Math.abs(dy) >= Math.abs(dx) ? "y" : "x";
+    }
+
+    const scale = getOpuiScale();
+    const delta = (state.axis === "y" ? dy : dx) / scale;
+    state.el.scrollTop = Math.max(0, Math.min(max, state.startScroll + delta));
+    e.preventDefault();
+  }, { passive: false, capture: true });
+
+  const end = () => {
+    state.el = null;
+    state.axis = null;
+  };
+  document.addEventListener("touchend", end, { passive: true, capture: true });
+  document.addEventListener("touchcancel", end, { passive: true, capture: true });
 }
 
 function applySidebarAssets() {
@@ -207,6 +235,7 @@ function isOverlayStreamReady() {
   const wrap = document.getElementById("camera-wrap");
   if (!wrap) return false;
   if (wrap.classList.contains("is-dev-pc")) return true;
+  if (!isPreviewStreamEnabled()) return true;
   return isCameraPlaying() || isRoadStreaming();
 }
 
@@ -218,7 +247,7 @@ function syncModelOverlayWatch() {
     return;
   }
   syncModelOverlayViewport();
-  if (!isOverlayStreamReady() || !isOverlayAllowed()) {
+  if (!isOverlayStreamReady() || !isOverlayAllowed() || !shouldDrawModelOverlay()) {
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
     setModelOverlayEnabled(false);
@@ -321,9 +350,7 @@ function setScreen(name) {
     metricsSidebar.hidden = !onroadSidebarVisible;
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
     notifyPanelWatch(null);
-    if (!devPc) {
-      ensureRoadStream();
-    }
+    ensureRoadStream();
     scheduleOverlaySync();
   } else {
     metricsSidebar.hidden = true;
@@ -336,7 +363,7 @@ function setScreen(name) {
     stopOnroadHudAnimLoop();
   }
 
-  showModelOverlay(name === "onroad" && isPreviewStreamEnabled());
+  showModelOverlay(name === "onroad");
   updateCameraPreviewUi();
 
   if (prevScreen === "onroad" && name !== "onroad" && !lastStarted) {
@@ -762,12 +789,13 @@ window.addEventListener("opui:preview-stream-changed", (ev) => {
   applyPreviewOffUi();
   if (!ev.detail?.enabled) {
     stopRoadStream().catch(() => {});
-    cancelOverlaySync();
-    opuiWs.unwatchModelOverlay();
-    stopModelOverlayPoll();
-    setModelOverlayEnabled(false);
-    if (lastUiState?.ok && app.dataset.screen === "onroad") updateOnroadHud(lastUiState);
-  } else if (app.dataset.screen === "onroad" && !devPc && (lastStarted || cameraPreview)) {
+    if (app.dataset.screen === "onroad") {
+      scheduleOverlaySync();
+      if (lastUiState?.ok) updateOnroadHud(lastUiState);
+    }
+    return;
+  }
+  if (app.dataset.screen === "onroad" && (lastStarted || cameraPreview)) {
     ensureRoadStream();
     scheduleOverlaySync();
   }

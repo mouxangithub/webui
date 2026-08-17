@@ -14,7 +14,7 @@ import {
   prewarmWebrtc,
   isRoadStreaming,
   isCameraPlaying,
-} from "./webrtc_stream.js?v=96";
+} from "./webrtc_stream.js?v=97";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -444,7 +444,7 @@ export function bindDriverCameraDialog() {
   });
 }
 
-export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=96";
+export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=97";
 export {
   applyStreamQuality,
   getQualityPreference,
@@ -456,4 +456,4 @@ export {
   onDocumentVisibilityChange,
   setQualityPreference,
   updateStreamDeviceState,
-} from "./webrtc_stream.js?v=96";
+} from "./webrtc_stream.js?v=97";

@@ -35,7 +35,7 @@ def _default_tree_root() -> dict[str, Any]:
   }
 
 
-def _bundle_entry(bundle: Any) -> tuple[dict[str, Any], str]:
+def _bundle_entry(bundle: Any, favorites: set[str]) -> tuple[dict[str, Any], str]:
   folder = ""
   generation = ""
   for ov in bundle.overrides:
@@ -49,6 +49,7 @@ def _bundle_entry(bundle: Any) -> tuple[dict[str, Any], str]:
     "internal": bundle.internalName,
     "index": bundle.index,
     "generation": generation,
+    "fav": bundle.ref in favorites,
   }, folder
 
 
@@ -70,7 +71,7 @@ def _build_model_tree(mm: Any, favorites: set[str]) -> list[dict[str, Any]]:
   fav_bundles: list[dict[str, Any]] = []
 
   for bundle in mm.availableBundles:
-    entry, folder = _bundle_entry(bundle)
+    entry, folder = _bundle_entry(bundle, favorites)
     folders.setdefault(folder, []).append(entry)
     if bundle.ref in favorites:
       fav_bundles.append(entry)
@@ -132,10 +133,21 @@ def models_status() -> dict[str, Any]:
           if ov.key == "generation":
             active_generation = ov.value
       if mm.selectedBundle:
+        def _part_progress(model: Any) -> float:
+          try:
+            art = getattr(model, "artifact", None)
+            if art is not None:
+              dp = getattr(art, "downloadProgress", None)
+              if dp is not None:
+                return float(getattr(dp, "progress", 0) or 0)
+          except Exception:
+            pass
+          return float(getattr(model, "progress", 0) or 0)
+
         download = {
           "status": str(mm.selectedBundle.status),
           "name": mm.selectedBundle.displayName,
-          "models": [{"type": str(m.type), "progress": getattr(m, "progress", 0)} for m in mm.selectedBundle.models],
+          "models": [{"type": str(m.type), "progress": _part_progress(m)} for m in mm.selectedBundle.models],
         }
 
     return {
@@ -183,6 +195,25 @@ def models_select(ref: str, index: int | None = None) -> dict[str, Any]:
         if new_gen and prev_gen and new_gen != prev_gen:
           needs_reset_cal = True
     return {"ok": True, "ref": ref, "needs_reset_cal": needs_reset_cal}
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def models_toggle_favorite(ref: str) -> dict[str, Any]:
+  ref = (ref or "").strip()
+  if not ref or ref == "Default":
+    return {"ok": False, "error": "invalid model ref"}
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    favs_raw = p.get("ModelManager_Favs") or ""
+    favorites = [f for f in str(favs_raw).split(";") if f]
+    if ref in favorites:
+      favorites = [f for f in favorites if f != ref]
+    else:
+      favorites.append(ref)
+    p.put("ModelManager_Favs", ";".join(favorites), block=True)
+    return {"ok": True, "ref": ref, "favorites": favorites}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
 

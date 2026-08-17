@@ -84,7 +84,7 @@ html.opui-portrait-host #opui-viewport {
 html.opui-portrait-host .opui-nav,
 html.opui-portrait-host .opui-panel,
 html.opui-portrait-host .opui-modal-scroll {
-  touch-action: pan-x;
+  touch-action: none;
 }
 
 .opui-main {
@@ -153,6 +153,8 @@ html.opui-portrait-host .opui-modal-scroll {
   flex-direction: column;
   gap: 0;
   padding: 8px 50px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(255, 255, 255, 0.04);
 }
 
 .opui-nav button {
@@ -846,18 +848,75 @@ html.opui-portrait-host .opui-modal-scroll {
   margin: 10px;
   background: #292929;
   border-radius: 40px;
-  flex: 1;
+  flex: 1 1 auto;
+  align-self: stretch;
   min-height: 0;
-  height: auto;
   max-height: calc(100% - 20px);
-  padding: 25px 50px 120px;
+  padding: 25px 50px 48px;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   box-shadow: none;
   border: none;
   touch-action: pan-y;
-  scroll-padding-bottom: 80px;
+  scroll-padding-bottom: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Prevent flex-shrink from squashing rows — segmented controls would overlap the next row */
+.opui-panel > * {
+  flex-shrink: 0;
+}
+
+.opui-panel-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 24px;
+}
+
+.opui-panel-body > * {
+  flex-shrink: 0;
+}
+
+.opui-panel-body--wifi {
+  padding: 0;
+  margin: -8px -50px 0;
+  gap: 0;
+}
+
+.opui-panel::-webkit-scrollbar,
+.opui-nav::-webkit-scrollbar,
+.opui-modal-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.opui-panel::-webkit-scrollbar-track,
+.opui-nav::-webkit-scrollbar-track,
+.opui-modal-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  margin: 12px 0;
+}
+
+.opui-panel::-webkit-scrollbar-thumb,
+.opui-nav::-webkit-scrollbar-thumb,
+.opui-modal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.opui-panel::-webkit-scrollbar-thumb:hover,
+.opui-nav::-webkit-scrollbar-thumb:hover,
+.opui-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+  background-clip: padding-box;
 }
 
 /* List items — sunnypilot SP list_view (170px rows) */
@@ -1308,7 +1367,7 @@ html.opui-portrait-host .opui-modal-scroll {
   left: var(--border-w);
   right: var(--border-w);
   bottom: calc(var(--border-w) * 2);
-  height: 120px;
+  height: 180px;
   width: auto;
   pointer-events: none;
   z-index: 12;
@@ -1436,9 +1495,6 @@ html.opui-portrait-host .opui-modal-scroll {
 .opui-dm-wrap.opui-dm-wrap--dev-bottom {
   bottom: calc(var(--border-w) * 2 + 126px);
 }
-.opui-dm-wrap.is-dm-active .opui-dm-face { opacity: 0.65; }
-.opui-dm-wrap:not(.is-dm-active) .opui-dm-face { opacity: 0.2; }
-
 .opui-dm-face {
   position: absolute;
   left: 50%;
@@ -1448,6 +1504,7 @@ html.opui-portrait-host .opui-modal-scroll {
   transform: translate(-50%, -50%);
   pointer-events: none;
   opacity: 0.65;
+  object-fit: contain;
 }
 
 .opui-dm-arc {
@@ -1639,7 +1696,7 @@ html.opui-portrait-host .opui-modal-scroll {
 
 .opui-stream-diag-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -1754,8 +1811,9 @@ html.opui-portrait-host .opui-modal-scroll {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  padding: 20px 48px 28px;
+  padding: 12px 48px 28px;
   min-height: 140px;
+  flex-shrink: 0;
 }
 
 .opui-wifi-scan-btn,
@@ -1782,8 +1840,20 @@ html.opui-portrait-host .opui-modal-scroll {
   font-size: 48px;
 }
 
+.opui-wifi-list-card {
+  flex: 1 1 auto;
+  min-height: 360px;
+  margin: 0 48px 32px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .opui-wifi-list {
-  padding: 0 48px 32px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 24px 24px;
 }
 
 .opui-panel > .opui-sp-row:last-child,
@@ -2451,6 +2521,53 @@ html.opui-portrait-host .opui-modal-scroll {
   border-bottom: 1px solid #3a3a3a;
   width: 100%;
   box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* Stacked / segmented rows — must follow base .opui-sp-row (cascade order) */
+.opui-sp-row.opui-sp-row--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  min-height: auto;
+}
+
+.opui-sp-row.opui-sp-row--stacked .opui-sp-row-text {
+  flex: 0 0 auto;
+  width: 100%;
+  text-align: left;
+}
+
+.opui-sp-row.opui-sp-row--segmented {
+  min-height: 260px;
+  padding-bottom: 32px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.opui-sp-row.opui-sp-row--control-below {
+  min-height: 260px;
+  padding-bottom: 32px;
+  align-items: flex-start;
+}
+
+.opui-sp-row.opui-sp-row--control-below .opui-sp-row-text {
+  width: 100%;
+  text-align: left;
+}
+
+.opui-sp-row--segmented .opui-multi-btn-group,
+.opui-sp-row--segmented .opui-choice-group {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.opui-sp-row--segmented .opui-multi-btn-group::-webkit-scrollbar,
+.opui-sp-row--segmented .opui-choice-group::-webkit-scrollbar {
+  display: none;
 }
 
 .opui-sp-row-text { flex: 1; min-width: 0; }
@@ -2712,17 +2829,78 @@ html.opui-portrait-host .opui-modal-scroll {
   background: #ff2424;
 }
 
-.opui-trips-card {
-  margin: 24px 48px;
-  padding: 32px 48px;
-  background: #1e1e1e;
-  border-radius: 24px;
+.opui-trips-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  min-height: 520px;
+  margin: 0 -26px;
+  padding: 8px 0 16px;
+  box-sizing: border-box;
 }
-.opui-trips-title { font-size: 50px; color: #c8c8c8; margin-bottom: 32px; }
-.opui-trips-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; text-align: center; }
-.opui-trips-icon { width: 72px; height: 72px; object-fit: contain; margin: 0 auto 12px; display: block; }
-.opui-trips-num { font-size: 92px; font-weight: 700; line-height: 1; }
-.opui-trips-unit { font-size: 55px; color: #a0a0a0; margin-top: 8px; }
+
+.opui-trips-card {
+  flex: 1 1 0;
+  min-height: 240px;
+  margin: 0;
+  padding: 30px 48px 36px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.opui-trips-title {
+  font-size: 50px;
+  font-weight: 600;
+  color: #c8c8c8;
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+.opui-trips-cols {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  align-items: center;
+  min-height: 0;
+}
+
+.opui-trips-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 0;
+  gap: 8px;
+}
+
+.opui-trips-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+}
+
+.opui-trips-icon--road {
+  width: 100px;
+  height: 100px;
+}
+
+.opui-trips-num {
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.opui-trips-unit {
+  font-size: 55px;
+  color: #a0a0a0;
+  margin-top: 4px;
+}
 
 .opui-sunnylink-header { padding: 20px 48px 12px; }
 
@@ -2872,7 +3050,7 @@ body.opui-modal-open {
   overflow-x: hidden;
   padding-right: 8px;
   scrollbar-width: thin;
-  scrollbar-color: #444 transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(255, 255, 255, 0.04);
 }
 
 .opui-modal-body {
@@ -3663,4 +3841,225 @@ body.opui-system-wait-open {
   text-shadow: 0 0 24px rgba(0, 255, 128, 0.35);
   user-select: none;
   pointer-events: none;
+}
+
+/* Storage panel */
+.opui-storage-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-bottom: 8px;
+}
+
+.opui-storage-summary-title {
+  font-size: 52px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.opui-storage-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.opui-storage-summary-head .opui-storage-summary-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.opui-storage-refresh {
+  flex-shrink: 0;
+  font-size: 36px;
+  padding: 12px 28px;
+}
+
+.opui-storage-volume-label {
+  font-size: 40px;
+  color: #a8a8a8;
+  margin-top: -8px;
+}
+
+.opui-storage-volume-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.opui-storage-volume-title {
+  font-size: 44px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.opui-storage-volume-capacity {
+  font-size: 40px;
+  color: #a8a8a8;
+  flex-shrink: 0;
+}
+
+.opui-storage-summary-sub--volume {
+  margin-top: 0;
+}
+
+.opui-storage-volume-note {
+  font-size: 34px;
+  color: #888;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.opui-storage-volume--external {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 32px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.opui-storage-summary-sub {
+  font-size: 40px;
+  color: #a8a8a8;
+  margin-top: 8px;
+}
+
+.opui-storage-summary-sub--warn { color: #daca25; }
+.opui-storage-summary-sub--danger { color: #e74c3c; }
+
+.opui-storage-bar {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #1a1a1a;
+  gap: 2px;
+}
+
+.opui-storage-bar-seg {
+  min-width: 2px;
+  height: 100%;
+}
+
+.opui-storage-bar-seg--free {
+  background: #3a3a3a;
+}
+
+.opui-storage-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.opui-storage-legend-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto auto;
+  align-items: center;
+  gap: 20px;
+  font-size: 40px;
+  color: #c8c8c8;
+}
+
+.opui-storage-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.opui-storage-dot--free {
+  background: #3a3a3a;
+  border: 2px solid #555;
+}
+
+.opui-storage-legend-pct {
+  color: #888;
+  min-width: 72px;
+  text-align: right;
+}
+
+.opui-storage-legend-size {
+  color: #aaa;
+  min-width: 140px;
+  text-align: right;
+}
+
+.opui-storage-warn {
+  font-size: 38px;
+  color: #daca25;
+  margin: 0;
+}
+
+.opui-storage-warn--danger {
+  color: #e74c3c;
+}
+
+.opui-storage-section-title {
+  font-size: 44px;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.opui-storage-action-row {
+  align-items: flex-start;
+}
+
+.opui-storage-action-row .opui-storage-clear-btn {
+  flex-shrink: 0;
+  min-width: 160px;
+}
+
+.opui-storage-est {
+  color: #5cdb7f !important;
+}
+
+.opui-storage-hint {
+  font-size: 36px;
+  color: #888;
+}
+
+.opui-storage-starred-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -8px 0 8px;
+  padding: 20px 24px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.opui-storage-starred-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 34px;
+  color: #a8a8a8;
+}
+
+.opui-storage-starred-id {
+  color: #ddd;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opui-storage-starred-meta {
+  flex-shrink: 0;
+  color: #888;
+}
+
+.opui-storage-starred-more {
+  font-size: 32px;
+  color: #666;
+  padding-top: 4px;
 }

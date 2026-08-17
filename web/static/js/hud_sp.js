@@ -447,6 +447,27 @@ function setText(id, text) {
 let dmFadeFiltered = 0;
 let dmFadeTs = 0;
 
+function smoothSplinePath(points, closed = false) {
+  if (!points?.length) return "";
+  if (points.length < 3) {
+    return `M ${points[0][0]},${points[0][1]} L ${points[points.length - 1][0]},${points[points.length - 1][1]}`;
+  }
+  const pts = closed ? [...points, points[0], points[1]] : points;
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 2; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
 const slaArrowFade = new AlertFadeAnimator({ durationOn: 0.75, rc: 0.05 });
 const sccVisionFade = new AlertFadeAnimator();
 const sccMapFade = new AlertFadeAnimator();
@@ -482,16 +503,18 @@ function drawDmArc(dm, hideDm, devUi) {
   const faceLine = svg.querySelector(".dm-arc-face");
   const faceImg = wrap.querySelector(".opui-dm-face");
   const outline = dm.face_outline || [];
+  if (faceImg) {
+    faceImg.hidden = false;
+    faceImg.style.opacity = String(faceAlpha);
+  }
   if (faceLine) {
     if (outline.length >= 2) {
-      faceLine.setAttribute("points", outline.map((p) => `${p[0]},${p[1]}`).join(" "));
+      faceLine.setAttribute("d", smoothSplinePath(outline, true));
       faceLine.hidden = false;
       faceLine.setAttribute("stroke-opacity", String(faceAlpha));
-      if (faceImg) faceImg.hidden = true;
     } else {
-      faceLine.setAttribute("points", "");
+      faceLine.setAttribute("d", "");
       faceLine.hidden = true;
-      if (faceImg) faceImg.hidden = false;
     }
   }
 
@@ -499,23 +522,23 @@ function drawDmArc(dm, hideDm, devUi) {
   const vArc = svg.querySelector(".dm-arc-v");
   const engagedColor = dm.engaged ? "#1af242" : "#8b8b8b";
 
-  function applyArcPoly(el, arc) {
+  function applyArcPath(el, arc) {
     if (!el) return;
     const pts = arc?.points;
     if (!pts?.length) {
-      el.setAttribute("points", "");
+      el.setAttribute("d", "");
       el.hidden = true;
       return;
     }
     el.hidden = false;
-    el.setAttribute("points", pts.map((p) => `${p[0]},${p[1]}`).join(" "));
+    el.setAttribute("d", smoothSplinePath(pts, false));
     el.setAttribute("stroke", engagedColor);
     el.setAttribute("stroke-width", String(arc.thickness ?? 6.7));
     el.setAttribute("stroke-opacity", String(arcAlpha));
   }
 
-  applyArcPoly(hArc, dm.h_arc);
-  applyArcPoly(vArc, dm.v_arc);
+  applyArcPath(hArc, dm.h_arc);
+  applyArcPath(vArc, dm.v_arc);
 }
 
 let dmArcBound = false;

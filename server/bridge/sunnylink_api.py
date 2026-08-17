@@ -133,20 +133,7 @@ def sunnylink_status() -> dict[str, Any]:
     return {"ok": False, "error": str(exc)}
 
 
-def _qr_data_url(text: str) -> str:
-  import base64
-  import io
-
-  import qrcode
-
-  qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=8, border=4)
-  qr.add_data(text)
-  qr.make(fit=True)
-  img = qr.make_image(fill_color="black", back_color="white")
-  buf = io.BytesIO()
-  img.save(buf, format="PNG")
-  b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-  return f"data:image/png;base64,{b64}"
+from webui.server.bridge.qr_data_url import qr_data_url as _qr_data_url
 
 
 def sunnylink_pair_url(mode: str = "pair") -> dict[str, Any]:

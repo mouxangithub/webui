@@ -6,8 +6,6 @@ import os
 
 LITE_UNAVAILABLE_PARAMS = frozenset({
   "RecordAudio",
-  "AlwaysOnDM",
-  "DistractionDetectionLevel",
 })
 
 

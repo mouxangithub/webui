@@ -134,6 +134,14 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Weak network — preview switched to smooth mode": "Weak network — preview switched to smooth mode",
     "Device warm — preview switched to smooth mode": "Device warm — preview switched to smooth mode",
     "Livestream diagnostics": "Livestream diagnostics",
+    "Stream stack": "Stream stack",
+    "Storage": "Storage",
+    "GPU": "GPU",
+    "CPU usage": "CPU usage",
+    "Power": "Power",
+    "Active": "Active",
+    "Partial": "Partial",
+    "free": "free",
     "Livestream": "Livestream",
     "webrtcd": "webrtcd",
     "Bitrate": "Bitrate",
@@ -271,6 +279,62 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     ),
     "Driver Camera Preview enabled": "Driver Camera Preview enabled",
     "Driver Camera Preview disabled": "Driver Camera Preview disabled",
+    "Data": "Data",
+    "Routes": "Routes",
+    "Maps": "Maps",
+    "Software": "Software",
+    "Logs": "Logs",
+    "Other": "Other",
+    "Free": "Free",
+    "Refresh": "Refresh",
+    "Internal storage": "Internal storage",
+    "External SSD": "External SSD",
+    "total": "total",
+    "Storage usage": "Storage usage",
+    "Cleanup": "Cleanup",
+    "Clear route recordings": "Clear route recordings",
+    "Deletes non-preserved driving segments. Starred and recent routes are kept.": "Deletes non-preserved driving segments. Starred and recent routes are kept.",
+    "Routes auto-delete when free space is below 10% or 5 GB (oldest first). Upload is not required. Starred routes are kept.": (
+      "Routes auto-delete when free space is below 10% or 5 GB (oldest first). Upload is not required. Starred routes are kept."
+    ),
+    "Includes {size} on external SSD.": "Includes {size} on external SSD.",
+    "Route recordings on external SSD are moved here when internal storage is low.": (
+      "Route recordings on external SSD are moved here when internal storage is low."
+    ),
+    "webui_storage_routes_autodelete_hint": (
+      "Routes auto-delete when free space is below 10% or 5 GB (oldest first). "
+      "Upload is not required. Starred routes are kept."
+    ),
+    "webui_storage_routes_external_includes": "Includes {size} on external SSD.",
+    "webui_storage_external_note": (
+      "Route recordings on external SSD are moved here when internal storage is low."
+    ),
+    "Clear starred routes": "Clear starred routes",
+    "Deletes route recordings you bookmarked while driving. Other routes are not affected.": (
+      "Deletes route recordings you bookmarked while driving. Other routes are not affected."
+    ),
+    "webui_storage_starred_count": "{count} starred routes on device.",
+    "webui_storage_starred_more": "and {count} more…",
+    "webui_storage_starred_confirm": (
+      "This will permanently delete {count} starred routes ({size}). Continue?"
+    ),
+    "Clear map cache": "Clear map cache",
+    "Removes downloaded OSM map data. Maps can be downloaded again from OSM settings.": "Removes downloaded OSM map data. Maps can be downloaded again from OSM settings.",
+    "Clear model cache": "Clear model cache",
+    "Removes downloaded models except the one currently in use.": "Removes downloaded models except the one currently in use.",
+    "Clear logs": "Clear logs",
+    "Removes system logs and crash dumps.": "Removes system logs and crash dumps.",
+    "Clear download cache": "Clear download cache",
+    "Removes temporary download files. Safe to clear.": "Removes temporary download files. Safe to clear.",
+    "About {size} can be freed": "About {size} can be freed",
+    "This will free about {size}. Continue?": "This will free about {size}. Continue?",
+    "Are you sure you want to clear this data?": "Are you sure you want to clear this data?",
+    "Clear": "Clear",
+    "Freed {size}": "Freed {size}",
+    "Cleanup is only available while offroad.": "Cleanup is only available while offroad.",
+    "Storage is running low (less than 10% free).": "Storage is running low (less than 10% free).",
+    "Training data upload settings →": "Training data upload settings →",
+    "Used {used} ({pct}%) · Free {free}": "Used {used} ({pct}%) · Free {free}",
     "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": (
       "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled."
     ),
@@ -408,6 +472,14 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Weak network — preview switched to smooth mode": "网络较弱，已切换为流畅预览",
     "Device warm — preview switched to smooth mode": "设备温度较高，已切换为流畅预览",
     "Livestream diagnostics": "直播诊断",
+    "Stream stack": "直播链路",
+    "Storage": "存储",
+    "GPU": "GPU",
+    "CPU usage": "CPU 占用",
+    "Power": "功耗",
+    "Active": "活跃",
+    "Partial": "部分",
+    "free": "可用",
     "Livestream": "直播",
     "webrtcd": "webrtcd",
     "Bitrate": "码率",
@@ -541,6 +613,59 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     ),
     "Driver Camera Preview enabled": "驾驶员摄像头预览已开启",
     "Driver Camera Preview disabled": "驾驶员摄像头预览已关闭",
+    "Data": "数据",
+    "Routes": "路线",
+    "Maps": "地图",
+    "Software": "软件",
+    "Logs": "日志",
+    "Other": "其他",
+    "Free": "可用",
+    "Refresh": "刷新",
+    "Internal storage": "本机存储",
+    "External SSD": "外接 SSD",
+    "total": "总计",
+    "Storage usage": "存储占用",
+    "Cleanup": "清理",
+    "Clear route recordings": "清理路线录像",
+    "Deletes non-preserved driving segments. Starred and recent routes are kept.": "删除未收藏的旧行程片段，收藏和最近路线会保留。",
+    "Routes auto-delete when free space is below 10% or 5 GB (oldest first). Upload is not required. Starred routes are kept.": (
+      "可用空间低于 10% 或 5 GB 时，系统会自动删除最旧路线（与是否上传无关），收藏路线会保留。"
+    ),
+    "Includes {size} on external SSD.": "其中外置 SSD 约 {size}。",
+    "Route recordings on external SSD are moved here when internal storage is low.": (
+      "内置存储不足时，旧路线会迁移到此盘；外置盘空间不足时也会自动删除最旧路线。"
+    ),
+    "webui_storage_routes_autodelete_hint": (
+      "可用空间低于 10% 或 5 GB 时，系统会自动删除最旧路线（与是否上传无关），收藏路线会保留。"
+    ),
+    "webui_storage_routes_external_includes": "其中外置 SSD 约 {size}。",
+    "webui_storage_external_note": (
+      "内置存储不足时，旧路线会迁移到此盘；外置盘空间不足时也会自动删除最旧路线。"
+    ),
+    "Clear starred routes": "清理收藏路线",
+    "Deletes route recordings you bookmarked while driving. Other routes are not affected.": (
+      "删除行驶中收藏的路线录像，不会影响其他未收藏路线。"
+    ),
+    "webui_storage_starred_count": "设备上共有 {count} 条收藏路线。",
+    "webui_storage_starred_more": "另有 {count} 条…",
+    "webui_storage_starred_confirm": "将永久删除 {count} 条收藏路线（约 {size}），是否继续？",
+    "Clear map cache": "清理地图缓存",
+    "Removes downloaded OSM map data. Maps can be downloaded again from OSM settings.": "删除已下载的 OSM 地图，可在 OSM 设置中重新下载。",
+    "Clear model cache": "清理模型缓存",
+    "Removes downloaded models except the one currently in use.": "删除已下载模型，当前使用中的模型会保留。",
+    "Clear logs": "清理日志",
+    "Removes system logs and crash dumps.": "删除系统日志和崩溃转储。",
+    "Clear download cache": "清理下载缓存",
+    "Removes temporary download files. Safe to clear.": "删除临时下载文件，可安全清理。",
+    "About {size} can be freed": "约可释放 {size}",
+    "This will free about {size}. Continue?": "将释放约 {size}，是否继续？",
+    "Are you sure you want to clear this data?": "确定要清理这些数据吗？",
+    "Clear": "清理",
+    "Freed {size}": "已释放 {size}",
+    "Cleanup is only available while offroad.": "仅在离路时可执行清理。",
+    "Storage is running low (less than 10% free).": "存储空间不足（可用低于 10%）。",
+    "Training data upload settings →": "训练数据上传设置 →",
+    "Used {used} ({pct}%) · Free {free}": "已用 {used}（{pct}%）· 可用 {free}",
     "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": (
       "仅离路时可用。启用 camerad 以在 WebUI 中预览驾驶员摄像头。开启后将阻止上路。"
     ),
@@ -650,6 +775,14 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Weak network — preview switched to smooth mode": "網路較弱，已切換為流暢預覽",
     "Device warm — preview switched to smooth mode": "裝置溫度較高，已切換為流暢預覽",
     "Livestream diagnostics": "直播診斷",
+    "Stream stack": "直播鏈路",
+    "Storage": "儲存",
+    "GPU": "GPU",
+    "CPU usage": "CPU 佔用",
+    "Power": "功耗",
+    "Active": "活躍",
+    "Partial": "部分",
+    "free": "可用",
     "Livestream": "直播",
     "webrtcd": "webrtcd",
     "Bitrate": "碼率",
@@ -742,6 +875,59 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     ),
     "Driver Camera Preview enabled": "駕駛員攝影機預覽已開啟",
     "Driver Camera Preview disabled": "駕駛員攝影機預覽已關閉",
+    "Data": "數據",
+    "Routes": "路線",
+    "Maps": "地圖",
+    "Software": "軟體",
+    "Logs": "日誌",
+    "Other": "其他",
+    "Free": "可用",
+    "Refresh": "重新整理",
+    "Internal storage": "本機儲存",
+    "External SSD": "外接 SSD",
+    "total": "總計",
+    "Storage usage": "儲存佔用",
+    "Cleanup": "清理",
+    "Clear route recordings": "清理路線錄影",
+    "Deletes non-preserved driving segments. Starred and recent routes are kept.": "刪除未收藏的舊行程片段，收藏和最近路線會保留。",
+    "Routes auto-delete when free space is below 10% or 5 GB (oldest first). Upload is not required. Starred routes are kept.": (
+      "可用空間低於 10% 或 5 GB 時，系統會自動刪除最舊路線（與是否上傳無關），收藏路線會保留。"
+    ),
+    "Includes {size} on external SSD.": "其中外接 SSD 約 {size}。",
+    "Route recordings on external SSD are moved here when internal storage is low.": (
+      "內建儲存不足時，舊路線會遷移到此碟；外接碟空間不足時也會自動刪除最舊路線。"
+    ),
+    "webui_storage_routes_autodelete_hint": (
+      "可用空間低於 10% 或 5 GB 時，系統會自動刪除最舊路線（與是否上傳無關），收藏路線會保留。"
+    ),
+    "webui_storage_routes_external_includes": "其中外接 SSD 約 {size}。",
+    "webui_storage_external_note": (
+      "內建儲存不足時，舊路線會遷移到此碟；外接碟空間不足時也會自動刪除最舊路線。"
+    ),
+    "Clear starred routes": "清理收藏路線",
+    "Deletes route recordings you bookmarked while driving. Other routes are not affected.": (
+      "刪除行駛中收藏的路線錄影，不會影響其他未收藏路線。"
+    ),
+    "webui_storage_starred_count": "裝置上共有 {count} 條收藏路線。",
+    "webui_storage_starred_more": "另有 {count} 條…",
+    "webui_storage_starred_confirm": "將永久刪除 {count} 條收藏路線（約 {size}），是否繼續？",
+    "Clear map cache": "清理地圖快取",
+    "Removes downloaded OSM map data. Maps can be downloaded again from OSM settings.": "刪除已下載的 OSM 地圖，可在 OSM 設定中重新下載。",
+    "Clear model cache": "清理模型快取",
+    "Removes downloaded models except the one currently in use.": "刪除已下載模型，目前使用中的模型會保留。",
+    "Clear logs": "清理日誌",
+    "Removes system logs and crash dumps.": "刪除系統日誌和崩潰轉儲。",
+    "Clear download cache": "清理下載快取",
+    "Removes temporary download files. Safe to clear.": "刪除臨時下載檔案，可安全清理。",
+    "About {size} can be freed": "約可釋放 {size}",
+    "This will free about {size}. Continue?": "將釋放約 {size}，是否繼續？",
+    "Are you sure you want to clear this data?": "確定要清理這些資料嗎？",
+    "Clear": "清理",
+    "Freed {size}": "已釋放 {size}",
+    "Cleanup is only available while offroad.": "僅在離路時可執行清理。",
+    "Storage is running low (less than 10% free).": "儲存空間不足（可用低於 10%）。",
+    "Training data upload settings →": "訓練資料上傳設定 →",
+    "Used {used} ({pct}%) · Free {free}": "已用 {used}（{pct}%）· 可用 {free}",
     "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": (
       "僅離路時可用。啟用 camerad 以在 WebUI 中預覽駕駛員攝影機。開啟後將阻止上路。"
     ),
@@ -753,18 +939,19 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
 
 
 def webui_extra_strings(po_code: str, po_strings: dict[str, str] | None = None) -> dict[str, str]:
-  """Return WebUI strings missing from the shared .po catalog (English fallback)."""
+  """Return WebUI strings; manual locale entries always win over .po for these keys."""
   po_strings = po_strings or {}
   en = _WEBUI_STRINGS.get("en", {})
   manual = _WEBUI_STRINGS.get(po_code, {})
   out: dict[str, str] = {}
   for key, en_val in en.items():
-    po_val = (po_strings.get(key) or "").strip()
+    en_text = en_val if isinstance(en_val, str) else str(en_val)
     manual_val = (manual.get(key) or "").strip()
-    if po_val and po_val != en_val:
-      continue
-    if manual_val and manual_val != en_val:
+    po_val = (po_strings.get(key) or "").strip()
+    if manual_val and manual_val != en_text:
       out[key] = manual_val
+    elif po_val and po_val != en_text:
+      continue
     else:
-      out[key] = en_val
+      out[key] = en_text
   return out

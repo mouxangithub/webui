@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from webui.server.bridge.model_overlay import OVERLAY_PARAM_KEYS, invalidate_overlay_params_cache
@@ -163,6 +164,39 @@ def _coerce_write_value(ptype_enum, value: str) -> Any:
   return value
 
 
+def _prebuilt_path() -> str:
+  try:
+    from openpilot.common.hardware import PC
+    from openpilot.common.hardware.hw import Paths
+    import os
+    return os.path.join(Paths.comma_home(), "prebuilt") if PC else "/data/openpilot/prebuilt"
+  except Exception:
+    return "/data/openpilot/prebuilt"
+
+
+def sync_quickboot_param() -> None:
+  """Mirror developer.py — keep QuickBootToggle in sync with prebuilt file."""
+  try:
+    import os
+    from openpilot.common.params import Params
+    p = Params()
+    prebuilt = os.path.exists(_prebuilt_path())
+    if prebuilt != p.get_bool("QuickBootToggle"):
+      p.put_bool("QuickBootToggle", prebuilt, block=True)
+  except Exception:
+    pass
+
+
+def _apply_quickboot_file(enabled: bool) -> None:
+  import os
+  path = _prebuilt_path()
+  if enabled:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    Path(path).touch(exist_ok=True)
+  elif os.path.exists(path):
+    os.remove(path)
+
+
 def remove_param(key: str) -> dict[str, Any]:
   try:
     p = _params()
@@ -196,7 +230,10 @@ def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, A
         raise
 
     if ptype_enum == ParamKeyType.BOOL:
-      p.put_bool(key, _coerce_write_value(ptype_enum, value), block=True)
+      coerced = _coerce_write_value(ptype_enum, value)
+      if key == "QuickBootToggle":
+        _apply_quickboot_file(bool(coerced))
+      p.put_bool(key, coerced, block=True)
     else:
       p.put(key, _coerce_write_value(ptype_enum, value), block=True)
 
@@ -222,6 +259,8 @@ def list_toggle_params() -> dict[str, Any]:
 
 
 def panel_values(panel_id: str) -> dict[str, Any]:
+  if panel_id == "developer":
+    sync_quickboot_param()
   panel = get_panel(panel_id)
   if not panel:
     return {"ok": False, "error": f"unknown panel: {panel_id}"}

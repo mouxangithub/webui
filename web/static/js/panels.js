@@ -5,16 +5,58 @@ import {
   getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, webCodecsCapability, getStreamDecodePath,
 } from "./webrtc_webcodecs.js";
 import { renderWebUiUpdateRow, fetchWebUiUpdate, syncWebUiUpdateRow } from "./webui_update.js";
-import { runAgnosUpdateFlow, runSoftwareInstallFlow, runRebootFlow } from "./system_wait_overlay.js";
+import { runSoftwareInstallFlow, runRebootFlow } from "./system_wait_overlay.js";
 import { opuiWs } from "./ws.js";
 import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption, showQrPair,
-  createSpToggle, createProgressRow, createDualButton, bindRowExpand,
+  createSpToggle, createProgressRow, createDualButton, bindRowExpand, experimentalE2eHtml,
 } from "./components.js";
 import { reopenOnboarding } from "./onboarding.js";
 
 function t(s) {
   return tr(s);
+}
+
+function trFormat(template, ...args) {
+  let i = 0;
+  return tr(template)
+    .replace(/\{:\.(\d+)f\}/g, (_, digits) => Number(args[i++]).toFixed(Number(digits)))
+    .replace(/\{\}/g, () => String(args[i++]));
+}
+
+function buildCalibrationDescHtml(w, cal) {
+  const parts = [escapeHtml(t(w.desc))];
+  if (cal?.has_mount_angles && cal.pitch_deg != null && cal.yaw_deg != null) {
+    const pitch = cal.pitch_deg;
+    const yaw = cal.yaw_deg;
+    parts.push(escapeHtml(trFormat(
+      " Your device is pointed {:.1f}° {} and {:.1f}° {}.",
+      Math.abs(pitch),
+      t(pitch > 0 ? "down" : "up"),
+      Math.abs(yaw),
+      t(yaw > 0 ? "left" : "right"),
+    )));
+  }
+  if (cal?.lag_perc != null) {
+    if (cal.lag_perc < 100) {
+      parts.push(trFormat("<br><br>Steering lag calibration is {}% complete.", cal.lag_perc));
+    } else {
+      parts.push(t("<br><br>Steering lag calibration is complete."));
+    }
+  }
+  if (cal?.torque_applicable) {
+    if (cal.torque_perc < 100) {
+      parts.push(trFormat(" Steering torque response calibration is {}% complete.", cal.torque_perc));
+    } else {
+      parts.push(t(" Steering torque response calibration is complete."));
+    }
+  }
+  parts.push("<br><br>");
+  parts.push(escapeHtml(t(
+    "sunnypilot is continuously calibrating, resetting is rarely required. "
+    + "Resetting calibration will restart sunnypilot if the car is powered on.",
+  )));
+  return parts.join("");
 }
 
 function panelHelpText(w) {
@@ -243,7 +285,45 @@ function formatOptionLabel(w, rawVal, panelData = panelDataRef) {
 let panelDataRef = null;
 let lastPanelVisibilityHash = "";
 
-const PERSONALITY_INDEX = { aggressive: 0, standard: 1, relaxed: 2 };
+const UNREGISTERED_SUNNYLINK_DONGLE_ID = "UnregisteredDevice";
+const SOFTWARE_UPDATER_TIMEOUT_MS = 10000;
+let softwareDownloadWaitUntil = 0;
+let modelsPanelPoll = null;
+
+function stopModelsPanelPoll() {
+  if (modelsPanelPoll) {
+    clearInterval(modelsPanelPoll);
+    modelsPanelPoll = null;
+  }
+}
+
+function laneTurnOptionStep(w) {
+  if (w?.param === "LaneTurnValue" && globalState.is_metric) return Math.round(100 / 1.609344);
+  return w?.step ?? 1;
+}
+
+const SPEED_LIMIT_MODE_DESCS = [
+  "Off: Disables the Speed Limit functions.",
+  "Information: Displays the current road's speed limit.",
+  "Warning: Provides a warning when exceeding the current road's speed limit.",
+  "Assist: Adjusts the vehicle's cruise speed based on the current road's speed limit when operating the +/- buttons.",
+];
+const SPEED_LIMIT_OFFSET_DESCS = [
+  "None: No Offset",
+  "Fixed: Adds a fixed offset [Speed Limit + Offset]",
+  "Percent: Adds a percent offset [Speed Limit + (Offset % Speed Limit)]",
+];
+
+function panelAssetUrl(rel) {
+  return `/api/opui/assets/${String(rel).replace(/^\//, "")}`;
+}
+
+function buildHighlightedDescHtml(descriptions, selectedIdx) {
+  return descriptions.map((key, i) => {
+    const text = escapeHtml(t(key));
+    return i === selectedIdx ? `<b>${text}</b>` : text;
+  }).join("<br>");
+}
 
 let globalState = { started: false, engaged: false, is_offroad: true };
 let homeState = { paired: false };
@@ -321,6 +401,7 @@ const paramHandlers = {
 export function setGlobalState(st) {
   globalState = st || globalState;
   updateEngagedWidgets();
+  syncToggleLocksFromPanel();
   updateToggleCapabilities(st);
   updateCruiseCapabilities(st);
   updateVisualsCapabilities(st);
@@ -349,41 +430,64 @@ export function setHomeState(home) {
 function updateToggleCapabilities(st) {
   if (!st) return;
   const hasLong = st.has_longitudinal_control !== false;
+  const spRelease = !!st.is_release_branch;
   const expRow = document.querySelector('[data-param="ExperimentalMode"]');
   const expInput = expRow?.querySelector("input[type=checkbox]");
-  const expDesc = expRow?.querySelector(".opui-sp-row-desc");
+  const expDesc = expRow?.querySelector(".opui-sp-row-desc--expandable, .opui-sp-row-desc:not(.opui-sp-row-desc--hint):not(.opui-sp-row-desc--experimental)");
   const longRow = document.querySelector('[data-param="LongitudinalPersonality"]');
 
   if (expInput) {
     const disable = !hasLong;
-    expInput.disabled = disable || (globalState.engaged && expRow?.dataset.needsCycle === "1");
-    expRow?.querySelector(".opui-sp-toggle")?.classList.toggle("disabled", disable);
+    const locked = expRow?.dataset.locked === "1";
+    expInput.disabled = disable || locked || (globalState.engaged && expRow?.dataset.needsCycle === "1");
+    expRow?.querySelector(".opui-sp-toggle")?.classList.toggle("disabled", disable || locked);
     if (disable && expInput.checked) {
       expInput.checked = false;
       expRow?.querySelector(".opui-sp-toggle")?.classList.remove("on");
+      removeParam("ExperimentalMode");
     }
+    const e2e = experimentalE2eHtml();
     if (expDesc) {
-      const e2e = t(
-        "sunnypilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode. "
-        + "Experimental features are listed below: End-to-End Longitudinal Control — Let the driving model control the gas and brakes. "
-        + "New Driving Visualization — The driving visualization will transition to the road-facing wide-angle camera at low speeds.",
-      );
       if (!hasLong) {
         let unavailable = t(
           "Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control.",
         );
         if (st.alpha_longitudinal_available) {
-          unavailable += ` ${t("Enable the sunnypilot longitudinal control (alpha) toggle to allow Experimental mode.")}`;
+          if (spRelease) {
+            unavailable += ` ${t("An alpha version of sunnypilot longitudinal control can be tested, along with Experimental mode, on non-release branches.")}`;
+          } else {
+            unavailable += ` ${t("Enable the sunnypilot longitudinal control (alpha) toggle to allow Experimental mode.")}`;
+          }
         } else {
           unavailable += ` ${t("sunnypilot longitudinal control may come in a future update.")}`;
         }
-        expDesc.innerHTML = `<b>${escapeHtml(unavailable)}</b><br><br>${escapeHtml(e2e)}`;
+        expDesc.innerHTML = `<b>${unavailable}</b><br><br>${e2e}`;
       } else {
-        expDesc.textContent = e2e;
+        expDesc.innerHTML = e2e;
       }
     }
   }
   longRow?.querySelectorAll("button").forEach((b) => { b.disabled = !hasLong; });
+}
+
+function syncToggleLocksFromPanel() {
+  if (!panelDataRef?.widgets) return;
+  for (const w of panelDataRef.widgets) {
+    if (!w.param) continue;
+    const row = document.querySelector(`[data-param="${CSS.escape(w.param)}"]`);
+    if (!row) continue;
+    if (w.locked) {
+      row.dataset.locked = "1";
+      const input = row.querySelector("input[type=checkbox]");
+      const label = row.querySelector(".opui-sp-toggle");
+      if (input) input.disabled = true;
+      label?.classList.add("disabled");
+      const hint = row.querySelector(".opui-sp-row-desc--hint");
+      if (hint) hint.hidden = true;
+    } else {
+      delete row.dataset.locked;
+    }
+  }
 }
 
 function setPanelRowDesc(row, text) {
@@ -496,9 +600,24 @@ function updateSlaCapabilities(st) {
   const row = document.querySelector('[data-param="SpeedLimitMode"]');
   if (!row) return;
   const slaOk = !!st.sla_available;
+  let modeIdx = parseInt(panelDataRef?.values?.SpeedLimitMode ?? "0", 10);
+  if (!slaOk && modeIdx === 3) {
+    putParam("SpeedLimitMode", "2", false, true);
+    if (panelDataRef?.values) panelDataRef.values.SpeedLimitMode = "2";
+    modeIdx = 2;
+    row.querySelectorAll(".opui-multi-btn-group button").forEach((btn, i) => {
+      btn.classList.toggle("selected", i === modeIdx);
+    });
+  }
   row.querySelectorAll(".opui-multi-btn-group button").forEach((btn, i) => {
     if (i === 3) btn.disabled = !slaOk;
   });
+  setPanelRowDescHtml(row, buildHighlightedDescHtml(SPEED_LIMIT_MODE_DESCS, modeIdx));
+  const offsetRow = document.querySelector('[data-param="SpeedLimitOffsetType"]');
+  if (offsetRow) {
+    const offsetIdx = parseInt(panelDataRef?.values?.SpeedLimitOffsetType ?? "0", 10);
+    setPanelRowDescHtml(offsetRow, buildHighlightedDescHtml(SPEED_LIMIT_OFFSET_DESCS, offsetIdx));
+  }
 }
 
 function updateModelsCapabilities(st) {
@@ -506,6 +625,13 @@ function updateModelsCapabilities(st) {
   if (btn) btn.disabled = !st?.is_offroad;
   const camRow = document.querySelector('[data-param="CameraOffset"]');
   if (camRow) camRow.hidden = !st?.custom_model_active;
+  const turnDesire = paramIsOn(panelDataRef?.values?.LaneTurnDesire);
+  const advanced = paramIsOn(panelDataRef?.values?.ShowAdvancedControls);
+  const laneTurnRow = document.querySelector('[data-param="LaneTurnValue"]');
+  if (laneTurnRow) laneTurnRow.hidden = !(turnDesire && advanced);
+  const lagdOn = paramIsOn(panelDataRef?.values?.LagdToggle);
+  const delayRow = document.querySelector('[data-param="LagdToggleDelay"]');
+  if (delayRow) delayRow.hidden = lagdOn || !advanced;
 }
 
 function updateModelsDynamicDesc(st) {
@@ -543,6 +669,7 @@ function updateDeveloperCapabilities(st) {
 
   const joyRow = document.querySelector('[data-param="JoystickDebugMode"]');
   if (joyRow) {
+    joyRow.hidden = spRelease;
     const disabled = !globalState.is_offroad;
     const input = joyRow.querySelector("input");
     const label = joyRow.querySelector(".opui-sp-toggle");
@@ -552,8 +679,11 @@ function updateDeveloperCapabilities(st) {
 
   const alphaRow = document.querySelector('[data-param="AlphaLongitudinalEnabled"]');
   if (alphaRow) {
-    const hideAlpha = !st.cp_loaded || st.alpha_longitudinal_available === false;
+    const hideAlpha = spRelease || !st.cp_loaded || st.alpha_longitudinal_available === false;
     alphaRow.hidden = hideAlpha;
+    if (hideAlpha && paramIsOn(panelDataRef?.values?.AlphaLongitudinalEnabled)) {
+      removeParam("AlphaLongitudinalEnabled");
+    }
     const input = alphaRow.querySelector("input");
     const label = alphaRow.querySelector(".opui-sp-toggle");
     const disabled = !!globalState.engaged;
@@ -586,6 +716,7 @@ function updateDeveloperCapabilities(st) {
 
   const longMan = document.querySelector('[data-param="LongitudinalManeuverMode"]');
   if (longMan) {
+    longMan.hidden = spRelease;
     const disabled = !globalState.is_offroad || !st.has_longitudinal_control;
     const input = longMan.querySelector("input");
     const label = longMan.querySelector(".opui-sp-toggle");
@@ -595,6 +726,7 @@ function updateDeveloperCapabilities(st) {
 
   const latMan = document.querySelector('[data-param="LateralManeuverMode"]');
   if (latMan) {
+    latMan.hidden = spRelease;
     const disabled = !globalState.is_offroad;
     const input = latMan.querySelector("input");
     const label = latMan.querySelector(".opui-sp-toggle");
@@ -700,27 +832,51 @@ function updateCruiseCapabilities(st) {
   const offroad = globalState.is_offroad;
   const hasLong = st.has_longitudinal_control !== false;
   const hasIcbm = !!st.has_icbm;
+  const icbmAvailable = !!st.icbm_available;
   const pcm = !!st.pcm_cruise;
   const sccOk = hasLong || hasIcbm;
   const customAccOk = offroad && ((hasLong && !pcm) || hasIcbm);
 
-  let icbmDesc = "When enabled, sunnypilot will attempt to manage the built-in cruise control buttons by emulating button presses for limited longitudinal control.";
-  let icbmDisabled = !offroad;
-  if (!offroad) {
-    icbmDesc = "Start the vehicle to check vehicle compatibility.";
-  } else if (!hasIcbm) {
-    icbmDisabled = true;
-    if (hasLong) {
-      icbmDesc = "Disable the sunnypilot Longitudinal Control (alpha) toggle to allow Intelligent Cruise Button Management.";
-    } else {
-      icbmDesc = "sunnypilot Longitudinal Control is the default longitudinal control for this platform.";
+  const clearIfOn = async (param) => {
+    if (paramIsOn(panelDataRef?.values?.[param])) {
+      await removeParam(param);
+      if (panelDataRef?.values) panelDataRef.values[param] = "0";
     }
+  };
+
+  const icbmBaseDesc = "When enabled, sunnypilot will attempt to manage the built-in cruise control buttons by emulating button presses for limited longitudinal control.";
+  let icbmDisabled = !offroad;
+  const icbmRow = document.querySelector('[data-param="IntelligentCruiseButtonManagement"]');
+  if (!offroad) {
+    setToggleRowState("IntelligentCruiseButtonManagement", { disabled: true, desc: "Start the vehicle to check vehicle compatibility." });
+  } else if (icbmAvailable) {
+    setToggleRowState("IntelligentCruiseButtonManagement", { disabled: false, desc: icbmBaseDesc });
+  } else {
+    let unavailable = "sunnypilot Longitudinal Control is the default longitudinal control for this platform.";
+    if (hasLong) {
+      unavailable = "Disable the sunnypilot Longitudinal Control (alpha) toggle to allow Intelligent Cruise Button Management.";
+      if (st.alpha_longitudinal_available) {
+        unavailable += " An alpha version of sunnypilot longitudinal control can be tested, along with Experimental mode, on non-release branches.";
+      } else {
+        unavailable += " sunnypilot longitudinal control may come in a future update.";
+      }
+    }
+    setToggleRowState("IntelligentCruiseButtonManagement", { disabled: true });
+    if (icbmRow) {
+      setPanelRowDescHtml(icbmRow, `<b>${escapeHtml(t(unavailable))}</b><br><br>${escapeHtml(t(icbmBaseDesc))}`);
+    }
+    clearIfOn("IntelligentCruiseButtonManagement");
   }
-  setToggleRowState("IntelligentCruiseButtonManagement", { disabled: icbmDisabled, desc: icbmDesc });
 
   setToggleRowState("DynamicExperimentalControl", { disabled: !hasLong });
+  if (!hasLong) clearIfOn("DynamicExperimentalControl");
+
   setToggleRowState("SmartCruiseControlVision", { disabled: !sccOk });
   setToggleRowState("SmartCruiseControlMap", { disabled: !sccOk });
+  if (!sccOk) {
+    clearIfOn("SmartCruiseControlVision");
+    clearIfOn("SmartCruiseControlMap");
+  }
 
   let customDesc = "Enable custom Short & Long press increments for cruise speed increase/decrease.";
   let customDisabled = !customAccOk;
@@ -729,6 +885,7 @@ function updateCruiseCapabilities(st) {
     customDisabled = true;
   } else if (!customAccOk) {
     customDisabled = true;
+    clearIfOn("CustomAccIncrementsEnabled");
     if (pcm) customDesc = "This feature is not supported on this platform due to vehicle limitations.";
     else customDesc = "This feature can only be used with sunnypilot longitudinal control enabled.";
   }
@@ -775,8 +932,16 @@ function updateSteeringCapabilities(st) {
 
   setToggleDisabled("Mads", !offroad);
   const madsRow = document.querySelector('[data-param="Mads"]');
-  if (madsRow && !st.cp_loaded) {
-    setPanelRowDesc(madsRow, t("Start the vehicle to check vehicle compatibility."));
+  if (madsRow) {
+    const baseDesc = t("Enable the beloved MADS feature. Disable toggle to revert back to stock sunnypilot engagement/disengagement.");
+    if (!st.cp_loaded) {
+      setPanelRowDescHtml(madsRow, `<b>${escapeHtml(t("Start the vehicle to check vehicle compatibility."))}</b><br><br>${escapeHtml(baseDesc)}`);
+    } else {
+      const limitedDesc = st.mads_limited
+        ? t("This platform supports limited MADS settings.")
+        : t("This platform supports full MADS settings.");
+      setPanelRowDescHtml(madsRow, `<b>${escapeHtml(limitedDesc)}</b><br><br>${escapeHtml(baseDesc)}`);
+    }
   }
   setToggleDisabled("EnforceTorqueControl", !offroad || !torqueAllowed);
   setToggleDisabled("NeuralNetworkLateralControl", !offroad || !torqueAllowed || jerk);
@@ -813,7 +978,8 @@ function applySoftwareCustom(sw) {
   if (dlVal) dlVal.textContent = formatSoftwareDownloadStatus(sw);
   if (dlBtn) {
     dlBtn.textContent = t(sw.download_label || "CHECK");
-    dlBtn.disabled = sw.download_enabled === false;
+    const waiting = softwareDownloadWaitUntil > Date.now();
+    dlBtn.disabled = waiting || sw.download_enabled === false;
     dlBtn.hidden = !sw.is_offroad;
   }
 
@@ -892,6 +1058,7 @@ function updateEngagedWidgets() {
   const root = document.getElementById("panel-content");
   if (!root) return;
   root.querySelectorAll("[data-needs-cycle='1']").forEach((row) => {
+    if (row.dataset.locked === "1") return;
     const input = row.querySelector("input[type=checkbox]");
     const label = row.querySelector(".opui-sp-toggle");
     const disabled = globalState.engaged;
@@ -916,6 +1083,7 @@ function panelVisibilityHash(data) {
 export function applyPanelSync(data) {
   if (!data?.ok) return;
   panelDataRef = data;
+  syncToggleLocksFromPanel();
   const hash = panelVisibilityHash(data);
   if (hash !== lastPanelVisibilityHash) {
     if (currentPanelRef) panelDomCache.delete(currentPanelRef);
@@ -1172,6 +1340,10 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
     await renderFirehosePanel(container);
     return;
   }
+  if (data.custom === "storage") {
+    await renderStoragePanel(container);
+    return;
+  }
   if (data.custom === "sunnylink") {
     await renderSunnylinkPanel(container, data);
     return;
@@ -1413,7 +1585,7 @@ function renderReadonlyRow(w) {
 
 function renderBoolRow(w) {
   const stacked = widgetUsesStacked(w);
-  const { icon: _icon, icon_active: _iconActive, ...toggleDef } = w;
+  const toggleDef = { ...w };
   if (w.param === "DisableUpdates") {
     toggleDef.onBeforeChange = async (checked) => {
       const ok = await showConfirm({
@@ -1450,6 +1622,7 @@ function renderBoolRow(w) {
   }, {}, globalState, paramHandlers);
   row.dataset.param = w.param;
   row.dataset.widget = "bool";
+  if (w.locked) row.dataset.locked = "1";
   if (w.dynamic_desc) row.dataset.dynamicDesc = w.dynamic_desc;
   if (w.capability) row.dataset.capability = w.capability;
   if (w.needs_cycle) row.dataset.needsCycle = "1";
@@ -1505,6 +1678,12 @@ function renderMultipleButtonRow(w, panelData) {
       group.querySelectorAll("button").forEach((b, j) => b.classList.toggle("selected", j === i));
       if (w.param === "MadsSteeringMode") {
         updateMadsSteeringModeDesc(i, !!globalState.mads_limited);
+      }
+      if (w.param === "SpeedLimitMode") {
+        setPanelRowDescHtml(row, buildHighlightedDescHtml(SPEED_LIMIT_MODE_DESCS, i));
+      }
+      if (w.param === "SpeedLimitOffsetType") {
+        setPanelRowDescHtml(row, buildHighlightedDescHtml(SPEED_LIMIT_OFFSET_DESCS, i));
       }
     });
     group.appendChild(btn);
@@ -1648,7 +1827,7 @@ function renderOptionRow(w, panelData) {
   let idx = resolveOptionIndex(w, w.value);
   const min = w.min ?? 0;
   const max = w.max ?? 11;
-  const step = w.step ?? 1;
+  const step = laneTurnOptionStep(w);
 
   const text = document.createElement("div");
   text.className = "opui-sp-row-text";
@@ -1918,16 +2097,19 @@ function renderActionRow(w) {
   row.className = "opui-sp-row";
   if (w.action) row.dataset.action = w.action;
   const disabled = (w.offroad_only && !globalState.is_offroad);
-  let desc = w.desc ? t(w.desc) : "";
-  if (w.dynamic_desc === "calibration" && deviceExtrasCache?.calibration?.desc_html) {
-    desc = deviceExtrasCache.calibration.desc_html.replace(/<[^>]+>/g, " ").trim();
-  }
+  const calHtml = (w.dynamic_desc === "calibration")
+    ? buildCalibrationDescHtml(w, deviceExtrasCache?.calibration)
+    : "";
   row.innerHTML = `
     <div class="opui-sp-row-text">
       <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
     </div>
     <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(t(w.button || "GO"))}</button>`;
-  if (desc) bindRowExpand(row, { desc });
+  if (calHtml) {
+    bindRowExpand(row, { desc_html: calHtml });
+  } else if (w.desc) {
+    bindRowExpand(row, { desc: t(w.desc) });
+  }
   const btn = row.querySelector("button");
   if (disabled) {
     btn.disabled = true;
@@ -1946,7 +2128,25 @@ function renderActionRow(w) {
       confirmText: t(w.confirm_button || (w.action === "reset_calibration" ? "Reset" : "Yes")),
     }))) return;
     if (w.action === "pair_device") {
-      window.open("https://connect.comma.ai/", "_blank");
+      const res = await apiGet("/api/opui/device/pair");
+      if (!res.ok) { toast(res.error || t("Failed")); return; }
+      await showQrPair({
+        title: t("Pair your device to your comma account"),
+        url: res.url,
+        qrDataUrl: res.qr_data_url,
+        onPoll: async () => {
+          const home = await apiGet("/api/opui/home");
+          return !!home?.paired;
+        },
+      });
+      requestPanelRefresh();
+      return;
+    }
+    if (w.action === "models_sync") {
+      const res = await apiPost("/api/opui/action/models_sync");
+      if (!res.ok) { toast(res.error || t("Failed")); return; }
+      await showConfirm({ message: t("Fetching Latest Models"), single: true, confirmText: t("OK") });
+      requestPanelRefresh();
       return;
     }
     if (w.action === "developer_error_log") {
@@ -1998,8 +2198,10 @@ function renderActionRow(w) {
       return;
     }
     const res = await apiPost(`/api/opui/action/${encodeURIComponent(w.action)}`);
-    if (res.ok) toast(t(w.label));
-    else toast(res.error || "Failed");
+    if (res.ok) {
+      toast(t(w.label));
+      if (w.action === "reset_calibration") requestPanelRefresh();
+    } else toast(res.error || "Failed");
   });
   return row;
 }
@@ -2007,6 +2209,7 @@ function renderActionRow(w) {
 async function renderNetworkPanel(container, data) {
   const gen = beginPanelRender();
   container.innerHTML = "";
+  const body = createPanelBody(container, "opui-panel-body--wifi");
 
   const header = document.createElement("div");
   header.className = "opui-wifi-header";
@@ -2022,11 +2225,14 @@ async function renderNetworkPanel(container, data) {
     if (onNavigateSubpanel) onNavigateSubpanel("network__advanced");
   });
   header.append(scanBtn, advBtn);
-  container.appendChild(header);
+  body.appendChild(header);
 
+  const listCard = document.createElement("div");
+  listCard.className = "opui-wifi-list-card";
   const list = document.createElement("div");
   list.className = "opui-wifi-list";
-  container.appendChild(list);
+  listCard.appendChild(list);
+  body.appendChild(listCard);
 
   const asset = (rel) => `/api/opui/assets/${rel.replace(/^\//, "")}`;
   const strengthIcon = (strength, secured) => {
@@ -2323,6 +2529,9 @@ async function renderTripsPanel(container, data) {
     container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(trips.error || "")}</p>`;
     return;
   }
+  const wrap = document.createElement("div");
+  wrap.className = "opui-trips-wrap";
+  container.appendChild(wrap);
   const s = trips.stats || {};
   const metric = globalState.is_metric;
   for (const [title, key] of [[t("ALL TIME"), "all"], [t("PAST WEEK"), "week"]]) {
@@ -2337,18 +2546,21 @@ async function renderTripsPanel(container, data) {
       <div class="opui-trips-cols">
         <div class="opui-trips-col">
           <img class="opui-trips-icon" src="/api/opui/assets/icons_mici/wheel.png" alt="" />
-          <div class="opui-trips-num">${block.routes || 0}</div><div class="opui-trips-unit">${escapeHtml(t("Drives"))}</div>
+          <div class="opui-trips-num">${block.routes || 0}</div>
+          <div class="opui-trips-unit">${escapeHtml(t("Drives"))}</div>
         </div>
         <div class="opui-trips-col">
-          <img class="opui-trips-icon" src="/api/opui/assets/icons_mici/road.png" alt="" />
-          <div class="opui-trips-num">${distStr}</div><div class="opui-trips-unit">${escapeHtml(unit)}</div>
+          <img class="opui-trips-icon opui-trips-icon--road" src="/api/opui/assets/icons/road.png" alt="" />
+          <div class="opui-trips-num">${distStr}</div>
+          <div class="opui-trips-unit">${escapeHtml(unit)}</div>
         </div>
         <div class="opui-trips-col">
           <img class="opui-trips-icon" src="/api/opui/assets/sunnypilot/selfdrive/assets/icons/clock.png" alt="" />
-          <div class="opui-trips-num">${Math.round((block.minutes || 0) / 60)}</div><div class="opui-trips-unit">${escapeHtml(t("Hours"))}</div>
+          <div class="opui-trips-num">${Math.round((block.minutes || 0) / 60)}</div>
+          <div class="opui-trips-unit">${escapeHtml(t("Hours"))}</div>
         </div>
       </div>`;
-    container.appendChild(card);
+    wrap.appendChild(card);
   }
 }
 
@@ -2359,6 +2571,7 @@ function formatStat(v) {
 }
 
 async function renderModelsPanel(container, data) {
+  stopModelsPanelPoll();
   const gen = beginPanelRender();
   container.innerHTML = "";
   const m = await apiGet("/api/opui/models");
@@ -2394,9 +2607,22 @@ async function renderModelsPanel(container, data) {
       folders: m.tree || [],
       selectedRef: m.active_ref,
       searchable: true,
+      getFolders: async () => {
+        const latest = await apiGet("/api/opui/models");
+        return latest?.tree || [];
+      },
+      onFavorite: async (modelRef) => {
+        const res = await apiPost("/api/opui/models/favorite", { ref: modelRef });
+        if (!res.ok) {
+          toast(res.error || t("Failed"));
+          return false;
+        }
+        return true;
+      },
     });
     if (!ref) return;
-    const bundle = (m.tree || []).flatMap((f) => f.bundles || []).find((b) => b.ref === ref);
+    const latest = await apiGet("/api/opui/models");
+    const bundle = (latest?.tree || m.tree || []).flatMap((f) => f.bundles || []).find((b) => b.ref === ref);
     const res = await apiPost("/api/opui/models/select", { ref, index: bundle?.index });
     if (res.ok) {
       if (res.needs_reset_cal) {
@@ -2417,21 +2643,16 @@ async function renderModelsPanel(container, data) {
   });
   container.appendChild(pickRow);
 
-  if (m.download?.name && m.download_index != null && m.download_index !== "") {
-    const types = {
-      supercombo: t("Driving Model"),
-      vision: t("Vision Model"),
-      policy: t("Policy Model"),
-      offPolicy: t("Off-Policy Model"),
-      onPolicy: t("On-Policy Model"),
-    };
-    const parts = m.download.models?.length ? m.download.models : Object.keys(types).map((type) => ({ type, progress: 0 }));
-    for (const part of parts) {
-      const label = types[part.type] || part.type;
-      container.appendChild(createProgressRow(`${label} — ${m.download.name}`, part.progress || 0));
-    }
+  const downloadRoot = document.createElement("div");
+  downloadRoot.dataset.modelsDownload = "1";
+  container.appendChild(downloadRoot);
+
+  const paintModelsDownload = (status) => {
+    downloadRoot.innerHTML = "";
+    const hasDownload = status.download?.name && status.download_index != null && status.download_index !== "";
+    if (!hasDownload) return;
     const cancel = document.createElement("div");
-    cancel.className = "opui-sp-row";
+    cancel.className = "opui-sp-row opui-sp-row--has-action";
     cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Cancel Download"))}</div></div>
       <button type="button" class="opui-btn opui-btn--action danger">${escapeHtml(t("Cancel"))}</button>`;
     cancel.querySelector("button")?.addEventListener("click", async () => {
@@ -2439,21 +2660,54 @@ async function renderModelsPanel(container, data) {
       toast(t("Download cancelled"));
       await renderModelsPanel(container, data);
     });
-    container.appendChild(cancel);
-  }
-
-  appendPanelWidgets(container, data);
-
-  const clearRow = container.querySelector('[data-action="models_clear_cache"]');
-  if (clearRow && m.cache_size_mb != null) {
-    const text = clearRow.querySelector(".opui-sp-row-text");
-    if (text && !text.querySelector(".opui-sp-row-desc")) {
-      const d = document.createElement("div");
-      d.className = "opui-sp-row-desc";
-      d.textContent = `${Number(m.cache_size_mb).toFixed(2)} ${t("MB")}`;
-      text.appendChild(d);
+    downloadRoot.appendChild(cancel);
+    const types = {
+      supercombo: t("Driving Model"),
+      vision: t("Vision Model"),
+      policy: t("Policy Model"),
+      offPolicy: t("Off-Policy Model"),
+      onPolicy: t("On-Policy Model"),
+    };
+    const parts = status.download.models?.length
+      ? status.download.models
+      : Object.keys(types).map((type) => ({ type, progress: 0 }));
+    for (const part of parts) {
+      const label = types[part.type] || part.type;
+      downloadRoot.appendChild(createProgressRow(`${label} — ${status.download.name}`, part.progress || 0));
     }
-  }
+  };
+
+  const syncModelsExtras = (status) => {
+    paintModelsDownload(status);
+    const clearRow = container.querySelector('[data-action="models_clear_cache"]');
+    if (clearRow && status.cache_size_mb != null) {
+      const text = clearRow.querySelector(".opui-sp-row-text");
+      if (text) {
+        let d = text.querySelector(".opui-sp-row-desc");
+        if (!d) {
+          d = document.createElement("div");
+          d.className = "opui-sp-row-desc";
+          text.appendChild(d);
+        }
+        d.textContent = `${Number(status.cache_size_mb).toFixed(2)} ${t("MB")}`;
+      }
+    }
+  };
+
+  syncModelsExtras(m);
+  appendPanelWidgets(container, data);
+  syncModelsExtras(m);
+
+  modelsPanelPoll = setInterval(async () => {
+    if (panelRenderStale(gen)) {
+      stopModelsPanelPoll();
+      return;
+    }
+    try {
+      const latest = await apiGet("/api/opui/models");
+      if (latest?.ok) syncModelsExtras(latest);
+    } catch { /* ignore transient poll errors */ }
+  }, 500);
 }
 
 function applyOsmPanelValues(patch) {
@@ -2951,7 +3205,7 @@ function renderStreamPreviewQualityRow(w) {
       group.querySelectorAll("button").forEach((el) => el.classList.remove("selected"));
       btn.classList.add("selected");
       toast(t("Preview quality updated"));
-      const { applyStreamQuality, applyPreviewOffUi, isRoadStreaming, startRoadStream, stopRoadStream } = await import("./webrtc_stream.js?v=95");
+      const { applyStreamQuality, applyPreviewOffUi, isRoadStreaming, startRoadStream, stopRoadStream } = await import("./webrtc_stream.js?v=97");
       applyPreviewOffUi();
       if (level === "off") {
         if (isRoadStreaming()) await stopRoadStream();
@@ -3045,14 +3299,17 @@ function renderStreamDiagnosticsRow() {
   const foot = row.querySelector("#stream-diag-foot");
 
   const tiles = [
-    { id: "live", label: t("Livestream") },
-    { id: "webrtc", label: t("webrtcd") },
+    { id: "stream", label: t("Stream stack") },
     { id: "bitrate", label: t("Bitrate") },
     { id: "camera", label: t("Camera") },
     { id: "thermal", label: t("Thermal") },
     { id: "lag", label: t("Encoder lag") },
     { id: "memory", label: t("Memory") },
+    { id: "gpu", label: t("GPU") },
+    { id: "storage", label: t("Storage") },
     { id: "cpu", label: t("CPU temp") },
+    { id: "cpu_usage", label: t("CPU usage") },
+    { id: "power", label: t("Power") },
   ];
 
   const cells = {};
@@ -3080,23 +3337,38 @@ function renderStreamDiagnosticsRow() {
     el.className = "opui-stream-diag-value" + (tone ? ` ${streamDiagValueClass(tone)}` : "");
   };
 
+  const streamStackLabel = (status) => {
+    if (status === "active") return t("Active");
+    if (status === "partial") return t("Partial");
+    return t("Off");
+  };
+
   const applyHealth = (h) => {
     if (!h?.ok) {
-      setCell("live", h?.error || t("Update status unavailable"), "danger");
+      setCell("stream", h?.error || t("Update status unavailable"), "danger");
+      ["bitrate", "camera", "thermal", "lag", "memory", "gpu", "storage", "cpu", "cpu_usage", "power"].forEach((id) => setCell(id, null));
       foot.hidden = true;
       return;
     }
-    setCell("live", h.livestreaming ? t("On") : t("Off"), h.livestreaming ? "on" : "off");
-    setCell("webrtc", h.webrtcd_listening ? t("On") : t("Off"), h.webrtcd_listening ? "on" : "off");
+    const stack = h.stream_stack || ((h.livestreaming && h.webrtcd_listening) ? "active" : (h.livestreaming || h.webrtcd_listening) ? "partial" : "off");
+    const stackTone = stack === "active" ? "on" : (stack === "partial" ? "warn" : "off");
+    setCell("stream", streamStackLabel(stack), stackTone);
     setCell("bitrate", formatBitrate(h.encoder_bitrate));
     setCell("camera", h.active_camera || "—");
     setCell("thermal", h.thermal || "—", h.thermal === "ok" ? "on" : "warn");
     setCell("lag", h.encoder_lagging ? t("Yes") : t("No"), h.encoder_lagging ? "warn" : "on");
-    setCell("memory", h.memory_usage_percent != null ? `${h.memory_usage_percent}%` : null);
-    setCell("cpu", h.cpu_temp != null ? `${h.cpu_temp}°C` : null);
+    setCell("memory", h.memory_usage_percent != null ? `${h.memory_usage_percent}%` : "—");
+    setCell("gpu", h.gpu_usage_percent != null ? `${h.gpu_usage_percent}%` : "—");
+    setCell("storage", h.free_space_percent != null ? `${h.free_space_percent}% ${t("free")}` : "—");
+    setCell("cpu", h.cpu_temp != null ? `${h.cpu_temp}°C` : "—");
+    setCell("cpu_usage", h.cpu_usage_percent != null ? `${h.cpu_usage_percent}%` : "—");
+    setCell("power", h.power_draw_w != null ? `${h.power_draw_w} W` : "—");
     const decode = getStreamDecodePath();
-    const decodeLabel = decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)");
-    foot.textContent = `${t("Decode path")}: ${decodeLabel}`;
+    const parts = [`${t("Decode path")}: ${decode === "webcodecs" ? t("WebCodecs (browser HW)") : t("Video element (browser HW)")}`];
+    if (h.livestreaming != null || h.webrtcd_listening != null) {
+      parts.push(`${t("Livestream")}: ${h.livestreaming ? t("On") : t("Off")} · webrtcd: ${h.webrtcd_listening ? t("On") : t("Off")}`);
+    }
+    foot.textContent = parts.join(" · ");
     foot.hidden = false;
   };
 
@@ -3104,7 +3376,7 @@ function renderStreamDiagnosticsRow() {
     try {
       applyHealth(await apiGet("/api/opui/stream/health"));
     } catch {
-      setCell("live", t("Update status unavailable"), "danger");
+      setCell("stream", t("Update status unavailable"), "danger");
       foot.hidden = true;
     }
   };
@@ -3234,6 +3506,34 @@ async function sunnylinkConsentFlow(slStatus) {
   }
 }
 
+async function ensureSunnylinkDongleRegistered(dongleId) {
+  const dongle = String(dongleId || "").trim();
+  if (!dongle || dongle === UNREGISTERED_SUNNYLINK_DONGLE_ID) {
+    await showConfirm({
+      message: `${t("sunnylink Dongle ID not found. ")}${t("This may be due to weak internet connection or sunnylink registration issue. ")}${t("Please reboot and try again.")}`,
+      single: true,
+      confirmText: t("OK"),
+    });
+    return false;
+  }
+  return true;
+}
+
+function updateSunnylinkHeaderDesc(hdr, enabled) {
+  const green = hdr.querySelector(".opui-sunnylink-desc--green");
+  const orange = hdr.querySelector(".opui-sunnylink-desc--orange");
+  if (!green || !orange) return;
+  if (enabled) {
+    green.textContent = t("Welcome back!! We're excited to see you've enabled sunnylink again!");
+    green.hidden = false;
+    orange.hidden = true;
+  } else {
+    green.hidden = true;
+    orange.innerHTML = `😢 ${escapeHtml(t("Not going to lie, it's sad to see you disabled sunnylink") + t(", but we'll be here when you're ready to come back."))}`;
+    orange.hidden = false;
+  }
+}
+
 function createSunnylinkToggleRow(w, rightValue, disabled, slStatus) {
   const extra = {};
   if (w.param === "SunnylinkEnabled") {
@@ -3294,6 +3594,9 @@ async function renderSunnylinkPanel(container, data) {
     offroad_only: true,
   }, `${t("Dongle ID")}: ${values.SunnylinkDongleId || t("N/A")}`, !offroad, sl);
   enabledRow.dataset.slMaster = "1";
+  enabledRow.querySelector("input")?.addEventListener("change", () => {
+    updateSunnylinkHeaderDesc(hdr, !!enabledRow.querySelector("input")?.checked);
+  });
   container.appendChild(enabledRow);
   appendSpSeparator(container);
 
@@ -3305,6 +3608,7 @@ async function renderSunnylinkPanel(container, data) {
     valueColor: "#808080",
     disabled: childDisabled,
     onClick: async () => {
+      if (!(await ensureSunnylinkDongleRegistered(values.SunnylinkDongleId))) return;
       const res = await apiGet("/api/opui/sunnylink/pair?mode=sponsor");
       if (!res.ok) { toast(res.error || t("Failed")); return; }
       await showQrPair({ title: t("Sponsor sunnylink"), url: res.url, qrDataUrl: res.qr_data_url });
@@ -3320,9 +3624,18 @@ async function renderSunnylinkPanel(container, data) {
     buttonText: t("Not Paired"),
     disabled: childDisabled,
     onClick: async () => {
+      if (!(await ensureSunnylinkDongleRegistered(values.SunnylinkDongleId))) return;
       const res = await apiGet("/api/opui/sunnylink/pair?mode=pair");
       if (!res.ok) { toast(res.error || t("Failed")); return; }
-      await showQrPair({ title: t("Pair GitHub Account"), url: res.url, qrDataUrl: res.qr_data_url });
+      await showQrPair({
+        title: t("Pair GitHub Account"),
+        url: res.url,
+        qrDataUrl: res.qr_data_url,
+        onPoll: async () => {
+          const st = await apiGet("/api/opui/sunnylink/status");
+          return !!st?.is_paired;
+        },
+      });
     },
   });
   pairRow.dataset.slPair = "1";
@@ -3519,6 +3832,355 @@ async function renderSunnylinkPanel(container, data) {
   }
 }
 
+async function renderStoragePanel(container, opts = {}) {
+  const force = Boolean(opts.force);
+  const { loadI18n } = await import("./i18n.js");
+  await loadI18n(true);
+  container.innerHTML = `<p class="opui-muted opui-panel-loading" style="padding:48px;text-align:center">${escapeHtml(t("Calculating..."))}</p>`;
+  const data = await apiGet(`/api/opui/storage${force ? "?force=1" : ""}`);
+  if (!data.ok) {
+    container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(data.error || t("Load failed"))}</p>`;
+    return;
+  }
+  container.innerHTML = "";
+
+  const CAT_META = {
+    routes: { label: t("Routes"), color: "#4A90D9" },
+    models: { label: t("Models"), color: "#9B59B6" },
+    maps: { label: t("Maps"), color: "#27AE60" },
+    software: { label: t("Software"), color: "#8E8E93" },
+    logs: { label: t("Logs"), color: "#D4AC0D" },
+    other: { label: t("Other"), color: "#555555" },
+  };
+
+  const CLEAR_ACTIONS = [
+    {
+      category: "routes",
+      label: t("Clear route recordings"),
+      desc: t("Deletes non-preserved driving segments. Starred and recent routes are kept."),
+    },
+    {
+      category: "routes_starred",
+      label: t("Clear starred routes"),
+      desc: t("Deletes route recordings you bookmarked while driving. Other routes are not affected."),
+      starredList: true,
+    },
+    {
+      category: "maps",
+      label: t("Clear map cache"),
+      desc: t("Removes downloaded OSM map data. Maps can be downloaded again from OSM settings."),
+    },
+    {
+      category: "models_cache",
+      label: t("Clear model cache"),
+      desc: t("Removes downloaded models except the one currently in use."),
+    },
+    {
+      category: "logs",
+      label: t("Clear logs"),
+      desc: t("Removes system logs and crash dumps."),
+    },
+    {
+      category: "download_cache",
+      label: t("Clear download cache"),
+      desc: t("Removes temporary download files. Safe to clear."),
+    },
+  ];
+
+  const wrap = document.createElement("div");
+  wrap.className = "opui-storage-wrap";
+
+  const hasExternal = Boolean(data.external?.mounted);
+
+  const summary = document.createElement("div");
+  summary.className = "opui-storage-summary";
+  const usedPct = data.total_bytes ? Math.round((data.used_bytes / data.total_bytes) * 100) : 0;
+  const head = document.createElement("div");
+  head.className = "opui-storage-summary-head";
+  const titleEl = document.createElement("div");
+  titleEl.className = "opui-storage-summary-title";
+  titleEl.textContent = `${formatStorageBytes(data.total_bytes)} ${t("total")}`;
+  const refreshBtn = document.createElement("button");
+  refreshBtn.type = "button";
+  refreshBtn.className = "opui-btn opui-btn--ghost opui-storage-refresh";
+  refreshBtn.textContent = t("Refresh");
+  refreshBtn.addEventListener("click", () => renderStoragePanel(container, { force: true }));
+  head.appendChild(titleEl);
+  head.appendChild(refreshBtn);
+  summary.appendChild(head);
+  const sub = document.createElement("div");
+  sub.className = `opui-storage-summary-sub${data.low_space ? " opui-storage-summary-sub--warn" : ""}${data.critical_space ? " opui-storage-summary-sub--danger" : ""}`;
+  sub.textContent = tFmt("Used {used} ({pct}%) · Free {free}", {
+    used: formatStorageBytes(data.used_bytes),
+    pct: String(usedPct),
+    free: formatStorageBytes(data.free_bytes),
+  });
+  summary.appendChild(sub);
+  wrap.appendChild(summary);
+
+  const bar = document.createElement("div");
+  bar.className = "opui-storage-bar";
+  bar.setAttribute("role", "img");
+  bar.setAttribute("aria-label", t("Storage usage"));
+
+  if (hasExternal) {
+    const intHead = document.createElement("div");
+    intHead.className = "opui-storage-volume-head";
+    intHead.innerHTML = `
+      <div class="opui-storage-volume-title">${escapeHtml(t("Internal storage"))}</div>
+      <div class="opui-storage-volume-capacity">${escapeHtml(formatStorageBytes(data.total_bytes))}</div>`;
+    wrap.appendChild(intHead);
+  }
+  const segments = (data.categories || []).filter((c) => c.bytes > 0 && CAT_META[c.id]);
+  const denom = data.total_bytes || 1;
+  for (const cat of segments) {
+    const seg = document.createElement("div");
+    seg.className = "opui-storage-bar-seg";
+    seg.style.width = `${Math.max(0.4, (cat.bytes / denom) * 100)}%`;
+    seg.style.background = CAT_META[cat.id].color;
+    seg.title = `${CAT_META[cat.id].label} ${formatStorageBytes(cat.bytes)}`;
+    bar.appendChild(seg);
+  }
+  if (data.free_bytes > 0) {
+    const freeSeg = document.createElement("div");
+    freeSeg.className = "opui-storage-bar-seg opui-storage-bar-seg--free";
+    freeSeg.style.width = `${Math.max(0.4, (data.free_bytes / denom) * 100)}%`;
+    freeSeg.title = `${t("Free")} ${formatStorageBytes(data.free_bytes)}`;
+    bar.appendChild(freeSeg);
+  }
+  wrap.appendChild(bar);
+
+  const legend = document.createElement("div");
+  legend.className = "opui-storage-legend";
+  for (const cat of data.categories || []) {
+    const meta = CAT_META[cat.id];
+    if (!meta) continue;
+    const row = document.createElement("div");
+    row.className = "opui-storage-legend-row";
+    row.innerHTML = `
+      <span class="opui-storage-dot" style="background:${meta.color}"></span>
+      <span class="opui-storage-legend-label">${escapeHtml(meta.label)}</span>
+      <span class="opui-storage-legend-size">${escapeHtml(formatStorageBytes(cat.bytes))}</span>
+      <span class="opui-storage-legend-pct">${escapeHtml(String(cat.percent))}%</span>`;
+    legend.appendChild(row);
+  }
+  const freeRow = document.createElement("div");
+  freeRow.className = "opui-storage-legend-row";
+  freeRow.innerHTML = `
+    <span class="opui-storage-dot opui-storage-dot--free"></span>
+    <span class="opui-storage-legend-label">${escapeHtml(t("Free"))}</span>
+    <span class="opui-storage-legend-size">${escapeHtml(formatStorageBytes(data.free_bytes))}</span>
+    <span class="opui-storage-legend-pct">${escapeHtml(String(data.free_percent ?? 0))}%</span>`;
+  legend.appendChild(freeRow);
+  wrap.appendChild(legend);
+
+  if (hasExternal) {
+    const ext = data.external;
+    wrap.appendChild(document.createElement("hr"));
+    const extBlock = document.createElement("div");
+    extBlock.className = "opui-storage-volume opui-storage-volume--external";
+
+    const extHead = document.createElement("div");
+    extHead.className = "opui-storage-volume-head";
+    extHead.innerHTML = `
+      <div class="opui-storage-volume-title">${escapeHtml(t("External SSD"))}</div>
+      <div class="opui-storage-volume-capacity">${escapeHtml(formatStorageBytes(ext.total_bytes))}</div>`;
+    extBlock.appendChild(extHead);
+
+    const extUsedPct = ext.total_bytes ? Math.round((ext.used_bytes / ext.total_bytes) * 100) : 0;
+    const extSub = document.createElement("div");
+    extSub.className = `opui-storage-summary-sub opui-storage-summary-sub--volume${ext.low_space ? " opui-storage-summary-sub--warn" : ""}${ext.critical_space ? " opui-storage-summary-sub--danger" : ""}`;
+    extSub.textContent = tFmt("Used {used} ({pct}%) · Free {free}", {
+      used: formatStorageBytes(ext.used_bytes),
+      pct: String(extUsedPct),
+      free: formatStorageBytes(ext.free_bytes),
+    });
+    extBlock.appendChild(extSub);
+
+    const extNote = document.createElement("p");
+    extNote.className = "opui-storage-volume-note";
+    extNote.textContent = t("webui_storage_external_note");
+    extBlock.appendChild(extNote);
+
+    const extBar = document.createElement("div");
+    extBar.className = "opui-storage-bar";
+    extBar.setAttribute("role", "img");
+    extBar.setAttribute("aria-label", t("External SSD"));
+    const extDenom = ext.total_bytes || 1;
+    const routesBytes = ext.routes_bytes || 0;
+    if (routesBytes > 0) {
+      const routeSeg = document.createElement("div");
+      routeSeg.className = "opui-storage-bar-seg";
+      routeSeg.style.width = `${Math.max(0.4, (routesBytes / extDenom) * 100)}%`;
+      routeSeg.style.background = CAT_META.routes.color;
+      routeSeg.title = `${CAT_META.routes.label} ${formatStorageBytes(routesBytes)}`;
+      extBar.appendChild(routeSeg);
+    }
+    if (ext.free_bytes > 0) {
+      const extFreeSeg = document.createElement("div");
+      extFreeSeg.className = "opui-storage-bar-seg opui-storage-bar-seg--free";
+      extFreeSeg.style.width = `${Math.max(0.4, (ext.free_bytes / extDenom) * 100)}%`;
+      extFreeSeg.title = `${t("Free")} ${formatStorageBytes(ext.free_bytes)}`;
+      extBar.appendChild(extFreeSeg);
+    }
+    extBlock.appendChild(extBar);
+
+    const extLegend = document.createElement("div");
+    extLegend.className = "opui-storage-legend";
+    const routeRow = document.createElement("div");
+    routeRow.className = "opui-storage-legend-row";
+    const routePct = ext.total_bytes ? Math.round((routesBytes / ext.total_bytes) * 100) : 0;
+    routeRow.innerHTML = `
+      <span class="opui-storage-dot" style="background:${CAT_META.routes.color}"></span>
+      <span class="opui-storage-legend-label">${escapeHtml(CAT_META.routes.label)}</span>
+      <span class="opui-storage-legend-size">${escapeHtml(formatStorageBytes(routesBytes))}</span>
+      <span class="opui-storage-legend-pct">${escapeHtml(String(routePct))}%</span>`;
+    extLegend.appendChild(routeRow);
+    const extFreeRow = document.createElement("div");
+    extFreeRow.className = "opui-storage-legend-row";
+    extFreeRow.innerHTML = `
+      <span class="opui-storage-dot opui-storage-dot--free"></span>
+      <span class="opui-storage-legend-label">${escapeHtml(t("Free"))}</span>
+      <span class="opui-storage-legend-size">${escapeHtml(formatStorageBytes(ext.free_bytes))}</span>
+      <span class="opui-storage-legend-pct">${escapeHtml(String(ext.free_percent ?? 0))}%</span>`;
+    extLegend.appendChild(extFreeRow);
+    extBlock.appendChild(extLegend);
+    wrap.appendChild(extBlock);
+  }
+
+  if (data.critical_space) {
+    const warn = document.createElement("p");
+    warn.className = "opui-storage-warn opui-storage-warn--danger";
+    warn.textContent = t("Free up storage (less than 2% space remaining)");
+    wrap.appendChild(warn);
+  } else if (data.low_space) {
+    const warn = document.createElement("p");
+    warn.className = "opui-storage-warn";
+    warn.textContent = t("Storage is running low (less than 10% free).");
+    wrap.appendChild(warn);
+  }
+
+  wrap.appendChild(document.createElement("hr"));
+
+  const actionsTitle = document.createElement("div");
+  actionsTitle.className = "opui-storage-section-title";
+  actionsTitle.textContent = t("Cleanup");
+  wrap.appendChild(actionsTitle);
+
+  const offroad = data.offroad !== false;
+  for (const action of CLEAR_ACTIONS) {
+    const est = data.clearable?.[action.category];
+    let desc = action.desc;
+    if (action.category === "routes") {
+      const autoHint = t("webui_storage_routes_autodelete_hint");
+      let extraHint = "";
+      if (data.routes_external_bytes > 0) {
+        extraHint = tFmt("webui_storage_routes_external_includes", {
+          size: formatStorageBytes(data.routes_external_bytes),
+        });
+      }
+      desc = [action.desc, autoHint, extraHint].filter(Boolean).join(" ");
+    }
+    const starred = data.starred_routes || {};
+    if (action.category === "routes_starred" && starred.count > 0) {
+      desc = `${action.desc} ${tFmt("webui_storage_starred_count", { count: String(starred.count) })}`;
+    }
+    const row = document.createElement("div");
+    row.className = "opui-sp-row opui-storage-action-row";
+    const canClear = offroad && est != null && est > 0;
+    row.innerHTML = `
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(action.label)}</div>
+        <div class="opui-sp-row-desc">${escapeHtml(desc)}</div>
+        ${est != null && est > 0 ? `<div class="opui-sp-row-desc opui-storage-est">${escapeHtml(tFmt("About {size} can be freed", { size: formatStorageBytes(est) }))}</div>` : ""}
+      </div>
+      <button type="button" class="opui-btn opui-btn--dialog opui-storage-clear-btn" ${canClear ? "" : "disabled"}>${escapeHtml(t("Clear"))}</button>`;
+    const btn = row.querySelector(".opui-storage-clear-btn");
+    btn?.addEventListener("click", async () => {
+      if (!offroad) {
+        toast(t("Only available while offroad"));
+        return;
+      }
+      const sizeText = est != null ? formatStorageBytes(est) : "";
+      let confirmMessage = sizeText
+        ? tFmt("This will free about {size}. Continue?", { size: sizeText })
+        : t("Are you sure you want to clear this data?");
+      if (action.category === "routes_starred" && starred.count > 0) {
+        confirmMessage = tFmt("webui_storage_starred_confirm", {
+          count: String(starred.count),
+          size: sizeText || formatStorageBytes(starred.bytes || 0),
+        });
+      }
+      const ok = await showConfirm({
+        message: confirmMessage,
+        confirmText: t("Clear"),
+        cancelText: t("Cancel"),
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      const res = await apiPost("/api/opui/storage/clear", { category: action.category });
+      if (!res.ok) {
+        toast(res.error || t("Save failed"));
+        btn.disabled = false;
+        return;
+      }
+      toast(tFmt("Freed {size}", { size: formatStorageBytes(res.freed_bytes || est || 0) }));
+      await renderStoragePanel(container);
+    });
+    wrap.appendChild(row);
+
+    if (action.starredList && starred.count > 0 && Array.isArray(starred.items)) {
+      const list = document.createElement("div");
+      list.className = "opui-storage-starred-list";
+      const maxRows = 6;
+      for (const item of starred.items.slice(0, maxRows)) {
+        const line = document.createElement("div");
+        line.className = "opui-storage-starred-row";
+        const volLabel = item.volume === "external" ? t("External SSD") : t("Internal storage");
+        line.innerHTML = `
+          <span class="opui-storage-starred-id">${escapeHtml(item.id)}</span>
+          <span class="opui-storage-starred-meta">${escapeHtml(volLabel)} · ${escapeHtml(formatStorageBytes(item.bytes))}</span>`;
+        list.appendChild(line);
+      }
+      if (starred.items.length > maxRows) {
+        const more = document.createElement("div");
+        more.className = "opui-storage-starred-more";
+        more.textContent = tFmt("webui_storage_starred_more", {
+          count: String(starred.items.length - maxRows),
+        });
+        list.appendChild(more);
+      }
+      wrap.appendChild(list);
+    }
+  }
+
+  if (!offroad) {
+    const hint = document.createElement("p");
+    hint.className = "opui-storage-hint";
+    hint.textContent = t("Cleanup is only available while offroad.");
+    wrap.appendChild(hint);
+  }
+
+  container.appendChild(wrap);
+}
+
+function formatStorageBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return "—";
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+function tFmt(template, vars = {}) {
+  let out = t(template);
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+  }
+  return out;
+}
+
 async function renderFirehosePanel(container) {
   const fh = await apiGet("/api/opui/firehose");
   if (!fh.ok) {
@@ -3597,12 +4259,14 @@ async function renderSoftwarePanel(container, data) {
     return;
   }
 
+  const body = createPanelBody(container);
+
   if (sw.is_onroad) {
     const warn = document.createElement("div");
     warn.id = "software-onroad-warn";
     warn.className = "opui-row opui-row--warn";
     warn.textContent = t("Updates are only downloaded while the car is off.");
-    container.appendChild(warn);
+    body.insertBefore(warn, body.firstChild);
   }
 
   const version = document.createElement("div");
@@ -3621,88 +4285,7 @@ async function renderSoftwarePanel(container, data) {
     notes.hidden = expanded;
     version.classList.toggle("opui-sp-row--desc-open", !expanded);
   });
-  container.appendChild(version);
-
-  const agnos = await apiGet("/api/opui/agnos").catch(() => ({ ok: false }));
-  if (panelRenderStale(gen)) return;
-  if (agnos.ok && agnos.available && agnos.update_required) {
-    const agnosBlock = document.createElement("div");
-    agnosBlock.className = "opui-agnos-block";
-    const agnosRow = document.createElement("div");
-    agnosRow.id = "software-agnos-row";
-    agnosRow.className = "opui-sp-row opui-sp-row--has-action opui-sp-row--warn";
-    const agnosTitle = t("AGNOS Update");
-    const agnosDesc = `${agnos.current_version || "?"} → ${agnos.target_version || "?"}`;
-    agnosRow.innerHTML = `
-      <div class="opui-sp-row-text">
-        <div class="opui-sp-row-title">${escapeHtml(agnosTitle)}</div>
-        <div class="opui-sp-row-desc">${escapeHtml(t("Operating system update required (~1GB download)."))}</div>
-      </div>
-      <div class="opui-sp-row-value" id="software-agnos-value">${escapeHtml(agnosDesc)}</div>
-      <button type="button" class="opui-btn opui-btn--action" id="software-agnos-btn">${escapeHtml(agnos.ready_to_reboot ? t("REBOOT") : t("INSTALL"))}</button>`;
-    const agnosProgWrap = document.createElement("div");
-    agnosProgWrap.className = "opui-agnos-progress-wrap";
-    agnosProgWrap.id = "software-agnos-progress";
-    agnosProgWrap.hidden = true;
-    agnosProgWrap.innerHTML = `
-      <div class="opui-agnos-progress-head">
-        <span class="opui-agnos-progress-status" id="software-agnos-progress-status"></span>
-        <span class="opui-agnos-progress-label" id="software-agnos-progress-label">0%</span>
-      </div>
-      <div class="opui-agnos-progress-track">
-        <div class="opui-agnos-progress-bar" id="software-agnos-progress-bar"></div>
-      </div>`;
-    agnosBlock.appendChild(agnosRow);
-    agnosBlock.appendChild(agnosProgWrap);
-    const agnosBtn = agnosRow.querySelector("#software-agnos-btn");
-    const agnosVal = agnosRow.querySelector("#software-agnos-value");
-    const agnosProgBar = agnosProgWrap.querySelector("#software-agnos-progress-bar");
-    const agnosProgLabel = agnosProgWrap.querySelector("#software-agnos-progress-label");
-    const agnosProgStatus = agnosProgWrap.querySelector("#software-agnos-progress-status");
-    const setAgnosProgress = (st) => {
-      const running = st?.install_running || st?.job?.status === "running";
-      const pct = typeof st?.job?.progress === "number"
-        ? st.job.progress
-        : (typeof st?.progress === "number" ? st.progress : null);
-      if (agnosProgWrap) agnosProgWrap.hidden = !running;
-      if (!running) return;
-      if (agnosProgStatus && st?.job?.message) agnosProgStatus.textContent = st.job.message;
-      if (typeof pct === "number") {
-        const rounded = Math.min(100, Math.max(0, Math.round(pct)));
-        if (agnosProgBar) agnosProgBar.style.width = `${rounded}%`;
-        if (agnosProgLabel) agnosProgLabel.textContent = `${rounded}%`;
-      }
-    };
-    const refreshAgnosUi = (st) => {
-      if (!st?.ok) return;
-      setAgnosProgress(st);
-      if (st.job?.message && agnosVal && !(st.install_running || st.job?.status === "running")) {
-        const pct = st.job.progress ? ` (${st.job.progress}%)` : "";
-        agnosVal.textContent = `${st.job.message}${pct}`;
-      } else if (agnosVal && !st.install_running && st.job?.status !== "running") {
-        agnosVal.textContent = agnosDesc;
-      }
-      if (agnosBtn) {
-        agnosBtn.disabled = st.install_running;
-        agnosBtn.textContent = t(st.ready_to_reboot ? "REBOOT" : "INSTALL");
-      }
-    };
-    refreshAgnosUi(agnos);
-    agnosBtn?.addEventListener("click", async () => {
-      if (agnosBtn) agnosBtn.disabled = true;
-      await runAgnosUpdateFlow({ readyToReboot: !!agnos.ready_to_reboot });
-      if (agnosBtn) agnosBtn.disabled = false;
-    });
-    if (agnos.install_running || agnos.job?.status === "running") {
-      const poll = setInterval(async () => {
-        const st = await apiGet("/api/opui/agnos").catch(() => null);
-        refreshAgnosUi(st);
-        if (!st?.install_running && st?.job?.status !== "running") clearInterval(poll);
-      }, 2000);
-      runAgnosUpdateFlow({ readyToReboot: false });
-    }
-    container.appendChild(agnosBlock);
-  }
+  body.appendChild(version);
 
   const download = document.createElement("div");
   download.id = "software-download-row";
@@ -3718,11 +4301,37 @@ async function renderSoftwarePanel(container, data) {
     const label = btn?.textContent?.trim();
     const action = label === t("DOWNLOAD") ? "updater_download" : "updater_check";
     if (btn) btn.disabled = true;
+    softwareDownloadWaitUntil = Date.now() + SOFTWARE_UPDATER_TIMEOUT_MS;
+    applySoftwareCustom(panelDataRef);
     const res = await apiPost(`/api/opui/action/${action}`);
-    if (!res.ok) toast(res.error || t("Failed"));
-    else if (btn) btn.disabled = false;
+    if (!res.ok) {
+      softwareDownloadWaitUntil = 0;
+      toast(res.error || t("Failed"));
+      applySoftwareCustom(panelDataRef);
+      return;
+    }
+    const deadline = Date.now() + SOFTWARE_UPDATER_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      try {
+        const sw = await apiGet("/api/opui/software");
+        if (sw?.ok) {
+          panelDataRef = { ...panelDataRef, software: sw };
+          applySoftwareCustom(sw);
+          if (sw.updater_state && sw.updater_state !== "idle") {
+            softwareDownloadWaitUntil = 0;
+            return;
+          }
+        }
+      } catch { /* keep polling until timeout */ }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+    softwareDownloadWaitUntil = 0;
+    try {
+      const sw = await apiGet("/api/opui/software");
+      if (sw?.ok) applySoftwareCustom(sw);
+    } catch { applySoftwareCustom(panelDataRef); }
   });
-  container.appendChild(download);
+  body.appendChild(download);
 
   const install = document.createElement("div");
   install.id = "software-install-row";
@@ -3749,7 +4358,7 @@ async function renderSoftwarePanel(container, data) {
     await runSoftwareInstallFlow();
     if (btn) btn.disabled = false;
   });
-  container.appendChild(install);
+  body.appendChild(install);
 
   if (sw.branches?.length) {
     const branchRow = document.createElement("div");
@@ -3763,7 +4372,7 @@ async function renderSoftwarePanel(container, data) {
     branchRow.querySelector("button")?.addEventListener("click", async () => {
       const idx = Math.max(0, sw.branches.indexOf(sw.target_branch));
       const pick = await showMultiOption({
-        title: t("Target Branch"),
+        title: t("Select a branch"),
         options: sw.branches,
         selected: idx,
         current: idx,
@@ -3776,10 +4385,10 @@ async function renderSoftwarePanel(container, data) {
         requestPanelRefresh();
       }
     });
-    container.appendChild(branchRow);
+    body.appendChild(branchRow);
   }
 
-  appendPanelWidgets(container, data);
+  appendPanelWidgets(body, data);
   await fetchWebUiUpdate({ fetchRemote: true });
   syncWebUiUpdateRow();
 
@@ -3813,6 +4422,13 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function createPanelBody(container, extraClass = "") {
+  const body = document.createElement("div");
+  body.className = `opui-panel-body${extraClass ? ` ${extraClass}` : ""}`;
+  container.appendChild(body);
+  return body;
 }
 
 function escapeAttr(s) {

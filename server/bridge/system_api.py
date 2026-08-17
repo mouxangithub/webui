@@ -48,7 +48,8 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       return {"ok": True, "action": action}
 
     if action == "pair_device":
-      return {"ok": True, "action": action, "url": "https://connect.comma.ai/"}
+      from webui.server.bridge.device_api import device_pair_url
+      return device_pair_url()
 
     if action == "updater_check":
       subprocess.run("pkill -SIGUSR1 -f openpilot.system.updated.updated", shell=True, check=False)
@@ -154,11 +155,22 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       if not branch:
         return {"ok": False, "error": "branch required"}
       p.put("UpdaterTargetBranch", branch, block=True)
+      subprocess.run("pkill -SIGUSR1 -f openpilot.system.updated.updated", shell=True, check=False)
       return {"ok": True, "action": action, "branch": branch}
 
     return {"ok": False, "error": f"unknown action: {action}"}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
+
+
+def _sort_branches(branches: list[str], git_branch: str) -> list[str]:
+  """Match openpilot selfdrive/ui/layouts/settings/software.py branch picker order."""
+  ordered = list(branches)
+  for b in [git_branch, "devel-staging", "devel", "nightly", "nightly-dev", "master"]:
+    if b in ordered:
+      ordered.remove(b)
+      ordered.insert(0, b)
+  return ordered
 
 
 def software_status(*, started: bool | None = None) -> dict[str, Any]:
@@ -281,7 +293,10 @@ def software_status(*, started: bool | None = None) -> dict[str, Any]:
       "new_release_notes": _text("UpdaterNewReleaseNotes"),
       "target_branch": p.get("UpdaterTargetBranch") or "",
       "git_branch": p.get("GitBranch") or "",
-      "branches": [b for b in (p.get("UpdaterAvailableBranches") or "").split(",") if b],
+      "branches": _sort_branches(
+        [b for b in (p.get("UpdaterAvailableBranches") or "").split(",") if b],
+        p.get("GitBranch") or "",
+      ),
       "failed_count": failed_count,
       "last_update_time": last_update_raw or "",
       "last_update_epoch": last_update_epoch_out,

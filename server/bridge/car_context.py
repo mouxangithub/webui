@@ -29,6 +29,7 @@ class WebuiCarContext:
   torque_override_lat_accel_factor: float = 0.0
   has_longitudinal_control: bool = False
   has_icbm: bool = False
+  icbm_available: bool = False
   is_sp_release: bool = False
   brand: str = ""
   platform: str = ""
@@ -150,10 +151,15 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
         ctx.CP_SP.intelligentCruiseButtonManagementAvailable
         and p.get_bool("IntelligentCruiseButtonManagement")
       )
+      ctx.icbm_available = bool(
+        ctx.CP_SP.intelligentCruiseButtonManagementAvailable
+        and not ctx.has_longitudinal_control
+      )
       ctx.pcm_cruise_speed = bool(ctx.CP_SP.pcmCruiseSpeed)
     else:
       ctx.CP_SP = None
       ctx.has_icbm = False
+      ctx.icbm_available = False
       ctx.pcm_cruise_speed = None
 
     bundle = p.get("CarPlatformBundle")

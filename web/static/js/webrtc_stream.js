@@ -539,7 +539,7 @@ export async function startRoadStream(videoEl, wrapEl) {
   if (!isPreviewStreamEnabled()) {
     wrap?.classList.add("streaming");
     applyPreviewOffUi(wrap);
-    notifyCameraReady(false);
+    notifyCameraReady(true);
     return;
   }
 

@@ -35,7 +35,8 @@ from webui.server.bridge.osm_api import osm_download_progress, osm_fetch_regions
 from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select, vehicle_brand_widgets
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
 from webui.server.bridge.firehose_api import firehose_status
-from webui.server.bridge.device_api import device_extras, driver_view_status, regulatory_html, set_driver_view, set_language
+from webui.server.bridge.storage_api import clear_storage, snapshot_storage
+from webui.server.bridge.device_api import device_extras, device_pair_url, driver_view_status, regulatory_html, set_driver_view, set_language
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.onboarding_api import accept_sunnylink_consent, accept_terms, complete_training, onboarding_status
@@ -361,12 +362,32 @@ async def api_firehose(_request: web.Request) -> web.Response:
   return json_response(firehose_status())
 
 
+async def api_storage(_request: web.Request) -> web.Response:
+  force = _request.rel_url.query.get("force") == "1"
+  return json_response(await asyncio.to_thread(snapshot_storage, force=force))
+
+
+async def api_storage_clear(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    category = str(body.get("category", "")).strip()
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  if not category:
+    return json_response({"ok": False, "error": "category required"}, status=400)
+  return json_response(await asyncio.to_thread(clear_storage, category))
+
+
 async def api_stream_health(_request: web.Request) -> web.Response:
   return json_response(snapshot_stream_health())
 
 
 async def api_device_extras(_request: web.Request) -> web.Response:
   return json_response(device_extras())
+
+
+async def api_device_pair(_request: web.Request) -> web.Response:
+  return json_response(device_pair_url())
 
 
 async def api_torque_versions(_request: web.Request) -> web.Response:
@@ -527,8 +548,11 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/sunnylink/status", api_sunnylink_status)
   app.router.add_get("/api/opui/sunnylink/pair", api_sunnylink_pair)
   app.router.add_get("/api/opui/firehose", api_firehose)
+  app.router.add_get("/api/opui/storage", api_storage)
+  app.router.add_post("/api/opui/storage/clear", api_storage_clear)
   app.router.add_get("/api/opui/stream/health", api_stream_health)
   app.router.add_get("/api/opui/device/extras", api_device_extras)
+  app.router.add_get("/api/opui/device/pair", api_device_pair)
   app.router.add_get("/api/opui/device/driver_view", api_driver_view_status)
   app.router.add_post("/api/opui/device/driver_view", api_driver_view_set)
   app.router.add_get("/api/opui/steering/torque-versions", api_torque_versions)

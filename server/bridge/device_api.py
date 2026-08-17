@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
 
 from webui.server.bridge.headless_util import is_headless_mode
+from webui.server.bridge.qr_data_url import qr_data_url as _qr_data_url
 
 # Fallback when languages.json is unavailable (codes match openpilot GUI).
 LANGUAGES = [
@@ -67,6 +69,50 @@ def _fcc_path() -> Path | None:
   return None
 
 
+def _read_calibration_extra(p) -> dict[str, Any]:
+  """Mirror openpilot selfdrive/ui/layouts/settings/device.py _update_calib_description."""
+  cal: dict[str, Any] = {
+    "has_mount_angles": False,
+    "lag_perc": None,
+    "torque_applicable": False,
+    "torque_perc": None,
+  }
+  try:
+    from cereal import log
+    import openpilot.cereal.messaging as messaging
+
+    calib_bytes = p.get("CalibrationParams")
+    if calib_bytes:
+      try:
+        calib = messaging.log_from_bytes(calib_bytes, log.Event).extrinsicsCalibration
+        if calib.calStatus != log.ExtrinsicsCalibration.Status.uncalibrated:
+          cal["has_mount_angles"] = True
+          cal["pitch_deg"] = math.degrees(calib.rpyCalib[1])
+          cal["yaw_deg"] = math.degrees(calib.rpyCalib[2])
+      except Exception:
+        pass
+
+    lag_bytes = p.get("LiveDelay")
+    if lag_bytes:
+      try:
+        cal["lag_perc"] = int(messaging.log_from_bytes(lag_bytes, log.Event).lateralDelay.calPerc)
+      except Exception:
+        pass
+
+    torque_bytes = p.get("LiveTorqueParameters")
+    if torque_bytes:
+      try:
+        torque = messaging.log_from_bytes(torque_bytes, log.Event).lateralTorqueParameters
+        if torque.useParams:
+          cal["torque_applicable"] = True
+          cal["torque_perc"] = int(torque.calPerc)
+      except Exception:
+        pass
+  except Exception:
+    pass
+  return cal
+
+
 def regulatory_html() -> dict[str, Any]:
   path = _fcc_path()
   if not path:
@@ -95,14 +141,12 @@ def device_extras() -> dict[str, Any]:
     return {
       "ok": True,
       "calibration": {
-        "valid": True,
-        "pitch": 0.02,
-        "yaw": -0.01,
-        "roll": 0.0,
-        "desc_html": (
-          "<p>Device calibration is valid.</p>"
-          "<p>pitch 0.02 yaw -0.01</p>"
-        ),
+        "has_mount_angles": True,
+        "pitch_deg": 1.2,
+        "yaw_deg": -0.5,
+        "lag_perc": 100,
+        "torque_applicable": True,
+        "torque_perc": 85,
       },
       "languages": _language_options(),
       "current_language": _normalize_lang_id(lang),
@@ -113,34 +157,10 @@ def device_extras() -> dict[str, Any]:
       "driver_view_enabled": False,
     }
   try:
-    import openpilot.cereal.messaging as messaging
     from openpilot.common.params import Params
 
     p = Params()
-    sm = messaging.SubMaster(["extrinsicsCalibration"], poll="extrinsicsCalibration")
-    sm.update(300)
-    cal = {
-      "valid": False,
-      "pitch": 0,
-      "yaw": 0,
-      "roll": 0,
-      "desc_html": "<p>Calibration unknown</p>",
-    }
-    if sm.valid.get("extrinsicsCalibration"):
-      lc = sm["extrinsicsCalibration"]
-      pitch = round(float(getattr(lc, "rpyCalib", [0, 0, 0])[0]), 3)
-      yaw = round(float(getattr(lc, "rpyCalib", [0, 0, 0])[1]), 3)
-      roll = round(float(getattr(lc, "rpyCalib", [0, 0, 0])[2]), 3)
-      cal = {
-        "valid": bool(getattr(lc, "calStatus", 0)),
-        "pitch": pitch,
-        "yaw": yaw,
-        "roll": roll,
-        "desc_html": (
-          f"<p>pitch {pitch}° yaw {yaw}° roll {roll}°</p>"
-          "<p>Reset if device was moved or windshield replaced.</p>"
-        ),
-      }
+    cal = _read_calibration_extra(p)
     lang = _normalize_lang_id(str(p.get("LanguageSetting") or "en"))
     return {
       "ok": True,
@@ -196,5 +216,23 @@ def set_driver_view(enabled: bool) -> dict[str, Any]:
       "driver_view_enabled": p.get_bool("IsDriverViewEnabled"),
       "headless": is_headless_mode(),
     }
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+
+
+def device_pair_url() -> dict[str, Any]:
+  """Mirror PairingDialog QR URL (connect.comma.ai)."""
+  try:
+    if os.environ.get("WEBUI_DEV_PC") == "1":
+      url = "https://connect.comma.ai/?pair=dev-preview"
+      return {"ok": True, "url": url, "qr_data_url": _qr_data_url(url), "dev_pc": True}
+
+    from openpilot.common.api import Api
+    from openpilot.common.params import Params
+
+    dongle_id = Params().get("DongleId") or ""
+    token = Api(dongle_id).get_token({"pair": True})
+    url = f"https://connect.comma.ai/?pair={token}"
+    return {"ok": True, "url": url, "qr_data_url": _qr_data_url(url)}
   except Exception as exc:
     return {"ok": False, "error": str(exc)}

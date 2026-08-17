@@ -9,13 +9,14 @@ from urllib.parse import parse_qs, urlparse
 
 from webui.server.bridge.design_tokens import tokens_payload
 from webui.server.bridge.developer_api import developer_error_log
-from webui.server.bridge.device_api import device_extras, regulatory_html, set_language
+from webui.server.bridge.device_api import device_extras, device_pair_url, regulatory_html, set_language
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.firehose_api import firehose_status
+from webui.server.bridge.storage_api import clear_storage, snapshot_storage
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.model_overlay import snapshot_model_overlay
-from webui.server.bridge.models_api import models_select, models_status
+from webui.server.bridge.models_api import models_select, models_status, models_toggle_favorite
 from webui.server.bridge.network_api import (
   network_advanced_status,
   wifi_connect,
@@ -96,6 +97,8 @@ def custom_panel_data(panel_id: str) -> dict[str, Any] | None:
     return software_status()
   if panel_id == "firehose":
     return firehose_status()
+  if panel_id == "storage":
+    return snapshot_storage()
   if panel_id == "sunnylink":
     return sunnylink_status()
   if panel_id == "trips":
@@ -223,6 +226,9 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
       index = body.get("index")
       return models_select(str(body.get("ref", "")), int(index) if index is not None else None)
 
+    if method == "POST" and clean_path == "/api/opui/models/favorite":
+      return models_toggle_favorite(str(body.get("ref", "")))
+
     if method == "GET" and clean_path == "/api/opui/tokens":
       return {"ok": True, **tokens_payload()}
 
@@ -280,8 +286,21 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
     if method == "GET" and clean_path == "/api/opui/firehose":
       return firehose_status()
 
+    if method == "GET" and clean_path == "/api/opui/storage":
+      force = query.get("force") == "1"
+      return snapshot_storage(force=force)
+
+    if method == "POST" and clean_path == "/api/opui/storage/clear":
+      category = str(body.get("category", "")).strip()
+      if not category:
+        return {"ok": False, "error": "category required"}
+      return clear_storage(category)
+
     if method == "GET" and clean_path == "/api/opui/device/extras":
       return device_extras()
+
+    if method == "GET" and clean_path == "/api/opui/device/pair":
+      return device_pair_url()
 
     if method == "GET" and clean_path == "/api/opui/stream/health":
       from webui.server.bridge.stream_health_api import snapshot_stream_health

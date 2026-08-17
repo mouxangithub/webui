@@ -15,7 +15,7 @@ function paramIsOn(val) {
   return v === "1" || v === "true" || v === "on";
 }
 
-function experimentalE2eHtml() {
+export function experimentalE2eHtml() {
   return (
     `<h1>${tr("Experimental Mode")}</h1><br>`
     + `<p>${tr(
@@ -112,7 +112,13 @@ export function showConfirm(opts) {
 }
 
 export function showQrPair(opts = {}) {
-  const { title = tr("Scan QR code"), url = "", qrDataUrl = "" } = opts;
+  const {
+    title = tr("Scan QR code"),
+    url = "",
+    qrDataUrl = "",
+    onPoll = null,
+    pollMs = 1500,
+  } = opts;
   return new Promise((resolve) => {
     const root = document.getElementById("modal-qr");
     const titleEl = document.getElementById("modal-qr-title");
@@ -132,6 +138,7 @@ export function showQrPair(opts = {}) {
     if (openBtn) openBtn.textContent = tr("Open link");
     if (closeBtn) closeBtn.textContent = tr("Close");
     const finish = () => {
+      if (pollTimer) clearInterval(pollTimer);
       popModal(root);
       openBtn?.removeEventListener("click", onOpen);
       closeBtn?.removeEventListener("click", onClose);
@@ -141,6 +148,14 @@ export function showQrPair(opts = {}) {
       if (url) window.open(url, "_blank", "noopener");
     };
     const onClose = () => finish();
+    let pollTimer = null;
+    if (typeof onPoll === "function") {
+      pollTimer = setInterval(async () => {
+        try {
+          if (await onPoll()) finish();
+        } catch { /* ignore poll errors */ }
+      }, pollMs);
+    }
     openBtn?.addEventListener("click", onOpen);
     closeBtn?.addEventListener("click", onClose, { once: true });
     pushModal(root, onClose);
@@ -291,6 +306,7 @@ export function showTree(opts) {
     selectedRef = "",
     searchable = true,
     onFavorite,
+    getFolders,
   } = opts;
 
   return new Promise((resolve) => {
@@ -315,9 +331,16 @@ export function showTree(opts) {
     if (selectBtn) selectBtn.textContent = tr("Select");
     let pick = selectedRef;
     let query = "";
+    let treeFolders = folders;
     const expanded = new Set(
-      folders.filter((f) => f.name != null && f.name !== "").map((f) => f.name),
+      treeFolders.filter((f) => f.name != null && f.name !== "").map((f) => f.name),
     );
+
+    const reloadFolders = async () => {
+      if (typeof getFolders === "function") {
+        treeFolders = await getFolders();
+      }
+    };
 
     const syncSelectBtn = () => {
       if (!selectBtn) return;
@@ -335,7 +358,7 @@ export function showTree(opts) {
       body.innerHTML = "";
       const q = query.toLowerCase().trim();
       const searching = !!q;
-      for (const folder of folders) {
+      for (const folder of treeFolders) {
         const bundles = (folder.bundles || []).filter((b) => {
           const label = (b.name || b.ref || "").toLowerCase();
           const folderName = folderLabel(folder.name).toLowerCase();
@@ -367,10 +390,11 @@ export function showTree(opts) {
             const star = document.createElement("span");
             star.className = "opui-tree-star";
             star.textContent = b.fav ? "★" : "☆";
-            star.addEventListener("click", (e) => {
+            star.addEventListener("click", async (e) => {
               e.stopPropagation();
-              onFavorite(b.ref);
-              b.fav = !b.fav;
+              const result = await onFavorite(b.ref);
+              if (result === false) return;
+              await reloadFolders();
               render();
             });
             row.appendChild(star);
@@ -445,14 +469,18 @@ function escapeHtml(s) {
 export function bindRowExpand(row, w) {
   const text = row.querySelector(".opui-sp-row-text");
   if (!text) return;
-  const hasDesc = !!(w.desc || w.confirm_experimental);
+  const hasDesc = !!(w.desc || w.desc_html || w.confirm_experimental);
   if (!hasDesc) return;
 
-  if (w.desc && !text.querySelector(".opui-sp-row-desc--expandable:not(.opui-sp-row-desc--experimental)")) {
+  if ((w.desc || w.desc_html) && !text.querySelector(".opui-sp-row-desc--expandable:not(.opui-sp-row-desc--experimental)")) {
     const descEl = document.createElement("div");
     descEl.className = "opui-sp-row-desc opui-sp-row-desc--expandable";
     descEl.hidden = true;
-    descEl.innerHTML = escapeHtml(w.desc).replace(/\n/g, "<br>");
+    if (w.desc_html) {
+      descEl.innerHTML = w.desc_html;
+    } else {
+      descEl.innerHTML = escapeHtml(w.desc).replace(/\n/g, "<br>");
+    }
     text.appendChild(descEl);
   }
   if (w.confirm_experimental && !text.querySelector(".opui-sp-row-desc--experimental")) {
@@ -481,8 +509,6 @@ export function createSpToggle(w, panelData, globalState, handlers) {
   row.className = "opui-sp-row" + (w.stacked ? " opui-sp-row--stacked opui-sp-row--toggle-below" : "");
   const checked = paramIsOn(w.value);
   const disabled = w.locked || (w.needs_cycle && globalState.engaged) || (w.offroad_only && !globalState.is_offroad);
-  const iconSrc = w.icon ? assetUrl(checked && w.icon_active ? w.icon_active : w.icon) : "";
-  const iconHtml = iconSrc ? `<img class="opui-sp-row-icon" src="${iconSrc}" alt="" />` : "";
   const toggleHtml = `
     <label class="opui-sp-toggle${disabled ? " disabled" : ""}${checked ? " on" : ""}">
       <input type="checkbox" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
@@ -493,7 +519,7 @@ export function createSpToggle(w, panelData, globalState, handlers) {
       ${w.label ? `<div class="opui-sp-row-title">${escapeHtml(w.label)}${w.locked ? " 🔒" : ""}</div>` : ""}
       ${w.needs_cycle ? `<div class="opui-sp-row-desc opui-sp-row-desc--hint">${tr("Changing this setting will restart sunnypilot if the car is powered on.")}</div>` : ""}
     </div>`;
-  row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${iconHtml}${toggleHtml}${textHtml}`;
+  row.innerHTML = w.stacked ? `${textHtml}${toggleHtml}` : `${toggleHtml}${textHtml}`;
   bindRowExpand(row, { ...w, desc: w.desc || "" });
   const input = row.querySelector("input");
   const label = row.querySelector(".opui-sp-toggle");
@@ -523,7 +549,7 @@ export function createSpToggle(w, panelData, globalState, handlers) {
         return;
       }
     }
-    if (w.confirm_experimental && next) {
+    if (w.confirm_experimental && next && !globalState.experimental_mode_confirmed) {
       const ok = await showConfirm({
         rich: true,
         message: experimentalE2eHtml(),

@@ -258,6 +258,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   has_longitudinal = car_ctx.has_longitudinal_control
   alpha_long_available = car_ctx.alpha_long_available
   has_icbm = car_ctx.has_icbm
+  icbm_available = car_ctx.icbm_available
   pcm_cruise = car_ctx.pcm_cruise
   torque_control_allowed = car_ctx.torque_control_allowed
   lateral_jerk_torque = car_ctx.lateral_jerk_torque
@@ -434,6 +435,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "personality_index": _personality_index(personality),
     "has_longitudinal_control": has_longitudinal,
     "has_icbm": has_icbm,
+    "icbm_available": icbm_available,
     "pcm_cruise": pcm_cruise,
     "alpha_longitudinal_available": alpha_long_available,
     "cp_loaded": cp_loaded,
@@ -468,8 +470,11 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       "thermal": thermal,
       "cpu_temp": _cpu_temp_c(ds),
       "memory_usage_percent": int(ds.memoryUsagePercent) if hasattr(ds, "memoryUsagePercent") else None,
+      "gpu_usage_percent": int(ds.gpuUsagePercent) if hasattr(ds, "gpuUsagePercent") else None,
+      "cpu_usage_percent": max(int(v) for v in ds.cpuUsagePercent) if hasattr(ds, "cpuUsagePercent") and len(ds.cpuUsagePercent) else None,
       "livestream_encoder_lagging": _livestream_encoder_lagging(),
-      "free_space_percent": int(ds.freeSpacePercent) if hasattr(ds, "freeSpacePercent") else None,
+      "free_space_percent": round(float(ds.freeSpacePercent)) if hasattr(ds, "freeSpacePercent") and ds.freeSpacePercent == ds.freeSpacePercent else None,
+      "power_draw_w": round(float(ds.powerDrawW), 1) if hasattr(ds, "powerDrawW") and ds.powerDrawW == ds.powerDrawW else None,
       "athena_status": _athena_connection_status(ds),
       "panda_unknown": panda_unknown,
       "panda_online": panda_online,

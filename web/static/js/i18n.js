@@ -1,10 +1,82 @@
 let strings = {};
 let language = "en";
 let lastLang = "";
+let poCode = "en";
+
+/** Bundled fallbacks when /api/opui/i18n has not picked up WebUI-only keys yet. */
+const LOCAL_FALLBACKS = {
+  en: {
+    Refresh: "Refresh",
+    "webui_storage_routes_autodelete_hint": (
+      "Routes auto-delete when free space is below 10% or 5 GB (oldest first). "
+      + "Upload is not required. Starred routes are kept."
+    ),
+    "webui_storage_routes_external_includes": "Includes {size} on external SSD.",
+    "webui_storage_external_note": (
+      "Route recordings on external SSD are moved here when internal storage is low."
+    ),
+    "Clear starred routes": "Clear starred routes",
+    "Deletes route recordings you bookmarked while driving. Other routes are not affected.": (
+      "Deletes route recordings you bookmarked while driving. Other routes are not affected."
+    ),
+    "webui_storage_starred_count": "{count} starred routes on device.",
+    "webui_storage_starred_more": "and {count} more…",
+    "webui_storage_starred_confirm": (
+      "This will permanently delete {count} starred routes ({size}). Continue?"
+    ),
+  },
+  "zh-CHS": {
+    Refresh: "刷新",
+    "webui_storage_routes_autodelete_hint": (
+      "可用空间低于 10% 或 5 GB 时，系统会自动删除最旧路线（与是否上传无关），收藏路线会保留。"
+    ),
+    "webui_storage_routes_external_includes": "其中外置 SSD 约 {size}。",
+    "webui_storage_external_note": (
+      "内置存储不足时，旧路线会迁移到此盘；外置盘空间不足时也会自动删除最旧路线。"
+    ),
+    "Clear starred routes": "清理收藏路线",
+    "Deletes route recordings you bookmarked while driving. Other routes are not affected.": (
+      "删除行驶中收藏的路线录像，不会影响其他未收藏路线。"
+    ),
+    "webui_storage_starred_count": "设备上共有 {count} 条收藏路线。",
+    "webui_storage_starred_more": "另有 {count} 条…",
+    "webui_storage_starred_confirm": "将永久删除 {count} 条收藏路线（约 {size}），是否继续？",
+  },
+  "zh-CHT": {
+    Refresh: "重新整理",
+    "webui_storage_routes_autodelete_hint": (
+      "可用空間低於 10% 或 5 GB 時，系統會自動刪除最舊路線（與是否上傳無關），收藏路線會保留。"
+    ),
+    "webui_storage_routes_external_includes": "其中外接 SSD 約 {size}。",
+    "webui_storage_external_note": (
+      "內建儲存不足時，舊路線會遷移到此碟；外接碟空間不足時也會自動刪除最舊路線。"
+    ),
+    "Clear starred routes": "清理收藏路線",
+    "Deletes route recordings you bookmarked while driving. Other routes are not affected.": (
+      "刪除行駛中收藏的路線錄影，不會影響其他未收藏路線。"
+    ),
+    "webui_storage_starred_count": "裝置上共有 {count} 條收藏路線。",
+    "webui_storage_starred_more": "另有 {count} 條…",
+    "webui_storage_starred_confirm": "將永久刪除 {count} 條收藏路線（約 {size}），是否繼續？",
+  },
+};
+
+function resolvePoCode(lang, code) {
+  if (code) return code;
+  const l = String(lang || "en");
+  if (l === "zh-CHT") return "zh-CHT";
+  if (l === "zh" || l === "zh-CHS" || l.startsWith("zh")) return "zh-CHS";
+  return "en";
+}
+
+function localFallback(text) {
+  const loc = LOCAL_FALLBACKS[poCode] || LOCAL_FALLBACKS.en;
+  return loc?.[text] || LOCAL_FALLBACKS.en?.[text] || "";
+}
 
 export function tr(text) {
   if (!text) return "";
-  return strings[text] || text;
+  return strings[text] || localFallback(text) || text;
 }
 
 /** Plural helper — keys like "{} ALERT" / "{} ALERTS" with `{}` placeholder. */
@@ -103,6 +175,7 @@ export function applyI18nPayload(data, force = false) {
   }
   language = data.language || "en";
   lastLang = language;
+  poCode = resolvePoCode(language, data.po_code);
   strings = data.strings || {};
   const po = data.po_code || language;
   document.documentElement.lang = String(po).startsWith("zh") ? "zh-CN" : (po === "en" ? "en" : po);

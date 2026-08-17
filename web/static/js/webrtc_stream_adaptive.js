@@ -45,15 +45,23 @@ export function isPreviewStreamEnabled() {
 }
 
 export function isOverlayAllowed() {
-  return overlayAllowed && isPreviewStreamEnabled();
+  return overlayAllowed && !document.hidden;
 }
 
 export function shouldDrawModelOverlay() {
-  return isPreviewStreamEnabled() && overlayAllowed && !document.hidden;
+  return overlayAllowed && !document.hidden;
 }
 
 export function getOverlayFpsHint() {
-  if (!isPreviewStreamEnabled() || effectiveQuality === "off") return 0;
+  if (!overlayAllowed) return 0;
+  if (!isPreviewStreamEnabled()) {
+    let fps = 10;
+    if (typeof recommendedOverlayFps === "number" && recommendedOverlayFps > 0) {
+      fps = Math.min(fps, recommendedOverlayFps);
+    }
+    if (window.__OPUI_HEADLESS) fps = Math.min(fps, 5);
+    return fps;
+  }
   let fps = 15;
   if (!overlayAllowed || effectiveQuality === "low" || thermalHot || forcedLowReason) fps = 5;
   else if (effectiveQuality === "med" || deviceWarm) fps = 10;
@@ -153,8 +161,7 @@ function updateOverlayPolicy() {
 export async function applyStreamQuality(pref = getQualityPreference(), opts = {}) {
   if (pref === "off") {
     effectiveQuality = "off";
-    overlayAllowed = false;
-    window.dispatchEvent(new CustomEvent("opui:overlay-policy", { detail: { allowed: false } }));
+    updateOverlayPolicy();
     window.dispatchEvent(new CustomEvent("opui:stream-quality-applied", { detail: { quality: "off" } }));
     window.dispatchEvent(new CustomEvent("opui:preview-stream-changed", { detail: { enabled: false } }));
     return "off";

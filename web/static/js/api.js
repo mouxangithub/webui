@@ -30,7 +30,17 @@ async function fetchJson(path, init = {}) {
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(path, { ...init, signal: ctrl.signal });
-    return r.json();
+    const text = await r.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { ok: false, error: text || `HTTP ${r.status}` };
+    }
+    if (!r.ok && data.ok !== false) {
+      data = { ok: false, error: data.error || text || `HTTP ${r.status}` };
+    }
+    return data;
   } finally {
     clearTimeout(timer);
   }

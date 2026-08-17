@@ -1,6 +1,7 @@
-/** Steering torque arc (mirrors mici/onroad/torque_bar.py arc_bar_pts + gradient). */
+/** Steering torque arc (mirrors sunnypilot/onroad/hud_renderer.py TorqueBar scale=3). */
 
 const TORQUE_ANGLE_SPAN = 12.7;
+const TORQUE_SCALE = 3.0;
 let filtered = 0;
 let alphaFiltered = 0;
 let torqueAnimId = 0;
@@ -123,30 +124,34 @@ function paintTorque(st, devUi) {
 
   const wrap = document.getElementById("camera-wrap");
   const w = wrap?.clientWidth || canvas.clientWidth || 1860;
+  const roadH = wrap?.clientHeight || 680;
+  const canvasH = Math.round(60 * TORQUE_SCALE);
   const dpr = window.devicePixelRatio || 1;
   const pxW = Math.max(1, Math.round(w * dpr));
-  const pxH = Math.max(1, Math.round(120 * dpr));
+  const pxH = Math.max(1, Math.round(canvasH * dpr));
 
   if (canvas.width !== pxW || canvas.height !== pxH) {
     canvas.width = pxW;
     canvas.height = pxH;
     canvas.style.width = `${w}px`;
-    canvas.style.height = "120px";
+    canvas.style.height = `${canvasH}px`;
   }
 
   const engaged = st.ui_status === "engaged" || st.ui_status === "lat_only";
   const util = Math.abs(filtered);
-  const offset = lerp(22, 26, clamp((util - 0.5) / 0.5, 0, 1));
-  const thickness = lerp(14, 56, clamp((util - 0.5) / 0.5, 0, 1));
+  const offset = lerp(22 * TORQUE_SCALE, 26 * TORQUE_SCALE, clamp((util - 0.5) / 0.5, 0, 1));
+  const thickness = lerp(14 * TORQUE_SCALE, 56 * TORQUE_SCALE, clamp((util - 0.5) / 0.5, 0, 1));
+  const capRadius = 7 * TORQUE_SCALE;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, 120);
+  ctx.clearRect(0, 0, w, canvasH);
 
   const cx = w / 2 + 8;
-  const radius = 1200;
-  const cy = 120 + radius - offset;
+  const radius = 1200 * TORQUE_SCALE;
+  const canvasTopInRoad = roadH - canvasH;
+  const cy = roadH + radius - offset - canvasTopInRoad;
   const span = TORQUE_ANGLE_SPAN * alphaFiltered;
   const top = -90;
   const bgA0 = top - span / 2;
@@ -154,7 +159,7 @@ function paintTorque(st, devUi) {
   const bgAlpha = lerp(0.25, 0.5, clamp((util - 0.5) / 0.5, 0, 1)) * alphaFiltered;
   const midR = radius + thickness / 2;
 
-  const bgPts = arcBarPts(midR, thickness, bgA0, bgA1).map(([x, y]) => [x + cx, y + cy]);
+  const bgPts = arcBarPts(midR, thickness, bgA0, bgA1, capRadius).map(([x, y]) => [x + cx, y + cy]);
   fillPoly(ctx, bgPts, rgba({ r: 255, g: 255, b: 255, a: engaged ? bgAlpha : 0.15 * alphaFiltered }));
 
   const fillEnd = top + (span / 2) * filtered;
@@ -173,7 +178,7 @@ function paintTorque(st, devUi) {
     start = end = { r: 255, g: 255, b: 255, a: 0.35 * alphaFiltered };
   }
 
-  const slPts = arcBarPts(midR, thickness, top, fillEnd).map(([x, y]) => [x + cx, y + cy]);
+  const slPts = arcBarPts(midR, thickness, top, fillEnd, capRadius).map(([x, y]) => [x + cx, y + cy]);
   const minX = Math.min(...bgPts.map((p) => p[0]));
   const maxX = Math.max(...bgPts.map((p) => p[0]));
   const gradStart = filtered < 0 ? cx * 0.35 + minX * 0.65 : cx;
@@ -184,9 +189,9 @@ function paintTorque(st, devUi) {
   fillPoly(ctx, slPts, grad);
 
   if (util < 0.5) {
-    const dotY = 120 - offset - thickness / 2;
+    const dotY = canvasH - offset - thickness / 2;
     ctx.beginPath();
-    ctx.arc(cx, dotY, 5, 0, Math.PI * 2);
+    ctx.arc(cx, dotY, (10 / 2) * TORQUE_SCALE, 0, Math.PI * 2);
     ctx.fillStyle = rgba({ r: 182, g: 182, b: 182, a: 0.9 * alphaFiltered });
     ctx.fill();
   }

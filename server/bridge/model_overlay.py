@@ -15,7 +15,6 @@ _overlay_sm = None
 _cache_lock = threading.Lock()
 
 from webui.server.bridge.cereal_services import OVERLAY_SERVICES, make_submaster
-from webui.server.bridge.model_projection import ModelProjector
 
 _OVERLAY_SERVICES = list(OVERLAY_SERVICES)
 
@@ -297,6 +296,7 @@ def _get_projector(width: int, height: int):
   global _projector
 
   if _projector is None:
+    from webui.server.bridge.model_projection import ModelProjector
     _projector = ModelProjector(width, height)
   else:
     _projector.set_viewport(width, height)

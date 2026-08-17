@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/opui.css?v=101" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=116" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -128,10 +128,10 @@
         </div>
         <div id="dm-arc-wrap" class="opui-dm-wrap" hidden>
         <svg id="dm-arc" class="opui-dm-arc" viewBox="0 0 192 192">
-          <circle class="dm-arc-bg" cx="96" cy="96" r="80" fill="rgba(0,0,0,0.65)"/>
-          <polyline class="dm-arc-face" fill="none" stroke="rgba(255,255,255,0.65)" stroke-width="5" stroke-linejoin="round" points=""/>
-          <polyline class="dm-arc-h" fill="none" stroke-linecap="round" stroke-linejoin="round" points=""/>
-          <polyline class="dm-arc-v" fill="none" stroke-linecap="round" stroke-linejoin="round" points=""/>
+          <circle class="dm-arc-bg" cx="96" cy="96" r="96" fill="rgba(0,0,0,0.27)"/>
+          <path class="dm-arc-face" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round" d=""/>
+          <path class="dm-arc-h" fill="none" stroke-linecap="round" stroke-linejoin="round" d=""/>
+          <path class="dm-arc-v" fill="none" stroke-linecap="round" stroke-linejoin="round" d=""/>
         </svg>
         <img class="opui-dm-face" src="/api/opui/assets/icons/driver_face.png" alt="" />
         </div>
@@ -352,6 +352,6 @@
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=104"></script>
+  <script type="module" src="/static/js/app.js?v=115"></script>
 </body>
 </html>

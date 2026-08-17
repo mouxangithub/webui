@@ -77,5 +77,13 @@ def enforce_param_constraints(p: Any | None = None) -> None:
       p.remove("CustomAccIncrementsEnabled")
       p.remove("SmartCruiseControlVision")
       p.remove("SmartCruiseControlMap")
+
+    if not ctx.sla_available:
+      try:
+        mode = int(p.get("SpeedLimitMode", return_default=True) or 0)
+        if mode == 3:
+          p.put("SpeedLimitMode", 2, block=True)
+      except Exception:
+        pass
   except Exception:
     pass
