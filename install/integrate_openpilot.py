@@ -21,17 +21,35 @@ START_WEBUI_FN = r'''  start_webui() {
     local web_py=python3.12
     command -v "$web_py" >/dev/null 2>&1 || web_py=python3
     local venv_site="/usr/local/venv/lib/python3.12/site-packages"
+    local pydeps="$root/.pydeps"
     local py_path="$root"
-    [ -d "$venv_site" ] && py_path="$root:$venv_site"
+    [ -d "$venv_site" ] && py_path="$py_path:$venv_site"
+    [ -d "$pydeps" ] && py_path="$py_path:$pydeps"
+    # AGNOS rootfs is read-only; install aiohttp into $pydeps on first boot.
+    if ! "$web_py" -c "import aiohttp" 2>/dev/null; then
+      if [ -d "$pydeps" ] || mkdir -p "$pydeps" 2>/dev/null; then
+        if ! "$web_py" -c "import pip" 2>/dev/null; then
+          curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py 2>/dev/null && \
+            "$web_py" /tmp/get-pip.py --target="$pydeps" --no-warn-script-location >> /tmp/webui.log 2>&1 || true
+        fi
+        PYTHONPATH="$py_path" "$web_py" -m pip install --target="$pydeps" aiohttp >> /tmp/webui.log 2>&1 || true
+        py_path="$root"
+        [ -d "$venv_site" ] && py_path="$py_path:$venv_site"
+        py_path="$py_path:$pydeps"
+      fi
+    fi
     if pgrep -f "[p]ython.* -m webui\.webuid" >/dev/null 2>&1; then
       return 0
     fi
-    echo "[webui] starting :5080 ($(date))" >> /tmp/webui.log
-    (cd "$root" && PYTHONPATH="$py_path" "$web_py" -m webui.webuid >> /tmp/webui.log 2>&1 &)
+    echo "[webui] starting :5080 TLS ($(date))" >> /tmp/webui.log
+    # Headless (no builtin panel): native ui is skipped; WebUI is the primary UI.
+    # Override: OPENPILOT_HEADLESS=1 force headless, =0 force display mode.
+    # Headless first boot: USB tether (RNDIS) -> https://10.255.128.121:5080/ (accept TLS cert once).
+    (cd "$root" && PYTHONPATH="$py_path" WEBUI_TLS=1 "$web_py" -m webui.webuid >> /tmp/webui.log 2>&1 &)
   }
 '''
 
-START_WEBUI_CALL = r'''  # op Web UI：与 ai 并行，浏览器 :5080
+START_WEBUI_CALL = r'''  # op Web UI：:5080（TLS）；无屏时为主界面，与 ai :5090 并行
   start_webui
   (
     while true; do
@@ -50,8 +68,36 @@ def find_launch_script(root: Path) -> Path | None:
   return None
 
 
+def _upgrade_start_webui(content: str) -> tuple[str, bool]:
+  if LAUNCH_MARKER not in content:
+    return content, False
+  if ".pydeps" in content and "WEBUI_TLS=1" in content:
+    return content, False
+  if '[ ! -f "$root/webui/webuid.py" ]' not in content:
+    return content, False
+  pattern = r"  start_webui\(\) \{.*?^\  \}"
+  new_fn = START_WEBUI_FN.rstrip()
+  new_content, n = re.subn(pattern, new_fn, content, count=1, flags=re.MULTILINE | re.DOTALL)
+  if n == 0:
+    return content, False
+  new_content = new_content.replace(
+    "# op Web UI：与 ai 并行，浏览器 :5080",
+    "# op Web UI：:5080（TLS）；无屏时为主界面，与 ai :5090 并行",
+  )
+  return new_content, True
+
+
 def patch_launch_script(path: Path, *, dry_run: bool = False) -> dict[str, Any]:
   content = path.read_text(encoding="utf-8")
+  upgraded, was_upgraded = _upgrade_start_webui(content)
+  if was_upgraded:
+    if dry_run:
+      return {"ok": True, "path": str(path), "changed": True, "dry_run": True, "note": "upgraded start_webui"}
+    backup = path.with_suffix(path.suffix + f".bak.{datetime.now().strftime('%Y%m%d%H%M%S')}")
+    shutil.copy2(path, backup)
+    path.write_text(upgraded, encoding="utf-8")
+    return {"ok": True, "path": str(path), "backup": str(backup), "changed": True, "note": "upgraded start_webui"}
+
   if LAUNCH_MARKER in content:
     return {"ok": True, "path": str(path), "changed": False, "note": "start_webui already present"}
 
@@ -77,6 +123,11 @@ def patch_launch_script(path: Path, *, dry_run: bool = False) -> dict[str, Any]:
     elif re.search(r"cd\s+system/manager", new_content):
       manager_cd = "cd system/manager"
     if manager_cd:
+      build_block = None
+      if "./build.py" in new_content:
+        build_block = "  if [ ! -f $DIR/prebuilt ]; then\n    ./build.py\n  fi"
+      if build_block and build_block in new_content and call_block.strip() not in new_content:
+        new_content = new_content.replace(build_block, build_block + "\n\n" + call_block, 1)
       if fn_block.strip() not in new_content:
         new_content = new_content.replace(f"  {manager_cd}", fn_block + f"\n  {manager_cd}", 1)
       if "./manager.py" in new_content and call_block.strip() not in new_content:
