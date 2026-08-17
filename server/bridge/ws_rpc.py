@@ -44,6 +44,7 @@ from webui.server.bridge.system_api import manager_last_error, run_action, softw
 from webui.server.bridge.trips_api import trips_stats
 from webui.server.bridge.vehicle_api import vehicle_brand_widgets, vehicle_platforms, vehicle_select
 from webui.server.bridge.webrtc_api import webrtc_notify, webrtc_offer, webrtc_schema
+from webui.server.bridge.webui_update_api import apply_webui_update, dismiss_webui_update, snapshot_webui_update
 from webui.server.deps import openpilot_root, read_version
 
 _PANEL_GET = re.compile(r"^/api/opui/panels/([^/]+)$")
@@ -297,6 +298,16 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "POST" and clean_path == "/api/opui/device/language":
       return set_language(str(body.get("language", "")))
+
+    if method == "GET" and clean_path == "/api/opui/webui-update":
+      fetch_remote = query.get("fetch", "").lower() in ("1", "true", "yes")
+      return snapshot_webui_update(fetch=fetch_remote)
+
+    if method == "POST" and clean_path == "/api/opui/webui-update/dismiss":
+      return dismiss_webui_update(str(body.get("commit", "") or "") or None)
+
+    if method == "POST" and clean_path == "/api/opui/webui-update/apply":
+      return apply_webui_update()
 
     if method == "GET" and clean_path == "/api/opui/webrtc/schema":
       return webrtc_schema()

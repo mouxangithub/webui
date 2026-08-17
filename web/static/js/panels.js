@@ -1916,7 +1916,7 @@ function renderActionRow(w) {
   const row = document.createElement("div");
   row.className = "opui-sp-row";
   if (w.action) row.dataset.action = w.action;
-  const disabled = (w.offroad_only && !globalState.is_offroad) || (globalState.engaged && w.action === "reset_calibration");
+  const disabled = (w.offroad_only && !globalState.is_offroad);
   let desc = w.desc ? t(w.desc) : "";
   if (w.dynamic_desc === "calibration" && deviceExtrasCache?.calibration?.desc_html) {
     desc = deviceExtrasCache.calibration.desc_html.replace(/<[^>]+>/g, " ").trim();
@@ -1931,6 +1931,9 @@ function renderActionRow(w) {
   if (disabled) {
     btn.disabled = true;
     return row;
+  }
+  if (w.action === "reset_calibration" && globalState.engaged) {
+    btn.classList.add("is-engaged-blocked");
   }
   btn.addEventListener("click", async () => {
     if (w.action === "reset_calibration" && globalState.engaged) {

@@ -179,7 +179,15 @@ export function syncWebUiUpdateRow() {
   if (!desc) return;
   const st = lastStatus;
   if (!st?.ok) {
-    desc.textContent = tr("Update status unavailable");
+    desc.textContent = st?.error
+      ? `${tr("Update status unavailable")} (${st.error})`
+      : tr("Update status unavailable");
+    if (btn) btn.textContent = tr("CHECK");
+    return;
+  }
+  if (st.git === false) {
+    desc.textContent = st.message || tr("Web UI is not a git checkout");
+    row?.classList.remove("is-update-available");
     if (btn) btn.textContent = tr("CHECK");
     return;
   }

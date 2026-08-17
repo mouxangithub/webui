@@ -119,29 +119,53 @@ async function waitForDeviceReconnect({
   const minOfflineAt = startedAt + 2500;
   let delay = 1200;
   let sawDisconnect = false;
+  let countdownTimer = null;
+
+  const updateRestartCountdown = () => {
+    const secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+    onPhase?.(tr("Device restarting... ({s}s)").replace("{s}", String(secs)));
+  };
+
+  const startCountdown = () => {
+    if (countdownTimer != null) return;
+    updateRestartCountdown();
+    countdownTimer = setInterval(updateRestartCountdown, 1000);
+  };
+
+  const stopCountdown = () => {
+    if (countdownTimer != null) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  };
 
   writeSession({ kind, phase: "rebooting", startedAt });
 
-  while (Date.now() < deadline) {
-    if (abortCtrl?.signal.aborted) return false;
-    try {
-      await fetchBootstrap();
-      if (sawDisconnect && Date.now() >= minOfflineAt) {
-        hideOverlay();
-        toast(doneMsg);
-        const url = new URL(window.location.href);
-        url.searchParams.set("v", String(Date.now()));
-        window.location.replace(url.toString());
-        return true;
+  try {
+    while (Date.now() < deadline) {
+      if (abortCtrl?.signal.aborted) return false;
+      try {
+        await fetchBootstrap();
+        if (sawDisconnect && Date.now() >= minOfflineAt) {
+          stopCountdown();
+          hideOverlay();
+          toast(doneMsg);
+          const url = new URL(window.location.href);
+          url.searchParams.set("v", String(Date.now()));
+          window.location.replace(url.toString());
+          return true;
+        }
+        stopCountdown();
+        onPhase?.(tr("Waiting for device to restart..."));
+      } catch {
+        sawDisconnect = true;
+        startCountdown();
       }
-      onPhase?.(tr("Waiting for device to restart..."));
-    } catch {
-      sawDisconnect = true;
-      const secs = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-      onPhase?.(tr("Device restarting... ({s}s)").replace("{s}", String(secs)));
+      await sleep(delay);
+      delay = Math.min(Math.round(delay * 1.15), 3000);
     }
-    await sleep(delay);
-    delay = Math.min(Math.round(delay * 1.15), 5000);
+  } finally {
+    stopCountdown();
   }
 
   showOverlay({

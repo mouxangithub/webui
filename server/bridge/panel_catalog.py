@@ -22,7 +22,7 @@ PANELS: list[dict[str, Any]] = [
       {"type": "separator"},
       {"type": "action", "action": "reset_calibration", "label": "Reset Calibration", "button": "RESET",
        "desc": "sunnypilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.",
-       "offroad_only": True, "dynamic_desc": "calibration",
+       "dynamic_desc": "calibration",
        "confirm": "Are you sure you want to reset calibration?"},
       {"type": "separator"},
       {"type": "custom", "custom": "device_language"},
