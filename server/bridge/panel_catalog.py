@@ -113,6 +113,7 @@ PANELS: list[dict[str, Any]] = [
     "widgets": [
       {"type": "action", "action": "uninstall", "label": "Uninstall", "button": "UNINSTALL",
        "confirm": "Are you sure you want to uninstall?", "offroad_only": True},
+      {"type": "custom", "custom": "webui_update"},
       {"type": "bool", "param": "DisableUpdates", "label": "Disable Updates",
        "visible_if": {"param": "ShowAdvancedControls", "eq": "1"}, "offroad_only": True},
     ],

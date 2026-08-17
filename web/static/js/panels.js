@@ -808,6 +808,8 @@ function applySoftwareCustom(sw) {
 
   const dlVal = document.getElementById("software-download-value");
   const dlBtn = document.getElementById("software-download-btn");
+  const dlRow = document.getElementById("software-download-row");
+  if (dlRow) dlRow.hidden = !sw.is_offroad;
   if (dlVal) dlVal.textContent = formatSoftwareDownloadStatus(sw);
   if (dlBtn) {
     dlBtn.textContent = t(sw.download_label || "CHECK");
@@ -843,7 +845,7 @@ function applySoftwareCustom(sw) {
       installNotes.textContent = html;
       installNotes.classList.remove("opui-html-block");
     }
-    installNotes.hidden = !html;
+    installNotes.hidden = !html || installNotes.dataset.expanded !== "1";
   }
 }
 
@@ -1240,7 +1242,6 @@ function renderAlwaysOffroadRow(active) {
 function prunePanelWidgets(widgets, panelData) {
   const kept = [];
   for (const w of widgets || []) {
-    if (w.custom === "webui_update") continue;
     if (w.type === "separator") {
       if (!kept.length) continue;
       if (kept[kept.length - 1].type === "separator") continue;
@@ -1370,8 +1371,8 @@ function renderWidget(w, panelData) {
       const active = !!deviceExtrasCache?.offroad_mode;
       return renderAlwaysOffroadRow(active);
     }
+    if (w.custom === "webui_update") return renderWebUiUpdateRow();
     if (w.custom === "device_calibration") return null;
-    if (w.custom === "webui_update") return null;
     return null;
   }
 
@@ -3704,6 +3705,7 @@ async function renderSoftwarePanel(container, data) {
   }
 
   const download = document.createElement("div");
+  download.id = "software-download-row";
   download.className = "opui-sp-row opui-sp-row--has-action";
   download.innerHTML = `
     <div class="opui-sp-row-text">
@@ -3727,12 +3729,20 @@ async function renderSoftwarePanel(container, data) {
   install.className = "opui-sp-row opui-sp-row--has-action";
   install.hidden = true;
   install.innerHTML = `
-    <div class="opui-sp-row-text">
+    <div class="opui-sp-row-text opui-sp-row-text--expandable">
       <div class="opui-sp-row-title">${escapeHtml(t("Install Update"))}</div>
       <div class="opui-release-notes" id="software-install-notes" hidden></div>
     </div>
     <div class="opui-sp-row-value" id="software-install-value"></div>
     <button type="button" class="opui-btn opui-btn--action" id="software-install-btn">${escapeHtml(t("INSTALL"))}</button>`;
+  install.querySelector(".opui-sp-row-text")?.addEventListener("click", (e) => {
+    const notes = document.getElementById("software-install-notes");
+    if (!notes || !notes.innerHTML.trim()) return;
+    const expanded = notes.dataset.expanded === "1";
+    notes.dataset.expanded = expanded ? "0" : "1";
+    notes.hidden = expanded;
+    install.classList.toggle("opui-sp-row--desc-open", !expanded);
+  });
   install.querySelector("#software-install-btn")?.addEventListener("click", async () => {
     const btn = install.querySelector("#software-install-btn");
     if (btn) btn.disabled = true;
@@ -3770,11 +3780,7 @@ async function renderSoftwarePanel(container, data) {
   }
 
   appendPanelWidgets(container, data);
-
-  const sep = document.createElement("div");
-  sep.className = "opui-sp-separator";
-  container.appendChild(sep);
-  container.appendChild(renderWebUiUpdateRow());
+  await fetchWebUiUpdate({ fetchRemote: true });
   syncWebUiUpdateRow();
 
   applySoftwareCustom(sw);

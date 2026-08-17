@@ -220,14 +220,55 @@ def software_status(*, started: bool | None = None) -> dict[str, Any]:
       download_label = "DOWNLOAD"
     else:
       last_update = p.get("LastUpdateTime")
-      if last_update is not None and hasattr(last_update, "isoformat"):
-        last_update = last_update.isoformat()
-      download_value = "up to date, last checked never" if not last_update else f"up to date, last checked {last_update}"
+      last_update_epoch = None
+      if last_update is not None:
+        try:
+          if hasattr(last_update, "timestamp"):
+            last_update_epoch = int(last_update.timestamp())
+          elif hasattr(last_update, "isoformat"):
+            import datetime
+            dt = last_update
+            if dt.tzinfo is None:
+              dt = dt.replace(tzinfo=datetime.timezone.utc)
+            last_update_epoch = int(dt.timestamp())
+        except Exception:
+          last_update_epoch = None
+      if not last_update:
+        download_value = "up to date, last checked never"
+      elif last_update_epoch:
+        download_value = "up to date, last checked {}"  # formatted client-side
+      else:
+        download_value = f"up to date, last checked {last_update}"
       download_label = "CHECK"
 
     last_update_raw = p.get("LastUpdateTime")
+    last_update_epoch_out = None
+    if last_update_raw is not None:
+      try:
+        if hasattr(last_update_raw, "timestamp"):
+          last_update_epoch_out = int(last_update_raw.timestamp())
+        elif hasattr(last_update_raw, "isoformat"):
+          import datetime
+          dt = last_update_raw
+          if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+          last_update_epoch_out = int(dt.timestamp())
+      except Exception:
+        last_update_epoch_out = None
     if last_update_raw is not None and hasattr(last_update_raw, "isoformat"):
       last_update_raw = last_update_raw.isoformat()
+    if updater_state == "idle" and failed_count == 0 and not fetch_available and last_update_epoch_out:
+      download_value = "up to date, last checked {}"
+
+    download_status = "idle"
+    if updater_state != "idle":
+      download_status = "busy"
+    elif failed_count > 0:
+      download_status = "failed"
+    elif fetch_available:
+      download_status = "fetch_available"
+    elif last_update_raw:
+      download_status = "up_to_date"
 
     return {
       "ok": True,
@@ -243,6 +284,9 @@ def software_status(*, started: bool | None = None) -> dict[str, Any]:
       "branches": [b for b in (p.get("UpdaterAvailableBranches") or "").split(",") if b],
       "failed_count": failed_count,
       "last_update_time": last_update_raw or "",
+      "last_update_epoch": last_update_epoch_out,
+      "download_status": download_status,
+      "download_state": updater_state if updater_state != "idle" else "",
       "disable_updates": p.get_bool("DisableUpdates"),
       "is_onroad": is_onroad,
       "is_offroad": is_offroad,
