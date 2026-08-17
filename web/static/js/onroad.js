@@ -14,7 +14,7 @@ import {
   prewarmWebrtc,
   isRoadStreaming,
   isCameraPlaying,
-} from "./webrtc_stream.js?v=95";
+} from "./webrtc_stream.js?v=96";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -30,6 +30,39 @@ let expHoldUntil = 0;
 let lastOnroadState = null;
 let lastHudDigest = "";
 let lastDriverFaceKey = "";
+let hudAnimRafId = null;
+
+function updateAnimatedOnroadHud(st) {
+  applyCruiseStyle(st);
+  applyExperimentalButton(st);
+  updateSpHud(st);
+  updateDevUi(st);
+  updateCircularAlert(st);
+  updateConfidenceBall(st);
+}
+
+function tickOnroadHudAnim() {
+  hudAnimRafId = null;
+  const app = document.getElementById("app");
+  const st = lastOnroadState;
+  if (!st?.ok || !st.started || app?.dataset.screen !== "onroad") {
+    return;
+  }
+  updateAnimatedOnroadHud(st);
+  hudAnimRafId = requestAnimationFrame(tickOnroadHudAnim);
+}
+
+function ensureOnroadHudAnimLoop() {
+  if (hudAnimRafId != null) return;
+  tickOnroadHudAnim();
+}
+
+export function stopOnroadHudAnimLoop() {
+  if (hudAnimRafId != null) {
+    cancelAnimationFrame(hudAnimRafId);
+    hudAnimRafId = null;
+  }
+}
 
 export async function startRoadStream() {
   const video = document.getElementById("road-video");
@@ -237,9 +270,7 @@ export function updateOnroadHud(st) {
       setSpeedWrap.hidden = true;
     }
 
-    applyCruiseStyle(st);
     applyCruiseRadius();
-    applyExperimentalButton(st);
 
     if (border) {
       const inner = border.querySelector(".opui-border__inner");
@@ -249,66 +280,69 @@ export function updateOnroadHud(st) {
     }
 
     if (alertBar && alertT1) {
-    const t1 = st.alert?.text1 || "";
-    const t2 = st.alert?.text2 || "";
-    const size = (st.alert?.size || "").toLowerCase();
-    if (t1 && st.started && size !== "none") {
-      alertBar.hidden = false;
-      alertT1.textContent = tr(t1);
-      if (alertT2) {
-        alertT2.textContent = tr(t2);
-        alertT2.hidden = !t2 || size === "small";
-      }
-      alertBar.classList.remove("opui-alert--small", "opui-alert--mid", "opui-alert--full");
-      if (size === "full") alertBar.classList.add("opui-alert--full");
-      else if (size === "small") alertBar.classList.add("opui-alert--small");
-      else alertBar.classList.add("opui-alert--mid");
-      const heightPx = Number(st.alert?.height_px);
-      alertBar.classList.toggle("opui-alert--dynamic", heightPx > 0);
-      if (heightPx > 0) {
-        alertBar.style.minHeight = `${heightPx}px`;
+      const t1 = st.alert?.text1 || "";
+      const t2 = st.alert?.text2 || "";
+      const size = (st.alert?.size || "").toLowerCase();
+      if (t1 && st.started && size !== "none") {
+        alertBar.hidden = false;
+        alertT1.textContent = tr(t1);
+        if (alertT2) {
+          alertT2.textContent = tr(t2);
+          alertT2.hidden = !t2 || size === "small";
+        }
+        alertBar.classList.remove("opui-alert--small", "opui-alert--mid", "opui-alert--full");
+        if (size === "full") alertBar.classList.add("opui-alert--full");
+        else if (size === "small") alertBar.classList.add("opui-alert--small");
+        else alertBar.classList.add("opui-alert--mid");
+        const heightPx = Number(st.alert?.height_px);
+        alertBar.classList.toggle("opui-alert--dynamic", heightPx > 0);
+        if (heightPx > 0) {
+          alertBar.style.minHeight = `${heightPx}px`;
+        } else {
+          alertBar.style.minHeight = "";
+        }
+        if (size === "full") {
+          const t1Len = (t1 || "").length;
+          const titleLong = t1Len > 15;
+          const topLong = titleLong || (t1 || "").includes("\n");
+          alertBar.style.setProperty("--alert-title-size", titleLong ? "132px" : "177px");
+          alertBar.style.setProperty("--alert-title-top", topLong ? "200px" : "270px");
+          alertBar.style.setProperty("--alert-subtitle-bottom", titleLong ? "361px" : "420px");
+        } else {
+          alertBar.style.removeProperty("--alert-title-size");
+          alertBar.style.removeProperty("--alert-title-top");
+          alertBar.style.removeProperty("--alert-subtitle-bottom");
+        }
+        alertBar.style.background = "";
+        const status = (st.alert?.status || "normal").toLowerCase();
+        if (status.includes("critical")) alertBar.dataset.status = "critical";
+        else if (status.includes("user")) alertBar.dataset.status = "user";
+        else alertBar.dataset.status = "normal";
       } else {
-        alertBar.style.minHeight = "";
+        alertBar.hidden = true;
+        alertBar.classList.remove("opui-alert--small", "opui-alert--mid", "opui-alert--full");
+        delete alertBar.dataset.status;
       }
-      if (size === "full") {
-        const t1Len = (t1 || "").length;
-        const titleLong = t1Len > 15;
-        const topLong = titleLong || (t1 || "").includes("\n");
-        alertBar.style.setProperty("--alert-title-size", titleLong ? "132px" : "177px");
-        alertBar.style.setProperty("--alert-title-top", topLong ? "200px" : "270px");
-        alertBar.style.setProperty("--alert-subtitle-bottom", titleLong ? "361px" : "420px");
+      const devMode = Number(st.developer_ui) || 0;
+      const isFull = size === "full";
+      if (!isFull && devMode) {
+        alertBar.style.right = (devMode === 2 || devMode === 3)
+          ? "calc(var(--border-w) + var(--alert-margin) + 230px)" : "";
+        alertBar.style.bottom = (devMode === 1 || devMode === 3)
+          ? "calc(var(--border-w) + var(--alert-margin) + 40px)" : "";
       } else {
-        alertBar.style.removeProperty("--alert-title-size");
-        alertBar.style.removeProperty("--alert-title-top");
-        alertBar.style.removeProperty("--alert-subtitle-bottom");
+        alertBar.style.right = "";
+        alertBar.style.bottom = "";
       }
-      alertBar.style.background = "";
-      const status = (st.alert?.status || "normal").toLowerCase();
-      if (status.includes("critical")) alertBar.dataset.status = "critical";
-      else if (status.includes("user")) alertBar.dataset.status = "user";
-      else alertBar.dataset.status = "normal";
-    } else {
-      alertBar.hidden = true;
-      alertBar.classList.remove("opui-alert--small", "opui-alert--mid", "opui-alert--full");
-      delete alertBar.dataset.status;
     }
-    const devMode = Number(st.developer_ui) || 0;
-    const isFull = size === "full";
-    if (!isFull && devMode) {
-      alertBar.style.right = (devMode === 2 || devMode === 3)
-        ? "calc(var(--border-w) + var(--alert-margin) + 230px)" : "";
-      alertBar.style.bottom = (devMode === 1 || devMode === 3)
-        ? "calc(var(--border-w) + var(--alert-margin) + 40px)" : "";
-    } else {
-      alertBar.style.right = "";
-      alertBar.style.bottom = "";
-    }
-    }
+  }
 
-    updateSpHud(st);
-    updateDevUi(st);
-    updateCircularAlert(st);
-    updateConfidenceBall(st);
+  if (st.started) {
+    updateAnimatedOnroadHud(st);
+    ensureOnroadHudAnimLoop();
+  } else {
+    stopOnroadHudAnimLoop();
+    updateAnimatedOnroadHud(st);
   }
 
   updateTorqueBar(st, Number(st.developer_ui) || 0);
@@ -410,7 +444,7 @@ export function bindDriverCameraDialog() {
   });
 }
 
-export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=95";
+export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=96";
 export {
   applyStreamQuality,
   getQualityPreference,
@@ -422,4 +456,4 @@ export {
   onDocumentVisibilityChange,
   setQualityPreference,
   updateStreamDeviceState,
-} from "./webrtc_stream.js?v=95";
+} from "./webrtc_stream.js?v=96";

@@ -6,6 +6,7 @@ import hashlib
 import os
 import struct
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -119,6 +120,8 @@ class _FrameCacheEntry:
 
 _frame_cache: dict[tuple[int, int], _FrameCacheEntry] = {}
 _MAX_FRAME_CACHE = 3
+_FULL_GEOMETRY_INTERVAL_SEC = 2.0
+_last_full_geometry_at = 0.0
 
 
 def _trim_frame_cache() -> None:
@@ -314,11 +317,12 @@ def _resolve_sm():
   return sm, True
 
 
-def _geom_input_key(sm, width: int, height: int) -> tuple[Any, ...]:
+def _geom_input_key(sm, width: int, height: int, *, use_wide: bool) -> tuple[Any, ...]:
   mono = int(sm["modelV2"].logMonoTime) if sm.valid.get("modelV2") else 0
   calib_frame = int(sm.recv_frame.get("extrinsicsCalibration", 0) or 0)
   road_frame = int(sm.recv_frame.get("narrowRoadCameraState", 0) or 0)
-  return (mono, width, height, _overlay_params.cache_key(), calib_frame, road_frame)
+  wide_frame = int(sm.recv_frame.get("wideRoadCameraState", 0) or 0)
+  return (mono, width, height, _overlay_params.cache_key(), calib_frame, road_frame, wide_frame, int(use_wide))
 
 
 def _lead_metrics(lead_data, v_ego: float) -> list[str]:
@@ -477,13 +481,19 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900, *, static_mock:
 
   try:
     sm, _owned = _resolve_sm()
-    gkey = _geom_input_key(sm, width, height)
+    projector = _get_projector(width, height)
+    use_wide = projector.sync_camera_mode(sm)
+    gkey = _geom_input_key(sm, width, height, use_wide=use_wide)
     wh = (int(width), int(height))
+
+    global _last_full_geometry_at
+    now = time.monotonic()
+    force_full = (now - _last_full_geometry_at) >= _FULL_GEOMETRY_INTERVAL_SEC
 
     with _cache_lock:
       entry = _frame_cache.get(wh)
 
-    if entry and entry.geom_input_key == gkey:
+    if entry and entry.geom_input_key == gkey and not force_full:
       projector = _get_projector(width, height)
       long_ctrl = _overlay_params.longitudinal_control(sm)
       allow_throttle = True
@@ -502,6 +512,7 @@ def snapshot_model_overlay(width: int = 1600, height: int = 900, *, static_mock:
       return _apply_anim_fields(entry.frame, anim)
 
     frame = _build_overlay_frame(sm, width, height)
+    _last_full_geometry_at = now
     with _cache_lock:
       _frame_cache[wh] = _FrameCacheEntry(
         geom_input_key=gkey,

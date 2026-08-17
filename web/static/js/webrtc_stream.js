@@ -19,6 +19,7 @@ import {
   updateStreamDeviceState,
 } from "./webrtc_stream_adaptive.js";
 import { tryAttachWebCodecsDecode, stopWebCodecsDecode, tuneVideoReceiver } from "./webrtc_webcodecs.js";
+import { syncModelOverlayViewport } from "./model_viewport.js";
 
 
 
@@ -123,6 +124,7 @@ function bindRoadVideoPlayback(video, wrap) {
 
   const onPlaying = () => {
     wrap.classList.add("is-playing");
+    syncModelOverlayViewport();
     setCameraStatus("");
     notifyCameraReady(true);
   };

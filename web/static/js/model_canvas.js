@@ -239,6 +239,16 @@ let canvasRainbowRafId = null;
 let pendingOverlayFrame = null;
 let overlayDrawRafId = null;
 
+export function hasOverlayGeometry() {
+  const o = lastOverlay;
+  if (!o) return false;
+  return !!(
+    (o.lanes && o.lanes.length > 0)
+    || (o.path_polygon && o.path_polygon.length > 0)
+    || (o.edges && o.edges.length > 0)
+  );
+}
+
 export function scheduleDrawModelOverlay(data) {
   pendingOverlayFrame = data;
   if (overlayDrawRafId != null) return;
@@ -251,7 +261,11 @@ export function scheduleDrawModelOverlay(data) {
 }
 
 function resolveAnimOverlay(data) {
-  if (!data?.anim_only || !lastOverlay) return data;
+  if (!data?.anim_only) return data;
+  if (!lastOverlay) {
+    window.dispatchEvent(new CustomEvent("opui:need-full-overlay"));
+    return data;
+  }
   const gk = data.geometry_key || lastOverlay.geometry_key;
   if (gk && lastOverlay.geometry_key && gk !== lastOverlay.geometry_key) return data;
   return {
@@ -315,6 +329,7 @@ export function drawModelOverlay(data) {
   }
 
   const merged = resolveAnimOverlay(data);
+  if (data?.anim_only && !lastOverlay) return;
   const frameKey = merged.frame_key || null;
   const animKey = merged.anim_key || null;
   const animateOnly = !!merged._animate;

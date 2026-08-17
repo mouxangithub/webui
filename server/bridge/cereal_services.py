@@ -49,6 +49,7 @@ OVERLAY_SERVICES: tuple[str, ...] = (
   "radarState",
   "deviceState",
   "narrowRoadCameraState",
+  "wideRoadCameraState",
   "selfdriveState",
   "longitudinalPlan",
   "carParams",

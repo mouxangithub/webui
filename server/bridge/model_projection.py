@@ -19,6 +19,8 @@ INF_POINT = np.array([1000.0, 0.0, 0.0], dtype=np.float64)
 CLIP_MARGIN = 500.0
 MIN_DRAW_DISTANCE = 10.0
 MAX_DRAW_DISTANCE = 100.0
+WIDE_MAX_MS = 10.0
+ROAD_MIN_MS = 15.0
 
 THROTTLE_COLORS = [
   (13, 248, 122, 102),
@@ -58,7 +60,9 @@ class ModelProjector:
     self._transform_dirty = True
     self._device_camera = None
     self._view_from_calib = view_frame_from_device_frame.copy()
-    self._matrix_cache_key: tuple[Any, ...] = (0, 0, 0)
+    self._view_from_wide_calib = view_frame_from_device_frame.copy()
+    self._use_wide_camera = False
+    self._matrix_cache_key: tuple[Any, ...] = (0, 0, 0, 0)
     self._path_offset_z = HEIGHT_INIT[0]
     self._lane_line_probs = np.zeros(4, dtype=np.float32)
     self._road_edge_stds = np.zeros(2, dtype=np.float32)
@@ -82,6 +86,25 @@ class ModelProjector:
 
   def set_camera_offset(self, offset: float) -> None:
     self._camera_offset = float(offset)
+
+  @property
+  def use_wide_camera(self) -> bool:
+    return self._use_wide_camera
+
+  def sync_camera_mode(self, sm: Any) -> bool:
+    self._use_wide_camera = self._pick_wide_camera(sm)
+    return self._use_wide_camera
+
+  def _pick_wide_camera(self, sm: Any) -> bool:
+    experimental = bool(sm["selfdriveState"].experimentalMode) if sm.valid.get("selfdriveState") else False
+    if not experimental:
+      return False
+    v = float(sm["carState"].vEgo) if sm.valid.get("carState") else 0.0
+    if v < WIDE_MAX_MS:
+      return True
+    if v > ROAD_MIN_MS:
+      return False
+    return self._use_wide_camera
 
   def update_transform(self, sm: Any) -> bool:
     started = bool(sm.valid.get("deviceState") and sm["deviceState"].started)
@@ -113,11 +136,17 @@ class ModelProjector:
 
     device_from_calib = rot_from_euler(calib.rpyCalib)
     self._view_from_calib = view_frame_from_device_frame @ device_from_calib
+    if hasattr(calib, "wideFromDeviceEuler") and len(calib.wideFromDeviceEuler) == 3:
+      wide_from_device = rot_from_euler(calib.wideFromDeviceEuler)
+      self._view_from_wide_calib = view_frame_from_device_frame @ wide_from_device @ device_from_calib
+
+    use_wide = self.sync_camera_mode(sm)
 
     cache_key = (
       sm.recv_frame.get("extrinsicsCalibration", 0),
       self._width,
       self._height,
+      int(use_wide),
     )
     if cache_key == self._matrix_cache_key and not self._transform_dirty:
       return True
@@ -125,9 +154,10 @@ class ModelProjector:
     if self._device_camera is None:
       self._device_camera = DEVICE_CAMERAS.get(("tici", "ar0231"))
 
-    intrinsic = self._device_camera.narrow_road.intrinsics
-    zoom = 1.1
-    calib_transform = intrinsic @ self._view_from_calib
+    intrinsic = self._device_camera.wide_road.intrinsics if use_wide else self._device_camera.narrow_road.intrinsics
+    calibration = self._view_from_wide_calib if use_wide else self._view_from_calib
+    zoom = 2.0 if use_wide else 1.1
+    calib_transform = intrinsic @ calibration
     kep = calib_transform @ INF_POINT
 
     w, h = float(self._width), float(self._height)

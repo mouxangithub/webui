@@ -3,13 +3,14 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
 } from "./panels.js?v=99";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi } from "./onroad.js";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
+import { getOverlayProjectionSize, syncModelOverlayViewport } from "./model_viewport.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
 import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
 import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
-import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOverlayEnabled } from "./model_canvas.js";
+import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOverlayEnabled, hasOverlayGeometry } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
 import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
@@ -202,6 +203,13 @@ function cancelOverlaySync() {
   }
 }
 
+function isOverlayStreamReady() {
+  const wrap = document.getElementById("camera-wrap");
+  if (!wrap) return false;
+  if (wrap.classList.contains("is-dev-pc")) return true;
+  return isCameraPlaying() || isRoadStreaming();
+}
+
 function syncModelOverlayWatch() {
   if (app.dataset.screen !== "onroad") {
     opuiWs.unwatchModelOverlay();
@@ -209,7 +217,8 @@ function syncModelOverlayWatch() {
     lastModelWatch = null;
     return;
   }
-  if (!isCameraPlaying() || !isOverlayAllowed()) {
+  syncModelOverlayViewport();
+  if (!isOverlayStreamReady() || !isOverlayAllowed()) {
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
     setModelOverlayEnabled(false);
@@ -217,9 +226,7 @@ function syncModelOverlayWatch() {
     return;
   }
   setModelOverlayEnabled(true);
-  const wrap = document.getElementById("camera-wrap");
-  const w = wrap?.clientWidth || 1600;
-  const h = wrap?.clientHeight || 900;
+  const { w, h } = getOverlayProjectionSize();
   const fps = getOverlayFpsHint();
   const watch = { w, h, fps };
   if (opuiWs.connected) {
@@ -256,10 +263,9 @@ function startModelOverlayPoll(w, h) {
   stopModelOverlayPoll();
   if (opuiWs.connected || document.hidden) return;
   const poll = async () => {
-    if (app.dataset.screen !== "onroad" || !isCameraPlaying() || !shouldDrawModelOverlay()) return;
-    const wrap = document.getElementById("camera-wrap");
-    const width = wrap?.clientWidth || w;
-    const height = wrap?.clientHeight || h;
+    if (app.dataset.screen !== "onroad" || !isOverlayStreamReady() || !shouldDrawModelOverlay()) return;
+    syncModelOverlayViewport();
+    const { w: width, h: height } = getOverlayProjectionSize();
     try {
       const data = await fetchModelOverlay(width, height);
       if (data?.ok) scheduleDrawModelOverlay(data);
@@ -303,6 +309,7 @@ function setScreen(name) {
     cancelOverlaySync();
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
+    stopOnroadHudAnimLoop();
     if (opuiWs.lastHome?.data) {
       updateHomeScreen(opuiWs.lastHome.data);
     } else if (opuiWs.bootstrap?.home) {
@@ -326,6 +333,7 @@ function setScreen(name) {
     cancelOverlaySync();
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
+    stopOnroadHudAnimLoop();
   }
 
   showModelOverlay(name === "onroad" && isPreviewStreamEnabled());
@@ -657,6 +665,13 @@ function setupWebSocket() {
   });
   opuiWs.on("model_overlay", (msg) => {
     if (app.dataset.screen !== "onroad" || !msg?.data || !shouldDrawModelOverlay()) return;
+    if (msg.data.anim_only && !hasOverlayGeometry()) {
+      const { w, h } = getOverlayProjectionSize();
+      fetchModelOverlay(w, h).then((data) => {
+        if (data?.ok && !data.anim_only) scheduleDrawModelOverlay(data);
+      }).catch(() => {});
+      return;
+    }
     scheduleDrawModelOverlay(msg.data);
   });
   opuiWs.on("i18n", async (msg) => {
@@ -684,6 +699,18 @@ setSubpanelNavigator((panelId) => {
   currentPanel = panelId;
   renderNav();
   loadCurrentPanel();
+});
+
+window.addEventListener("opui:overlay-viewport", () => {
+  if (app.dataset.screen === "onroad") syncModelOverlayWatch();
+});
+
+window.addEventListener("opui:need-full-overlay", () => {
+  if (app.dataset.screen !== "onroad" || !shouldDrawModelOverlay()) return;
+  const { w, h } = getOverlayProjectionSize();
+  fetchModelOverlay(w, h).then((data) => {
+    if (data?.ok) scheduleDrawModelOverlay(data);
+  }).catch(() => {});
 });
 
 window.addEventListener("opui:camera-ready", (ev) => {
@@ -837,6 +864,7 @@ bootstrap().then(() => {
     refitTimer = setTimeout(() => {
       refitTimer = null;
       fitOpuiScale();
+      syncModelOverlayViewport();
       syncModelOverlayWatch();
     }, 200);
   };
