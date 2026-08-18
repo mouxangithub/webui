@@ -200,6 +200,11 @@ function widgetVisible(w, panelData) {
     const adv = panelData.values?.[w.advanced_if.param];
     if (String(adv) !== String(w.advanced_if.eq)) return false;
   }
+  if (w.hide_if) {
+    const dep = panelData.values?.[w.hide_if.param];
+    if (w.hide_if.eq != null && String(dep) === String(w.hide_if.eq)) return false;
+    if (w.hide_if.ne != null && String(dep) !== String(w.hide_if.ne)) return false;
+  }
   if (!w.visible_if) return true;
   if (w.visible_if.state) return !!globalState[w.visible_if.state];
   const dep = panelData.values?.[w.visible_if.param];

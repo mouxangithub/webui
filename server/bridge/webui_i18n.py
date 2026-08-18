@@ -96,6 +96,10 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Upload driver camera data to improve driver monitoring? You can change this later in Toggles.": (
       "Upload driver camera data to improve driver monitoring? You can change this later in Toggles."
     ),
+    "Disable Driver Monitoring": "Disable Driver Monitoring",
+    "Disable driver monitoring (no cabin camera required). Similar to LITE mode.": (
+      "Disable driver monitoring (no cabin camera required). Similar to LITE mode."
+    ),
     "Enable": "Enable",
     "Not now": "Not now",
     "Headless (no display)": "Headless (no display)",
@@ -433,6 +437,10 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Only available while offroad": "仅在离路时可用",
     "Upload driver camera data to improve driver monitoring? You can change this later in Toggles.": (
       "上传驾驶员相机数据以改进驾驶员监控？稍后可于开关中更改。"
+    ),
+    "Disable Driver Monitoring": "禁用驾驶员监控",
+    "Disable driver monitoring (no cabin camera required). Similar to LITE mode.": (
+      "禁用驾驶员监控（无需舱内摄像头），效果类似 LITE 模式。"
     ),
     "Enable": "启用",
     "Not now": "暂不",

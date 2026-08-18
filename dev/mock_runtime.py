@@ -94,6 +94,7 @@ def _seed_params() -> dict[str, bytes | str]:
   for k in bool_on:
     data[k] = b"1"
   data.update({
+    "DisableDM": b"0",
     "DongleId": b"dev-preview-0000",
     "HardwareSerial": b"PC-DEV-0001",
     "LongitudinalPersonality": b"1",

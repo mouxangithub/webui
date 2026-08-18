@@ -41,6 +41,10 @@ const LOCAL_FALLBACKS = {
     "webui_storage_starred_count": "设备上共有 {count} 条收藏路线。",
     "webui_storage_starred_more": "另有 {count} 条…",
     "webui_storage_starred_confirm": "将永久删除 {count} 条收藏路线（约 {size}），是否继续？",
+    "Disable Driver Monitoring": "禁用驾驶员监控",
+    "Disable driver monitoring (no cabin camera required). Similar to LITE mode.": (
+      "禁用驾驶员监控（无需舱内摄像头），效果类似 LITE 模式。"
+    ),
   },
   "zh-CHT": {
     Refresh: "重新整理",
