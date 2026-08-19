@@ -289,6 +289,8 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Software": "Software",
     "Logs": "Logs",
     "Other": "Other",
+    "OTA staging": "OTA staging",
+    "Build cache": "Build cache",
     "Free": "Free",
     "Refresh": "Refresh",
     "Internal storage": "Internal storage",
@@ -330,6 +332,16 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Removes system logs and crash dumps.": "Removes system logs and crash dumps.",
     "Clear download cache": "Clear download cache",
     "Removes temporary download files. Safe to clear.": "Removes temporary download files. Safe to clear.",
+    "Clear build cache": "Clear build cache",
+    "webui_storage_ota_staging_note": (
+      "OTA update workspace used by the system updater. Usually released after an update is applied."
+    ),
+    "webui_storage_scons_cache_clear_desc": (
+      "Removes the scons build cache. The next compile will take significantly longer."
+    ),
+    "webui_storage_scons_cache_confirm": (
+      "Clearing the build cache frees space, but the next compile will take significantly longer. Continue?"
+    ),
     "About {size} can be freed": "About {size} can be freed",
     "This will free about {size}. Continue?": "This will free about {size}. Continue?",
     "Are you sure you want to clear this data?": "Are you sure you want to clear this data?",
@@ -627,6 +639,8 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Software": "软件",
     "Logs": "日志",
     "Other": "其他",
+    "OTA staging": "更新暂存",
+    "Build cache": "编译缓存",
     "Free": "可用",
     "Refresh": "刷新",
     "Internal storage": "本机存储",
@@ -665,6 +679,16 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Removes system logs and crash dumps.": "删除系统日志和崩溃转储。",
     "Clear download cache": "清理下载缓存",
     "Removes temporary download files. Safe to clear.": "删除临时下载文件，可安全清理。",
+    "Clear build cache": "清理编译缓存",
+    "webui_storage_ota_staging_note": (
+      "系统 OTA 更新工作区，用于下载和准备新版本；应用更新后通常会释放。"
+    ),
+    "webui_storage_scons_cache_clear_desc": (
+      "删除 scons 编译缓存。清理后下次重新编译将耗时明显更长。"
+    ),
+    "webui_storage_scons_cache_confirm": (
+      "清理编译缓存可释放空间，但下次重新编译将耗时明显更长。是否继续？"
+    ),
     "About {size} can be freed": "约可释放 {size}",
     "This will free about {size}. Continue?": "将释放约 {size}，是否继续？",
     "Are you sure you want to clear this data?": "确定要清理这些数据吗？",
@@ -889,6 +913,8 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Software": "軟體",
     "Logs": "日誌",
     "Other": "其他",
+    "OTA staging": "更新暫存",
+    "Build cache": "編譯快取",
     "Free": "可用",
     "Refresh": "重新整理",
     "Internal storage": "本機儲存",
@@ -927,6 +953,16 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Removes system logs and crash dumps.": "刪除系統日誌和崩潰轉儲。",
     "Clear download cache": "清理下載快取",
     "Removes temporary download files. Safe to clear.": "刪除臨時下載檔案，可安全清理。",
+    "Clear build cache": "清理編譯快取",
+    "webui_storage_ota_staging_note": (
+      "系統 OTA 更新工作區，用於下載和準備新版本；套用更新後通常會釋放。"
+    ),
+    "webui_storage_scons_cache_clear_desc": (
+      "刪除 scons 編譯快取。清理後下次重新編譯將耗時明顯更長。"
+    ),
+    "webui_storage_scons_cache_confirm": (
+      "清理編譯快取可釋放空間，但下次重新編譯將耗時明顯更長。是否繼續？"
+    ),
     "About {size} can be freed": "約可釋放 {size}",
     "This will free about {size}. Continue?": "將釋放約 {size}，是否繼續？",
     "Are you sure you want to clear this data?": "確定要清理這些資料嗎？",

@@ -24,6 +24,18 @@ const LOCAL_FALLBACKS = {
     "webui_storage_starred_confirm": (
       "This will permanently delete {count} starred routes ({size}). Continue?"
     ),
+    "OTA staging": "OTA staging",
+    "Build cache": "Build cache",
+    "Clear build cache": "Clear build cache",
+    "webui_storage_ota_staging_note": (
+      "OTA update workspace used by the system updater. Usually released after an update is applied."
+    ),
+    "webui_storage_scons_cache_clear_desc": (
+      "Removes the scons build cache. The next compile will take significantly longer."
+    ),
+    "webui_storage_scons_cache_confirm": (
+      "Clearing the build cache frees space, but the next compile will take significantly longer. Continue?"
+    ),
   },
   "zh-CHS": {
     Refresh: "刷新",
@@ -41,6 +53,18 @@ const LOCAL_FALLBACKS = {
     "webui_storage_starred_count": "设备上共有 {count} 条收藏路线。",
     "webui_storage_starred_more": "另有 {count} 条…",
     "webui_storage_starred_confirm": "将永久删除 {count} 条收藏路线（约 {size}），是否继续？",
+    "OTA staging": "更新暂存",
+    "Build cache": "编译缓存",
+    "Clear build cache": "清理编译缓存",
+    "webui_storage_ota_staging_note": (
+      "系统 OTA 更新工作区，用于下载和准备新版本；应用更新后通常会释放。"
+    ),
+    "webui_storage_scons_cache_clear_desc": (
+      "删除 scons 编译缓存。清理后下次重新编译将耗时明显更长。"
+    ),
+    "webui_storage_scons_cache_confirm": (
+      "清理编译缓存可释放空间，但下次重新编译将耗时明显更长。是否继续？"
+    ),
     "Disable Driver Monitoring": "禁用驾驶员监控",
     "Disable driver monitoring (no cabin camera required). Similar to LITE mode.": (
       "禁用驾驶员监控（无需舱内摄像头），效果类似 LITE 模式。"
@@ -62,6 +86,18 @@ const LOCAL_FALLBACKS = {
     "webui_storage_starred_count": "裝置上共有 {count} 條收藏路線。",
     "webui_storage_starred_more": "另有 {count} 條…",
     "webui_storage_starred_confirm": "將永久刪除 {count} 條收藏路線（約 {size}），是否繼續？",
+    "OTA staging": "更新暫存",
+    "Build cache": "編譯快取",
+    "Clear build cache": "清理編譯快取",
+    "webui_storage_ota_staging_note": (
+      "系統 OTA 更新工作區，用於下載和準備新版本；套用更新後通常會釋放。"
+    ),
+    "webui_storage_scons_cache_clear_desc": (
+      "刪除 scons 編譯快取。清理後下次重新編譯將耗時明顯更長。"
+    ),
+    "webui_storage_scons_cache_confirm": (
+      "清理編譯快取可釋放空間，但下次重新編譯將耗時明顯更長。是否繼續？"
+    ),
   },
 };
 

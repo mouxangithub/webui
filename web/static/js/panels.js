@@ -3855,6 +3855,8 @@ async function renderStoragePanel(container, opts = {}) {
     maps: { label: t("Maps"), color: "#27AE60" },
     software: { label: t("Software"), color: "#8E8E93" },
     logs: { label: t("Logs"), color: "#D4AC0D" },
+    ota_staging: { label: t("OTA staging"), color: "#E67E22" },
+    scons_cache: { label: t("Build cache"), color: "#3498DB" },
     other: { label: t("Other"), color: "#555555" },
   };
 
@@ -3884,6 +3886,11 @@ async function renderStoragePanel(container, opts = {}) {
       category: "logs",
       label: t("Clear logs"),
       desc: t("Removes system logs and crash dumps."),
+    },
+    {
+      category: "scons_cache",
+      label: t("Clear build cache"),
+      desc: t("webui_storage_scons_cache_clear_desc"),
     },
     {
       category: "download_cache",
@@ -3978,6 +3985,14 @@ async function renderStoragePanel(container, opts = {}) {
     <span class="opui-storage-legend-pct">${escapeHtml(String(data.free_percent ?? 0))}%</span>`;
   legend.appendChild(freeRow);
   wrap.appendChild(legend);
+
+  const otaStaging = (data.categories || []).find((c) => c.id === "ota_staging");
+  if (otaStaging?.bytes > 0) {
+    const otaNote = document.createElement("p");
+    otaNote.className = "opui-storage-volume-note";
+    otaNote.textContent = t("webui_storage_ota_staging_note");
+    wrap.appendChild(otaNote);
+  }
 
   if (hasExternal) {
     const ext = data.external;
@@ -4115,6 +4130,9 @@ async function renderStoragePanel(container, opts = {}) {
           count: String(starred.count),
           size: sizeText || formatStorageBytes(starred.bytes || 0),
         });
+      }
+      if (action.category === "scons_cache") {
+        confirmMessage = t("webui_storage_scons_cache_confirm");
       }
       const ok = await showConfirm({
         message: confirmMessage,

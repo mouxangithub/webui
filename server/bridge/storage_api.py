@@ -11,7 +11,21 @@ from typing import Any
 _CACHE: dict[str, Any] = {"ts": 0.0, "data": None}
 _CACHE_TTL = 60.0
 
+SAFE_STAGING_ROOT = "/data/safe_staging"
+SCONS_CACHE_ROOT = "/data/scons_cache"
+
 _CATEGORY_PATHS: dict[str, list[str]] = {}
+
+_CATEGORY_ORDER = (
+  "routes",
+  "models",
+  "maps",
+  "software",
+  "logs",
+  "ota_staging",
+  "scons_cache",
+  "other",
+)
 
 
 def _init_paths() -> None:
@@ -58,6 +72,17 @@ def _data_mount() -> str:
     return str(Path(Paths.comma_home()).parent)
   except Exception:
     return os.path.expanduser("~")
+
+
+def _safe_staging_bytes() -> int:
+  """Disk used by OTA staging (exclude merged overlay to avoid double-counting /data/openpilot)."""
+  root = SAFE_STAGING_ROOT
+  if not os.path.isdir(root):
+    return 0
+  total = 0
+  for name in ("finalized", "upper", "metadata"):
+    total += _dir_bytes(os.path.join(root, name))
+  return total
 
 
 def _dir_bytes(path: str) -> int:
@@ -292,7 +317,9 @@ def _mock_snapshot() -> dict[str, Any]:
     "maps": int(4 * 1024 ** 3),
     "software": int(18 * 1024 ** 3),
     "logs": int(2 * 1024 ** 3),
-    "other": int(1 * 1024 ** 3),
+    "ota_staging": int(9 * 1024 ** 3),
+    "scons_cache": int(900 * 1024 ** 2),
+    "other": int(100 * 1024 ** 2),
   }
   used = sum(cats.values())
   free = max(0, total - used)
@@ -300,8 +327,8 @@ def _mock_snapshot() -> dict[str, Any]:
   routes_ext = int(120 * 1024 ** 3)
   ext_free = ext_total - routes_ext
   internal_cats = [
-    {"id": k, "bytes": v, "percent": round(100.0 * v / total, 1) if total else 0}
-    for k, v in cats.items()
+    {"id": k, "bytes": cats[k], "percent": round(100.0 * cats[k] / total, 1) if total else 0}
+    for k in _CATEGORY_ORDER
   ]
   return {
     "ok": True,
@@ -357,6 +384,7 @@ def _mock_snapshot() -> dict[str, Any]:
       "maps": cats["maps"],
       "models_cache": int(3 * 1024 ** 3),
       "logs": cats["logs"],
+      "scons_cache": cats["scons_cache"],
       "download_cache": int(512 * 1024 ** 2),
     },
   }
@@ -390,13 +418,16 @@ def snapshot_storage(*, force: bool = False) -> dict[str, Any]:
       size += _dir_bytes(p)
     cat_bytes[cat_id] = size
 
+  cat_bytes["ota_staging"] = _safe_staging_bytes()
+  cat_bytes["scons_cache"] = _dir_bytes(SCONS_CACHE_ROOT)
+
   download_cache = sum(_dir_bytes(p) for p in _CATEGORY_PATHS.get("download_cache", []))
   known = sum(cat_bytes.values()) + download_cache
   other = max(0, used_disk - known)
   cat_bytes["other"] = other
 
   categories = []
-  for cat_id in ("routes", "models", "maps", "software", "logs", "other"):
+  for cat_id in _CATEGORY_ORDER:
     b = int(cat_bytes.get(cat_id, 0))
     categories.append({
       "id": cat_id,
@@ -450,6 +481,7 @@ def snapshot_storage(*, force: bool = False) -> dict[str, Any]:
     "maps": int(cat_bytes.get("maps", 0)),
     "models_cache": None,
     "logs": int(cat_bytes.get("logs", 0)),
+    "scons_cache": int(cat_bytes.get("scons_cache", 0)),
     "download_cache": int(download_cache),
   }
 
@@ -605,6 +637,11 @@ def clear_storage(category: str) -> dict[str, Any]:
     elif category == "download_cache":
       for path in _CATEGORY_PATHS.get("download_cache", []):
         freed += _clear_dir_contents(path)
+
+    elif category == "scons_cache":
+      if os.path.isdir(SCONS_CACHE_ROOT):
+        freed += _dir_bytes(SCONS_CACHE_ROOT)
+        shutil.rmtree(SCONS_CACHE_ROOT, ignore_errors=True)
 
     else:
       return {"ok": False, "error": f"unknown category: {category}"}
