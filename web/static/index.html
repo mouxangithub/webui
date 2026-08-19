@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/opui.css?v=116" />
+  <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=125" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -92,6 +92,7 @@
 
       <!-- ONROAD -->
       <section id="screen-onroad" class="opui-screen opui-screen--onroad" hidden>
+        <div class="opui-onroad-stage">
         <div id="camera-wrap" class="opui-camera-wrap">
           <video id="road-video" class="opui-camera-video" autoplay playsinline muted></video>
           <div id="model-overlay" class="opui-model-overlay" hidden></div>
@@ -101,6 +102,14 @@
             <p id="camera-status-text">Loading camera...</p>
           </div>
           <div id="camera-bottom-fade" class="opui-camera-bottom-fade" aria-hidden="true"></div>
+        </div>
+        <canvas id="torque-bar-canvas" class="opui-torque-bar" hidden></canvas>
+        <div id="alert-bar" class="opui-alert" hidden>
+          <div class="opui-alert__inner">
+            <span id="alert-text1" class="opui-alert__t1"></span>
+            <span id="alert-text2" class="opui-alert__t2"></span>
+          </div>
+        </div>
         </div>
         <div id="hud" class="opui-hud">
         <div class="opui-hud-gradient" aria-hidden="true"></div>
@@ -153,13 +162,6 @@
         </div>
         <div id="dev-ui-bottom" class="opui-dev-ui-bottom" hidden></div>
         <div id="dev-ui-right" class="opui-dev-ui-right" hidden></div>
-        <canvas id="torque-bar-canvas" class="opui-torque-bar" hidden></canvas>
-        <div id="alert-bar" class="opui-alert" hidden>
-          <div class="opui-alert__inner">
-            <span id="alert-text1" class="opui-alert__t1"></span>
-            <span id="alert-text2" class="opui-alert__t2"></span>
-          </div>
-        </div>
         <div id="border" class="opui-border" aria-hidden="true">
           <div class="opui-border__outer"></div>
           <div class="opui-border__inner opui-border--disengaged"></div>
@@ -336,6 +338,9 @@
       <button type="button" data-preset="standstill_timer">Standstill timer</button>
       <button type="button" data-preset="long_only">Longitudinal only</button>
       <button type="button" data-preset="alert_full">Full-screen alert</button>
+      <button type="button" data-preset="sound_engage">Sound · engage</button>
+      <button type="button" data-preset="sound_disengage">Sound · disengage</button>
+      <button type="button" data-preset="sound_warning">Sound · warning</button>
       <button type="button" data-preset="home_update">Home · Update</button>
       <button type="button" data-preset="home_alerts">Home · Alerts</button>
       <button type="button" data-preset="confidence_low">Confidence · low</button>
@@ -352,6 +357,6 @@
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=115"></script>
+  <script type="module" src="/static/js/app.js?v=116"></script>
 </body>
 </html>

@@ -410,6 +410,14 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   except Exception:
     gate = {"blockers": [], "ignition": False, "can_start": True}
 
+  try:
+    from webui.server.bridge.alert_sound import derive_alert_sound, quiet_mode_enabled
+    alert_sound = derive_alert_sound(sm, ss, started)
+    quiet_mode = quiet_mode_enabled()
+  except Exception:
+    alert_sound = "none"
+    quiet_mode = False
+
   return {
     "ok": True,
     "started": started,
@@ -503,6 +511,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "startup_blockers": gate.get("blockers") or [],
     "ignition": bool(gate.get("ignition")),
     "can_start": bool(gate.get("can_start", True)),
+    "alert_sound": alert_sound,
+    "quiet_mode": quiet_mode,
   }
 
 

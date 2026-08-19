@@ -2,6 +2,7 @@ import { apiGet, apiPost } from "./api.js";
 import { opuiWs } from "./ws.js";
 import { tr } from "./i18n.js";
 import { updateHomeScreen } from "./home.js";
+import { replayAlertSoundFromState } from "./soundd_browser.js";
 
 const PRESET_I18N = {
   home: "Offroad",
@@ -13,6 +14,9 @@ const PRESET_I18N = {
   standstill_timer: "Standstill timer",
   long_only: "Longitudinal only",
   alert_full: "Full-screen alert",
+  sound_engage: "Sound · engage",
+  sound_disengage: "Sound · disengage",
+  sound_warning: "Sound · warning",
   home_update: "Home · Update",
   home_alerts: "Home · Alerts",
   confidence_low: "Confidence · low",
@@ -174,7 +178,10 @@ export async function initDevPanel() {
       const r = await apiPost(`/api/opui/dev/preset/${btn.dataset.preset}`);
       if (r.ok) {
         syncFormFromSim(r.simulation);
-        if (r.state) dispatchDevState(r.state);
+        if (r.state) {
+          dispatchDevState(r.state);
+          if (r.preset?.startsWith("sound_")) replayAlertSoundFromState(r.state);
+        }
         window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
       }
     });
@@ -192,6 +199,7 @@ export async function initDevPanel() {
     pushPatch({
       engaged: engaged.checked,
       ui_status: engaged.checked ? "engaged" : "disengaged",
+      alert_sound: engaged.checked ? "engage" : "disengage",
     });
   });
   experimental?.addEventListener("change", () => {

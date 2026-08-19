@@ -236,7 +236,7 @@ function updateSpeedLimit(sp, st) {
   slaWrap.classList.toggle("opui-hud-sla--mutcd", isMutcd);
   if (isMutcd) {
     const w = slaWrap.offsetWidth || 200;
-    const h = slaWrap.offsetHeight || 216;
+    const h = slaWrap.offsetHeight || 204;
     slaWrap.style.borderRadius = `${Math.round(Math.min(w, h) * 0.35)}px`;
   } else {
     slaWrap.style.borderRadius = "";
@@ -262,6 +262,7 @@ function updateSpeedLimit(sp, st) {
 
   const el = document.getElementById("hud-speed-limit");
   if (el) el.textContent = limitText;
+  slaWrap.classList.toggle("is-three-digit", limitText.length >= 3);
 
   const warningMode = Number(st.speed_limit_mode) >= 2;
   const isOverspeed = hasLimit

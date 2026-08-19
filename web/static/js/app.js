@@ -18,6 +18,7 @@ import { initSystemWaitOverlay } from "./system_wait_overlay.js";
 import { initScreenSaver, updateScreenSaverState } from "./screensaver.js";
 import { opuiWs } from "./ws.js";
 import { clientToOpui } from "./opui_coords.js";
+import { initBrowserSounds, updateAlertSound } from "./soundd_browser.js";
 
 export { clientToOpui };
 
@@ -631,6 +632,7 @@ function handleState(st) {
   updateSidebarMode(!!st.started);
   updateSidebarRecording(st);
   updateScreenSaverState(st);
+  updateAlertSound(st);
 
   if (!st.ok) return;
 
@@ -875,6 +877,7 @@ bindOnboardingDialog();
 initModelCanvas();
 applySidebarAssets();
 setupWebSocket();
+initBrowserSounds();
 
 bootstrap().then(() => {
   initDevPanel();

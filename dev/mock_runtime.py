@@ -74,6 +74,7 @@ SIM: dict[str, Any] = {
   "torque_utilization": 0.42,
   "pcm_cruise_speed": False,
   "headless": False,
+  "alert_sound": "none",
   "agnos_update_required": True,
   "agnos_current_version": "11.9.9",
   "agnos_target_version": "12.0.0",
@@ -323,7 +324,16 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "startup_blockers": _mock_startup_blockers(s),
     "ignition": False,
     "can_start": not _mock_startup_blockers(s),
+    "alert_sound": str(s.get("alert_sound", "none") or "none"),
+    "quiet_mode": _mock_quiet_mode(),
   }
+
+
+def _mock_quiet_mode() -> bool:
+  try:
+    return MockParams().get_bool("QuietMode")
+  except Exception:
+    return False
 
 
 def mock_wifi_networks() -> list[dict[str, Any]]:

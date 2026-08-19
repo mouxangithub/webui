@@ -56,6 +56,6 @@ def resolve_asset(rel_path: str) -> Path | None:
   name = Path(rel).name
   for base in _search_roots():
     for hit in base.rglob(name):
-      if hit.is_file() and hit.suffix.lower() in (".png", ".svg", ".ttf", ".otf", ".woff2"):
+      if hit.is_file() and hit.suffix.lower() in (".png", ".svg", ".ttf", ".otf", ".woff2", ".wav"):
         return hit
   return None

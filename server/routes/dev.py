@@ -87,7 +87,7 @@ async def api_dev_presets(request: web.Request) -> web.Response:
     "onroad_engaged": {
       "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 88,
       "alert_text1": "", "alert_text2": "", "alert_size": "none",
-      "torque_bar": True, "torque_utilization": 0.62, "developer_ui": 1,
+      "torque_bar": True, "torque_utilization": 0.62, "developer_ui": 3,
       "confidence_target": 0.85,
     },
     "onroad_disengaged": {"started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 45, "alert_text1": "", "alert_text2": "", "alert_size": "none"},
@@ -144,6 +144,19 @@ async def api_dev_presets(request: web.Request) -> web.Response:
       "experimental_mode": True, "experimental_mode_confirmed": True,
       "torque_bar": True, "torque_utilization": 0.5, "developer_ui": 3,
       "confidence_target": 0.7, "alert_size": "none",
+    },
+    "sound_engage": {
+      "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 72,
+      "alert_sound": "engage", "alert_size": "none",
+    },
+    "sound_disengage": {
+      "started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 45,
+      "alert_sound": "disengage", "alert_size": "none",
+    },
+    "sound_warning": {
+      "started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 0,
+      "alert_sound": "warningImmediate", "alert_size": "mid",
+      "alert_text1": "Brake!", "alert_text2": "Take control immediately", "alert_status": "critical",
     },
     "software_agnos": {
       "started": False, "engaged": False, "ui_status": "disengaged",
