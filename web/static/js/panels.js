@@ -244,6 +244,10 @@ function formatOptionLabel(w, rawVal, panelData = panelDataRef) {
     const map = { [-1]: t("Off"), 0: t("Nudge"), 1: t("Nudgeless"), 2: `0.5 ${t("s")}`, 3: `1 ${t("s")}`, 4: `2 ${t("s")}`, 5: `3 ${t("s")}` };
     return map[val] ?? String(val);
   }
+  if (fmt === "offroad_brightness") {
+    if (!val) return t("Default (50%)");
+    return `${val} %`;
+  }
   if (fmt === "onroad_brightness") {
     if (val === 0) return t("Auto (Default)");
     if (val === 1) return t("Auto (Dark)");
@@ -1864,6 +1868,18 @@ function renderOptionRow(w, panelData) {
       if (panelData?.values) panelData.values[w.param] = String(paramVal);
       if (w.param === "OnroadScreenOffBrightness") updateDisplayDependencies(panelData);
       if (w.param === "AutoLaneChangeTimer") updateLaneChangeSubpanel(globalState);
+      if (w.param === "Brightness") {
+        try {
+          if (opuiWs.connected) {
+            await opuiWs.rpc("PUT", "/api/opui/display/brightness", { brightness: paramVal });
+          } else {
+            await apiPut("/api/opui/display/brightness", { brightness: paramVal });
+          }
+        } catch (err) {
+          // Hardware brightness is best-effort; the param already persisted above.
+          console.warn("immediate brightness apply failed:", err);
+        }
+      }
     }
   };
   minus.disabled = idx <= min;

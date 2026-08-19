@@ -250,6 +250,9 @@ PANELS: list[dict[str, Any]] = [
     "id": "display",
     "title": "Display",
     "widgets": [
+      {"type": "option", "param": "Brightness", "label": "Screen Brightness",
+       "min": 0, "max": 100, "step": 5, "label_format": "offroad_brightness", "layout": "inline",
+       "desc": "Screen brightness when offroad (not driving). 0 uses the device default (50%)."},
       {"type": "option", "param": "OnroadScreenOffBrightness", "label": "Onroad Brightness",
        "min": 0, "max": 22, "step": 1, "label_format": "onroad_brightness", "layout": "inline"},
       {"type": "option", "param": "OnroadScreenOffTimer", "label": "Onroad Brightness Delay",
@@ -451,7 +454,7 @@ def panel_schema() -> dict[str, Any]:
   headless = is_headless_mode()
   lite = is_lite_hw()
   headless_hide_params = {
-    "OnroadScreenOffBrightness", "OnroadScreenOffTimer",
+    "Brightness", "OnroadScreenOffBrightness", "OnroadScreenOffTimer",
     "InteractivityTimeout", "ScreenSaverEnabled", "ScreenSaverTimeout",
   }
 

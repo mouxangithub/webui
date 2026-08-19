@@ -227,6 +227,8 @@ async def _handle_client(ws: web.WebSocketResponse, msg: dict[str, Any]) -> None
         invalidate_overlay_params_cache()
       if key == "LanguageSetting":
         await _broadcast_i18n(force=True)
+    if result.get("ok") and method == "PUT" and path.rstrip("/").endswith("/api/opui/display/brightness"):
+      await _broadcast_panel_updates_for_key("Brightness")
     if result.get("ok") and method == "POST" and path.rstrip("/").endswith("/api/opui/device/language"):
       await _broadcast_i18n(force=True)
     return

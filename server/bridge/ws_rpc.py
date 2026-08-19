@@ -38,6 +38,7 @@ from webui.server.bridge.osm_api import (
   osm_select_region,
 )
 from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param
+from webui.server.bridge.brightness_api import apply_brightness, snapshot_brightness
 from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
 from webui.server.bridge.state_hub import get_home, get_state
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
@@ -165,6 +166,12 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "POST" and clean_path == "/api/opui/params/batch":
       return batch_get(body.get("keys", []))
+
+    if method == "GET" and clean_path == "/api/opui/display/brightness":
+      return snapshot_brightness()
+
+    if method == "PUT" and clean_path == "/api/opui/display/brightness":
+      return apply_brightness(body.get("brightness", body.get("value", 0)))
 
     m = _ACTION_POST.match(clean_path)
     if method == "POST" and m:
