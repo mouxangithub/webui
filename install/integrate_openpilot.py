@@ -21,7 +21,7 @@ START_WEBUI_FN = r'''  start_webui() {
     local web_py=python3.12
     command -v "$web_py" >/dev/null 2>&1 || web_py=python3
     local venv_site="/usr/local/venv/lib/python3.12/site-packages"
-    local pydeps="$root/.pydeps"
+    local pydeps="/data/.pydeps"
     local py_path="$root"
     [ -d "$venv_site" ] && py_path="$py_path:$venv_site"
     [ -d "$pydeps" ] && py_path="$py_path:$pydeps"
@@ -89,6 +89,11 @@ def _upgrade_start_webui(content: str) -> tuple[str, bool]:
 
 def patch_launch_script(path: Path, *, dry_run: bool = False) -> dict[str, Any]:
   content = path.read_text(encoding="utf-8")
+
+  # New-style launch script already auto-starts webui via keep_alive; skip legacy patch.
+  if "keep_alive webui" in content and LAUNCH_MARKER not in content:
+    return {"ok": True, "path": str(path), "changed": False, "note": "new-style launch script already starts webui via keep_alive"}
+
   upgraded, was_upgraded = _upgrade_start_webui(content)
   if was_upgraded:
     if dry_run:
