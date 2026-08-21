@@ -31,16 +31,16 @@ def ensure_runtime() -> bool:
   venv_site = "/usr/local/venv/lib/python3.12/site-packages"
   if os.path.isdir(venv_site) and venv_site not in sys.path:
     sys.path.append(venv_site)
-  pydeps = os.path.join(root, ".pydeps")
-  if os.path.isdir(pydeps) and pydeps not in sys.path:
-    sys.path.append(pydeps)
+  for pydeps in (os.path.join(root, ".pydeps"), "/data/.pydeps"):
+    if os.path.isdir(pydeps) and pydeps not in sys.path:
+      sys.path.append(pydeps)
   try:
     from openpilot.common.params import Params
 
     Params()
     return False
-  except Exception:
-    pass
+  except Exception as exc:
+    logging.getLogger("webuid").warning("Params import failed: %s", exc, exc_info=True)
   from webui.dev.mock_runtime import install_openpilot_mocks
 
   install_openpilot_mocks(root)
