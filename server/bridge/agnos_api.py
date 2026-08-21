@@ -195,8 +195,10 @@ def _agnos_pending_status() -> dict[str, Any]:
       verify_error = str(exc)
 
   version_mismatch = bool(target) and current != target
-  # Show UI when the OS version lags, or when the inactive slot is flashed and needs reboot.
-  update_required = version_mismatch or ready_to_reboot
+  # Show UI only when the OS version string lags. If /VERSION already matches
+  # AGNOS_VERSION, treat the update as applied even if the inactive slot still
+  # verifies, to avoid repeated false-positive prompts after reboot.
+  update_required = version_mismatch
 
   return {
     "available": True,
