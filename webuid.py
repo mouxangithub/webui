@@ -34,6 +34,23 @@ def ensure_runtime() -> bool:
   for pydeps in (os.path.join(root, ".pydeps"), "/data/.pydeps"):
     if os.path.isdir(pydeps) and pydeps not in sys.path:
       sys.path.append(pydeps)
+
+  # After an overlay update the compiled Params shared library may still be
+  # building. Wait for it instead of immediately falling back to dev mocks.
+  params_so = os.path.join(root, "openpilot", "common", "libparams_c.so")
+  if not os.path.isfile(params_so):
+    logger = logging.getLogger("webuid")
+    logger.info("Waiting for %s to appear...", params_so)
+    waited = 0
+    while not os.path.isfile(params_so) and waited < 120:
+      import time
+      time.sleep(1)
+      waited += 1
+    if os.path.isfile(params_so):
+      logger.info("Found libparams_c.so after %ss", waited)
+    else:
+      logger.warning("Timed out waiting for libparams_c.so after %ss", waited)
+
   try:
     from openpilot.common.params import Params
 
