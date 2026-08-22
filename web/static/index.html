@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
   <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/opui.css?v=125" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=126" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -102,6 +102,10 @@
             <p id="camera-status-text">Loading camera...</p>
           </div>
           <div id="camera-bottom-fade" class="opui-camera-bottom-fade" aria-hidden="true"></div>
+          <div id="camera-switcher" class="opui-camera-switcher">
+            <button type="button" id="btn-cam-road" class="opui-camera-switcher-btn">Long focus</button>
+            <button type="button" id="btn-cam-wide" class="opui-camera-switcher-btn">Wide angle</button>
+          </div>
         </div>
         <canvas id="torque-bar-canvas" class="opui-torque-bar" hidden></canvas>
         <div id="alert-bar" class="opui-alert" hidden>
@@ -357,6 +361,6 @@
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=116"></script>
+  <script type="module" src="/static/js/app.js?v=117"></script>
 </body>
 </html>

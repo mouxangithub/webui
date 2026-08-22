@@ -3,7 +3,7 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
 } from "./panels.js?v=106";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js?v=117";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { getOverlayProjectionSize, syncModelOverlayViewport } from "./model_viewport.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
@@ -11,7 +11,7 @@ import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from 
 import { bindDmArcClick } from "./hud_sp.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOverlayEnabled, hasOverlayGeometry } from "./model_canvas.js";
-import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
+import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js?v=117";
 import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
 import { initSystemWaitOverlay } from "./system_wait_overlay.js";
@@ -870,6 +870,7 @@ document.getElementById("camera-wrap")?.addEventListener("click", (ev) => {
 $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindExperimentalButton();
+bindCameraSwitcher();
 bindDriverCameraDialog();
 bindDmArcClick();
 bindHomeHeader();

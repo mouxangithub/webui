@@ -27,6 +27,8 @@ const LOCAL_FALLBACKS = {
     "OTA staging": "OTA staging",
     "Build cache": "Build cache",
     "Clear build cache": "Clear build cache",
+    "Long focus": "Long focus",
+    "Wide angle": "Wide angle",
     "webui_storage_ota_staging_note": (
       "OTA update workspace used by the system updater. Usually released after an update is applied."
     ),
@@ -56,6 +58,8 @@ const LOCAL_FALLBACKS = {
     "OTA staging": "更新暂存",
     "Build cache": "编译缓存",
     "Clear build cache": "清理编译缓存",
+    "Long focus": "长焦",
+    "Wide angle": "广角",
     "webui_storage_ota_staging_note": (
       "系统 OTA 更新工作区，用于下载和准备新版本；应用更新后通常会释放。"
     ),
@@ -89,6 +93,8 @@ const LOCAL_FALLBACKS = {
     "OTA staging": "更新暫存",
     "Build cache": "編譯快取",
     "Clear build cache": "清理編譯快取",
+    "Long focus": "長焦",
+    "Wide angle": "廣角",
     "webui_storage_ota_staging_note": (
       "系統 OTA 更新工作區，用於下載和準備新版本；套用更新後通常會釋放。"
     ),
@@ -148,6 +154,8 @@ const STATIC_UI_KEYS = {
   "webui-update-check": "Check again",
   "webui-update-apply": "Update now",
   "camera-status-text": "Loading camera...",
+  "btn-cam-road": "Long focus",
+  "btn-cam-wide": "Wide angle",
   "btn-home-camera-preview-label": "Driving preview",
   "sunnylink": "sunnylink",
   "Decline": "Decline",

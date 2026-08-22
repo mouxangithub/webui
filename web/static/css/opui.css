@@ -2163,6 +2163,40 @@ html.opui-portrait-host .opui-modal-scroll {
 }
 .opui-hud.is-engaged .opui-hud-bottom-fade { opacity: 1; }
 
+.opui-camera-switcher {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  display: none;
+  flex-direction: row;
+  gap: 12px;
+  z-index: 10;
+  pointer-events: auto;
+}
+.opui-camera-wrap.streaming:not(.preview-off) .opui-camera-switcher {
+  display: flex;
+}
+.opui-camera-switcher-btn {
+  min-width: 120px;
+  padding: 14px 22px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 28px;
+  font-weight: 600;
+  font-family: inherit;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.opui-camera-switcher-btn.is-active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+  border-color: #fff;
+}
+
 .opui-hud-cruise {
   position: absolute;
   left: 60px;

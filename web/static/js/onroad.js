@@ -14,7 +14,11 @@ import {
   prewarmWebrtc,
   isRoadStreaming,
   isCameraPlaying,
-} from "./webrtc_stream.js?v=97";
+  switchCamera,
+  CAM,
+  getCurrentCamera,
+  setManualCamera,
+} from "./webrtc_stream.js?v=98";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -216,6 +220,7 @@ export function updateOnroadHud(st) {
   if (!st?.ok) return;
   lastOnroadState = st;
   updateRoadCameraForState(st);
+  updateCameraSwitcherButtons();
 
   const digest = hudDigest(st);
   const staticChanged = digest !== lastHudDigest;
@@ -389,6 +394,34 @@ function updateDriverCameraOverlay(st) {
   face.style.left = `${left}px`;
   face.style.top = `${top}px`;
   face.style.opacity = String(df.alpha ?? 0.7);
+}
+
+function updateCameraSwitcherButtons() {
+  const roadBtn = document.getElementById("btn-cam-road");
+  const wideBtn = document.getElementById("btn-cam-wide");
+  if (!roadBtn || !wideBtn) return;
+  const current = getCurrentCamera();
+  roadBtn.classList.toggle("is-active", current === CAM.ROAD);
+  wideBtn.classList.toggle("is-active", current === CAM.WIDE);
+}
+
+export function bindCameraSwitcher() {
+  const roadBtn = document.getElementById("btn-cam-road");
+  const wideBtn = document.getElementById("btn-cam-wide");
+  if (!roadBtn || !wideBtn) return;
+
+  roadBtn.addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    setManualCamera(CAM.ROAD);
+    await switchCamera(CAM.ROAD).catch(() => {});
+    updateCameraSwitcherButtons();
+  });
+  wideBtn.addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    setManualCamera(CAM.WIDE);
+    await switchCamera(CAM.WIDE).catch(() => {});
+    updateCameraSwitcherButtons();
+  });
 }
 
 export function bindExperimentalButton() {

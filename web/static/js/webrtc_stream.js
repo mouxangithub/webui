@@ -79,6 +79,9 @@ let prewarmPromise = null;
 
 let roadVideoBound = false;
 
+let manualCamera = null;
+let manualCameraOverride = false;
+
 
 
 function setCameraStatus(msg) {
@@ -321,7 +324,37 @@ export async function switchCamera(camera) {
 
 
 
+export function getCurrentCamera() {
+
+  return roadCamera || CAM.ROAD;
+
+}
+
+
+
+export function setManualCamera(camera) {
+
+  manualCamera = camera;
+
+  manualCameraOverride = true;
+
+}
+
+
+
+export function clearManualCamera() {
+
+  manualCamera = null;
+
+  manualCameraOverride = false;
+
+}
+
+
+
 function pickRoadCamera(st) {
+
+  if (manualCameraOverride && manualCamera) return manualCamera;
 
   if (!st?.experimental_mode) return CAM.ROAD;
 
@@ -524,6 +557,8 @@ export async function startRoadStream(videoEl, wrapEl) {
 
   cancelRoadDisableTimer();
 
+  clearManualCamera();
+
   const video = videoEl || document.getElementById("road-video");
 
   const wrap = wrapEl || document.getElementById("camera-wrap");
@@ -619,6 +654,8 @@ export async function stopRoadStream(videoEl, wrapEl) {
   roadStreaming = false;
 
   roadCamera = CAM.ROAD;
+
+  clearManualCamera();
 
   prewarmPromise = null;
 
