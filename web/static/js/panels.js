@@ -17,6 +17,10 @@ function t(s) {
   return tr(s);
 }
 
+const TripsState = {
+  source: "local",
+};
+
 function trFormat(template, ...args) {
   let i = 0;
   return tr(template)
@@ -2544,15 +2548,36 @@ async function renderNetworkAdvancedPanel(container, data) {
 async function renderTripsPanel(container, data) {
   const gen = beginPanelRender();
   container.innerHTML = "";
-  const trips = await apiGet("/api/opui/trips");
+  const trips = await apiGet(`/api/opui/trips?source=${encodeURIComponent(TripsState.source)}`);
   if (panelRenderStale(gen)) return;
   if (!trips.ok) {
     container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(trips.error || "")}</p>`;
     return;
   }
+  TripsState.source = trips.source || TripsState.source;
+
   const wrap = document.createElement("div");
   wrap.className = "opui-trips-wrap";
   container.appendChild(wrap);
+
+  // Local / Cloud toggle
+  const toggleRow = document.createElement("div");
+  toggleRow.className = "opui-trips-toggle";
+  toggleRow.innerHTML = `
+    <button type="button" class="opui-trips-toggle-btn ${TripsState.source === "local" ? "opui-trips-toggle-btn--active" : ""}" data-source="local">${escapeHtml(t("Local"))}</button>
+    <button type="button" class="opui-trips-toggle-btn ${TripsState.source === "cloud" ? "opui-trips-toggle-btn--active" : ""}" data-source="cloud">${escapeHtml(t("Cloud"))}</button>
+  `;
+  toggleRow.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const newSource = btn.dataset.source;
+      if (newSource === TripsState.source) return;
+      TripsState.source = newSource;
+      await apiPut("/api/opui/params/TripsDataSource", { value: newSource });
+      await renderTripsPanel(container, data);
+    });
+  });
+  wrap.appendChild(toggleRow);
+
   const s = trips.stats || {};
   const metric = globalState.is_metric;
   for (const [title, key] of [[t("ALL TIME"), "all"], [t("PAST WEEK"), "week"]]) {

@@ -2948,6 +2948,35 @@ html.opui-portrait-host .opui-modal-scroll {
   box-sizing: border-box;
 }
 
+.opui-trips-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  padding: 0 26px;
+}
+
+.opui-trips-toggle-btn {
+  background: #323232;
+  border: none;
+  color: #fff;
+  font-size: 40px;
+  font-weight: 600;
+  padding: 18px 48px;
+  cursor: pointer;
+}
+
+.opui-trips-toggle-btn:first-child {
+  border-radius: 12px 0 0 12px;
+}
+
+.opui-trips-toggle-btn:last-child {
+  border-radius: 0 12px 12px 0;
+}
+
+.opui-trips-toggle-btn--active {
+  background: #505050;
+}
+
 .opui-trips-card {
   flex: 1 1 0;
   min-height: 240px;

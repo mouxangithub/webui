@@ -230,8 +230,9 @@ async def api_webrtc_notify(request: web.Request) -> web.Response:
   return json_response(result)
 
 
-async def api_trips(_request: web.Request) -> web.Response:
-  return json_response(trips_stats())
+async def api_trips(request: web.Request) -> web.Response:
+  source = request.query.get("source")
+  return json_response(trips_stats(source=source))
 
 
 async def api_models(_request: web.Request) -> web.Response:

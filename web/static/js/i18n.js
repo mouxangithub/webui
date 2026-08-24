@@ -41,6 +41,8 @@ const LOCAL_FALLBACKS = {
   },
   "zh-CHS": {
     Refresh: "刷新",
+    Local: "本地",
+    Cloud: "云端",
     "webui_storage_routes_autodelete_hint": (
       "可用空间低于 10% 或 5 GB 时，系统会自动删除最旧路线（与是否上传无关），收藏路线会保留。"
     ),
@@ -76,6 +78,8 @@ const LOCAL_FALLBACKS = {
   },
   "zh-CHT": {
     Refresh: "重新整理",
+    Local: "本機",
+    Cloud: "雲端",
     "webui_storage_routes_autodelete_hint": (
       "可用空間低於 10% 或 5 GB 時，系統會自動刪除最舊路線（與是否上傳無關），收藏路線會保留。"
     ),

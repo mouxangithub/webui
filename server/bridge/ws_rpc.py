@@ -224,7 +224,7 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
       return wifi_forget(str(body.get("ssid", "")))
 
     if method == "GET" and clean_path == "/api/opui/trips":
-      return trips_stats()
+      return trips_stats(source=query.get("source"))
 
     if method == "GET" and clean_path == "/api/opui/models":
       return models_status()
