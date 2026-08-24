@@ -2165,15 +2165,16 @@ html.opui-portrait-host .opui-modal-scroll {
 
 .opui-camera-switcher {
   position: absolute;
-  bottom: 24px;
-  right: 24px;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
   display: none;
   flex-direction: row;
   gap: 12px;
   z-index: 10;
   pointer-events: auto;
 }
-.opui-camera-wrap.streaming:not(.preview-off) .opui-camera-switcher {
+.opui-camera-wrap.streaming:not(.preview-off):not(.is-onroad) .opui-camera-switcher {
   display: flex;
 }
 .opui-camera-switcher-btn {
@@ -2975,6 +2976,16 @@ html.opui-portrait-host .opui-modal-scroll {
 
 .opui-trips-toggle-btn--active {
   background: #505050;
+}
+
+.opui-trips-loading {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 520px;
+  font-size: 48px;
+  color: #a0a0a0;
 }
 
 .opui-trips-card {

@@ -362,6 +362,9 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
   },
   "zh-CHS": {
     "Web UI": "Web UI",
+    "Local": "本地",
+    "Cloud": "云端",
+    "Loading...": "加载中...",
     "Web UI update available": "有 Web UI 更新",
     "Web UI is up to date": "Web UI 已是最新版本",
     "New commits on {branch}": "{branch} 分支有新提交",
@@ -711,6 +714,9 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
   },
   "zh-CHT": {
     "Web UI": "Web UI",
+    "Local": "本機",
+    "Cloud": "雲端",
+    "Loading...": "載入中...",
     "Web UI update available": "有 Web UI 更新",
     "Web UI is up to date": "Web UI 已是最新版本",
     "New commits on {branch}": "{branch} 分支有新提交",

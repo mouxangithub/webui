@@ -26,6 +26,7 @@ PO_LANG: dict[str, str] = {
 
 
 _STRINGS_CACHE: dict[str, dict[str, str]] = {}
+_PO_MTIMES: dict[str, float] = {}
 
 
 def _normalize_lang_setting(lang: str) -> str:
@@ -93,15 +94,17 @@ def _parse_po_file(path: Path) -> dict[str, str]:
 
 def _load_strings(lang_setting: str) -> dict[str, str]:
   po_code = PO_LANG.get(lang_setting, PO_LANG.get(lang_setting.removeprefix("main_"), "en"))
-  cached = _STRINGS_CACHE.get(po_code)
-  if cached is not None:
-    return cached
   tdir = _translations_dir()
   if not tdir:
-    return {}
+    return _STRINGS_CACHE.get(po_code, {})
   po_path = tdir / f"app_{po_code}.po"
   if not po_path.is_file():
     return {}
+
+  mtime = po_path.stat().st_mtime
+  cached = _STRINGS_CACHE.get(po_code)
+  if cached is not None and _PO_MTIMES.get(po_code) == mtime:
+    return cached
 
   try:
     from openpilot.system.ui.lib.multilang import load_translations
@@ -109,6 +112,7 @@ def _load_strings(lang_setting: str) -> dict[str, str]:
   except Exception:
     translations = _parse_po_file(po_path)
   _STRINGS_CACHE[po_code] = translations
+  _PO_MTIMES[po_code] = mtime
   return translations
 
 

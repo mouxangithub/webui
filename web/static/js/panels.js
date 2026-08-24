@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut, toast } from "./api.js";
-import { tr } from "./i18n.js";
+import { loadI18n, tr } from "./i18n.js";
 import { getQualityPreference, setQualityPreference, QUALITY_LEVELS } from "./webrtc_stream_adaptive.js";
 import {
   getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, webCodecsCapability, getStreamDecodePath,
@@ -2547,9 +2547,11 @@ async function renderNetworkAdvancedPanel(container, data) {
 
 async function renderTripsPanel(container, data) {
   const gen = beginPanelRender();
-  container.innerHTML = "";
+  container.innerHTML = `<div class="opui-trips-loading"><span>${escapeHtml(t("Loading..."))}</span></div>`;
+  await loadI18n(true);
   const trips = await apiGet(`/api/opui/trips?source=${encodeURIComponent(TripsState.source)}`);
   if (panelRenderStale(gen)) return;
+  container.innerHTML = "";
   if (!trips.ok) {
     container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(trips.error || "")}</p>`;
     return;
