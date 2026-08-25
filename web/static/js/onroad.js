@@ -18,7 +18,7 @@ import {
   CAM,
   getCurrentCamera,
   setManualCamera,
-} from "./webrtc_stream.js?v=98";
+} from "./webrtc_stream.js?v=99";
 
 const EXP_WHEEL_ICON = "/api/opui/assets/icons/chffr_wheel.png";
 const EXP_MODE_ICON = "/api/opui/assets/icons/experimental.png";
@@ -426,6 +426,7 @@ export function bindCameraSwitcher() {
   exitBtn.addEventListener("click", async (ev) => {
     ev.stopPropagation();
     await apiPut("/api/opui/params/IsOnroadPreview", { value: "0" }).catch(() => {});
+    window.dispatchEvent(new CustomEvent("opui:exit-onroad-preview"));
   });
 }
 
@@ -482,7 +483,7 @@ export function bindDriverCameraDialog() {
   });
 }
 
-export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=98";
+export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=99";
 export {
   applyStreamQuality,
   getQualityPreference,
@@ -494,4 +495,4 @@ export {
   onDocumentVisibilityChange,
   setQualityPreference,
   updateStreamDeviceState,
-} from "./webrtc_stream.js?v=98";
+} from "./webrtc_stream.js?v=99";

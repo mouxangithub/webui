@@ -3253,7 +3253,7 @@ function renderStreamPreviewQualityRow(w) {
       group.querySelectorAll("button").forEach((el) => el.classList.remove("selected"));
       btn.classList.add("selected");
       toast(t("Preview quality updated"));
-      const { applyStreamQuality, applyPreviewOffUi, isRoadStreaming, startRoadStream, stopRoadStream } = await import("./webrtc_stream.js?v=98");
+      const { applyStreamQuality, applyPreviewOffUi, isRoadStreaming, startRoadStream, stopRoadStream } = await import("./webrtc_stream.js?v=99");
       applyPreviewOffUi();
       if (level === "off") {
         if (isRoadStreaming()) await stopRoadStream();

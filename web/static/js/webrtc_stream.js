@@ -306,8 +306,11 @@ export async function notifyWebrtc(payload) {
 
 export async function switchCamera(camera) {
 
-  if (!roadStreaming) return { ok: false, error: "not streaming" };
-
+  if (!roadStreaming) {
+    console.warn("[webrtc] switchCamera skipped: not streaming");
+    return { ok: false, error: "not streaming" };
+  }
+  console.log("[webrtc] switching camera to", camera);
   const res = await notifyWebrtc({
 
     type: "livestreamCameraSwitch",
@@ -315,7 +318,7 @@ export async function switchCamera(camera) {
     data: { camera },
 
   });
-
+  console.log("[webrtc] switchCamera response", res);
   if (res.ok) roadCamera = camera;
 
   return res;
@@ -381,6 +384,8 @@ export function updateRoadCameraForState(st) {
   const target = pickRoadCamera(st);
 
   if (target !== roadCamera) {
+
+    console.log("[webrtc] auto camera switch requested", { target, roadCamera, manualCameraOverride, manualCamera, experimental: st.experimental_mode, speed: st.speed_raw });
 
     switchCamera(target).catch(() => {});
 
@@ -557,8 +562,6 @@ export async function startRoadStream(videoEl, wrapEl) {
 
   cancelRoadDisableTimer();
 
-  clearManualCamera();
-
   const video = videoEl || document.getElementById("road-video");
 
   const wrap = wrapEl || document.getElementById("camera-wrap");
@@ -591,6 +594,8 @@ export async function startRoadStream(videoEl, wrapEl) {
     return;
 
   }
+
+  clearManualCamera();
 
 
 

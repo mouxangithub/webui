@@ -3,7 +3,7 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
 } from "./panels.js?v=108";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js?v=118";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js?v=119";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { getOverlayProjectionSize, syncModelOverlayViewport } from "./model_viewport.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
@@ -801,6 +801,12 @@ window.addEventListener("opui:preview-stream-changed", (ev) => {
     ensureRoadStream();
     scheduleOverlaySync();
   }
+});
+
+window.addEventListener("opui:exit-onroad-preview", async () => {
+  cameraPreview = false;
+  await stopRoadStream().catch(() => {});
+  setScreen("home");
 });
 
 window.addEventListener("opui:headless-mode-changed", (ev) => {
