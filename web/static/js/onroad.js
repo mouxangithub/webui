@@ -482,7 +482,7 @@ export function bindDriverCameraDialog() {
   });
 }
 
-export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=97";
+export { prewarmWebrtc, isRoadStreaming, isCameraPlaying, applyPreviewOffUi } from "./webrtc_stream.js?v=98";
 export {
   applyStreamQuality,
   getQualityPreference,
@@ -494,4 +494,4 @@ export {
   onDocumentVisibilityChange,
   setQualityPreference,
   updateStreamDeviceState,
-} from "./webrtc_stream.js?v=97";
+} from "./webrtc_stream.js?v=98";

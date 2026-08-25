@@ -2,8 +2,8 @@ import { apiGet, apiPost } from "./api.js";
 import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
-} from "./panels.js?v=107";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js?v=117";
+} from "./panels.js?v=108";
+import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js?v=118";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { getOverlayProjectionSize, syncModelOverlayViewport } from "./model_viewport.js";
 import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
