@@ -408,19 +408,24 @@ function updateCameraSwitcherButtons() {
 export function bindCameraSwitcher() {
   const roadBtn = document.getElementById("btn-cam-road");
   const wideBtn = document.getElementById("btn-cam-wide");
-  if (!roadBtn || !wideBtn) return;
+  const exitBtn = document.getElementById("btn-cam-exit");
+  if (!roadBtn || !wideBtn || !exitBtn) return;
 
+  wideBtn.addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    setManualCamera(CAM.WIDE);
+    await switchCamera(CAM.WIDE).catch(() => {});
+    updateCameraSwitcherButtons();
+  });
   roadBtn.addEventListener("click", async (ev) => {
     ev.stopPropagation();
     setManualCamera(CAM.ROAD);
     await switchCamera(CAM.ROAD).catch(() => {});
     updateCameraSwitcherButtons();
   });
-  wideBtn.addEventListener("click", async (ev) => {
+  exitBtn.addEventListener("click", async (ev) => {
     ev.stopPropagation();
-    setManualCamera(CAM.WIDE);
-    await switchCamera(CAM.WIDE).catch(() => {});
-    updateCameraSwitcherButtons();
+    await apiPut("/api/opui/params/IsOnroadPreview", { value: "0" }).catch(() => {});
   });
 }
 

@@ -64,6 +64,7 @@ const LOCAL_FALLBACKS = {
     "Clear build cache": "清理编译缓存",
     "Long focus": "长焦",
     "Wide angle": "广角",
+    "Exit": "退出",
     "webui_storage_ota_staging_note": (
       "系统 OTA 更新工作区，用于下载和准备新版本；应用更新后通常会释放。"
     ),
@@ -163,6 +164,7 @@ const STATIC_UI_KEYS = {
   "camera-status-text": "Loading camera...",
   "btn-cam-road": "Long focus",
   "btn-cam-wide": "Wide angle",
+  "btn-cam-exit": "Exit",
   "btn-home-camera-preview-label": "Driving preview",
   "sunnylink": "sunnylink",
   "Decline": "Decline",
