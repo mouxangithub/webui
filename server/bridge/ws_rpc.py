@@ -15,6 +15,13 @@ from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.storage_api import clear_storage, snapshot_storage
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
+from webui.server.bridge.imu_calibration_api import (
+  snapshot_imu_calibration,
+  start_imu_calibration,
+  cancel_imu_calibration,
+  reset_imu_calibration,
+  set_imu_calibration_enabled,
+)
 from webui.server.bridge.model_overlay import snapshot_model_overlay
 from webui.server.bridge.models_api import models_select, models_status, models_toggle_favorite
 from webui.server.bridge.network_api import (
@@ -52,6 +59,7 @@ from webui.server.deps import openpilot_root, read_version
 _PANEL_GET = re.compile(r"^/api/opui/panels/([^/]+)$")
 _PARAM_GET = re.compile(r"^/api/opui/params/([^/]+)$")
 _ACTION_POST = re.compile(r"^/api/opui/action/([^/]+)$")
+_IMU_CALIBRATION_ACTION = re.compile(r"^/api/opui/imu/calibration/([^/]+)$")
 _DEV_PRESET = re.compile(r"^/api/opui/dev/preset/([^/]+)$")
 
 
@@ -116,6 +124,8 @@ def custom_panel_data(panel_id: str) -> dict[str, Any] | None:
       "platforms": vehicle_platforms(),
       "brand_widgets": vehicle_brand_widgets(),
     }
+  if panel_id == "imu_calibration":
+    return snapshot_imu_calibration()
   return None
 
 
@@ -236,6 +246,23 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
     if method == "POST" and clean_path == "/api/opui/models/favorite":
       return models_toggle_favorite(str(body.get("ref", "")))
 
+    if method == "GET" and clean_path == "/api/opui/imu/calibration":
+      return snapshot_imu_calibration()
+
+    m = _IMU_CALIBRATION_ACTION.match(clean_path)
+    if method == "POST" and m:
+      action = m.group(1)
+      if action == "start":
+        return start_imu_calibration()
+      if action == "cancel":
+        return cancel_imu_calibration()
+      if action == "reset":
+        return reset_imu_calibration()
+      return {"ok": False, "error": f"unknown imu calibration action: {action}"}
+
+    if method == "POST" and clean_path == "/api/opui/imu/calibration/enabled":
+      return set_imu_calibration_enabled(bool(body.get("enabled", False)))
+
     if method == "GET" and clean_path == "/api/opui/tokens":
       return {"ok": True, **tokens_payload()}
 
@@ -324,6 +351,22 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "POST" and clean_path == "/api/opui/device/language":
       return set_language(str(body.get("language", "")))
+
+    if method == "GET" and clean_path == "/api/opui/imu/calibration":
+      return snapshot_imu_calibration()
+
+    if method == "POST" and (m := _IMU_CALIBRATION_ACTION.match(clean_path)):
+      action = m.group(1)
+      if action == "start":
+        return start_imu_calibration()
+      if action == "cancel":
+        return cancel_imu_calibration()
+      if action == "reset":
+        return reset_imu_calibration()
+      return {"ok": False, "error": f"unknown action: {action}"}
+
+    if method == "POST" and clean_path == "/api/opui/imu/calibration/enabled":
+      return set_imu_calibration_enabled(bool(body.get("enabled", False)))
 
     if method == "GET" and clean_path == "/api/opui/webui-update":
       fetch_remote = query.get("fetch", "").lower() in ("1", "true", "yes")

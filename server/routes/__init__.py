@@ -37,6 +37,13 @@ from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_stat
 from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.storage_api import clear_storage, snapshot_storage
 from webui.server.bridge.device_api import device_extras, device_pair_url, driver_view_status, regulatory_html, set_driver_view, set_language
+from webui.server.bridge.imu_calibration_api import (
+  snapshot_imu_calibration,
+  start_imu_calibration,
+  cancel_imu_calibration,
+  reset_imu_calibration,
+  set_imu_calibration_enabled,
+)
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.onboarding_api import accept_sunnylink_consent, accept_terms, complete_training, onboarding_status
@@ -450,6 +457,30 @@ async def api_set_language(request: web.Request) -> web.Response:
   return json_response(set_language(lang))
 
 
+async def api_imu_calibration(_request: web.Request) -> web.Response:
+  return json_response(snapshot_imu_calibration())
+
+
+async def api_imu_calibration_control(request: web.Request) -> web.Response:
+  action = request.match_info.get("action", "")
+  if action == "start":
+    return json_response(start_imu_calibration())
+  if action == "cancel":
+    return json_response(cancel_imu_calibration())
+  if action == "reset":
+    return json_response(reset_imu_calibration())
+  return json_response({"ok": False, "error": f"unknown action: {action}"}, status=400)
+
+
+async def api_imu_calibration_enabled(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    enabled = bool(body.get("enabled", False))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(set_imu_calibration_enabled(enabled))
+
+
 async def api_webui_update(request: web.Request) -> web.Response:
   fetch = request.rel_url.query.get("fetch", "").lower() in ("1", "true", "yes")
   return json_response(snapshot_webui_update(fetch=fetch))
@@ -560,6 +591,9 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/device/regulatory", api_device_regulatory)
   app.router.add_get("/api/opui/developer/error-log", api_developer_error_log)
   app.router.add_post("/api/opui/device/language", api_set_language)
+  app.router.add_get("/api/opui/imu/calibration", api_imu_calibration)
+  app.router.add_post("/api/opui/imu/calibration/{action}", api_imu_calibration_control)
+  app.router.add_post("/api/opui/imu/calibration/enabled", api_imu_calibration_enabled)
   app.router.add_get("/api/opui/webui-update", api_webui_update)
   app.router.add_post("/api/opui/webui-update/dismiss", api_webui_update_dismiss)
   app.router.add_post("/api/opui/webui-update/apply", api_webui_update_apply)

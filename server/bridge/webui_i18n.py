@@ -359,6 +359,15 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Enable driver camera preview in Web UI while offroad. Turn off before driving.": (
       "Enable driver camera preview in Web UI while offroad. Turn off before driving."
     ),
+    "IMU Calibration": "IMU Calibration",
+    "Calibration in progress": "Calibration in progress",
+    "Progress": "Progress",
+    "Calibration cancelled": "Calibration cancelled",
+    "Calibration failed": "Calibration failed",
+    "Calibration completed": "Calibration completed",
+    "Computing calibration...": "Computing calibration...",
+    "Collecting static data — keep parked": "Collecting static data — keep parked",
+    "Collecting dynamic data — drive straight": "Collecting dynamic data — drive straight",
   },
   "zh-CHS": {
     "Web UI": "Web UI",
@@ -990,6 +999,15 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Enable driver camera preview in Web UI while offroad. Turn off before driving.": (
       "離路時在 Web UI 中預覽駕駛員攝影機，上路前請關閉。"
     ),
+    "IMU Calibration": "IMU 校正",
+    "Calibration in progress": "校正進行中",
+    "Progress": "進度",
+    "Calibration cancelled": "校正已取消",
+    "Calibration failed": "校正失敗",
+    "Calibration completed": "校正完成",
+    "Computing calibration...": "正在計算校正…",
+    "Collecting static data — keep parked": "正在收集靜態資料 — 請保持停車",
+    "Collecting dynamic data — drive straight": "正在收集動態資料 — 請直線行駛",
   },
 }
 

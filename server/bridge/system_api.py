@@ -38,6 +38,14 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       p.put_bool("OnroadCycleRequested", True, block=True)
       return {"ok": True, "action": action}
 
+    if action == "imu_calibration_start":
+      from webui.server.bridge.imu_calibration_api import start_imu_calibration
+      return start_imu_calibration()
+
+    if action == "imu_calibration_reset":
+      from webui.server.bridge.imu_calibration_api import reset_imu_calibration
+      return reset_imu_calibration()
+
     if action == "reset_all_params":
       try:
         from openpilot.common.hardware import HARDWARE

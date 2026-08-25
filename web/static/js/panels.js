@@ -1104,7 +1104,7 @@ export function applyPanelSync(data) {
     if (data.custom) {
       const container = document.getElementById("panel-content");
       if (container) {
-        if (data.custom === "software" || data.custom === "models" || data.custom === "osm") {
+        if (data.custom === "software" || data.custom === "models" || data.custom === "osm" || data.custom === "imu_calibration") {
           container.querySelectorAll("[data-panel-widget]").forEach((el) => el.remove());
           appendPanelWidgets(container, data);
           if (data.custom === "osm") {
@@ -1112,6 +1112,10 @@ export function applyPanelSync(data) {
             updateOsmLabels(document.getElementById("osm-custom-root"), data);
             const ver = document.getElementById("osm-mapd-version");
             if (ver) ver.textContent = data.values?.MapdVersion || t("Loading...");
+          }
+          if (data.custom === "imu_calibration") {
+            ensureImuCalibrationBlock(container);
+            refreshImuCalibrationStatus();
           }
         } else {
           window.dispatchEvent(new CustomEvent("opui:refresh-panel"));
@@ -1135,6 +1139,9 @@ export function applyPanelSync(data) {
       updateOsmLabels(document.getElementById("osm-custom-root"), data);
       const ver = document.getElementById("osm-mapd-version");
       if (ver) ver.textContent = data.values?.MapdVersion || t("Loading...");
+    }
+    if (data.custom === "imu_calibration") {
+      refreshImuCalibrationStatus();
     }
     return;
   }
@@ -1163,6 +1170,9 @@ export function applyPanelSync(data) {
     updateOsmLabels(document.getElementById("osm-custom-root"), data);
     const ver = document.getElementById("osm-mapd-version");
     if (ver) ver.textContent = data.values?.MapdVersion || t("Loading...");
+  }
+  if (data.custom === "imu_calibration") {
+    refreshImuCalibrationStatus();
   }
 }
 
@@ -3137,6 +3147,151 @@ async function renderVehiclePanel(container, data) {
       const el = renderWidget(w, brandData);
       if (el) container.appendChild(el);
     }
+  }
+}
+
+let imuCalibrationPoll = null;
+let imuCalibrationLastState = null;
+
+function formatImuState(state) {
+  const map = {
+    idle: "Idle",
+    static_collecting: "Collecting static data — keep the car parked on level ground",
+    dynamic_collecting: "Collecting dynamic data — drive straight",
+    computing: "Computing calibration...",
+    completed: "Calibration completed",
+    failed: "Calibration failed",
+    cancelled: "Calibration cancelled",
+  };
+  return t(map[state] || state);
+}
+
+function ensureImuCalibrationBlock(container) {
+  let block = container.querySelector("#imu-calibration-custom-root");
+  if (block) return block;
+  block = document.createElement("div");
+  block.id = "imu-calibration-custom-root";
+  block.className = "opui-imu-calibration-block";
+  block.innerHTML = `
+    <div id="imu-calibration-status-row" class="opui-sp-row" hidden>
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title" id="imu-calibration-status-title">${escapeHtml(t("Status"))}</div>
+      </div>
+      <span class="opui-sp-row-value" id="imu-calibration-status-text">${escapeHtml(t("Loading..."))}</span>
+    </div>
+    <div id="imu-calibration-progress-slot"></div>
+    <div id="imu-calibration-angles-row" class="opui-sp-row" hidden>
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(t("Estimated orientation"))}</div>
+      </div>
+      <span class="opui-sp-row-value" id="imu-calibration-angles-text"></span>
+    </div>
+    <div id="imu-calibration-error-row" class="opui-sp-row" hidden>
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(t("Error"))}</div>
+      </div>
+      <span class="opui-sp-row-value" id="imu-calibration-error-text"></span>
+    </div>
+    <div class="opui-sp-row" id="imu-calibration-cancel-row" hidden>
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(t("Calibration in progress"))}</div>
+      </div>
+      <button type="button" class="opui-btn opui-btn--action danger" id="imu-calibration-cancel-btn">${escapeHtml(t("CANCEL"))}</button>
+    </div>`;
+  container.appendChild(block);
+
+  block.querySelector("#imu-calibration-cancel-btn")?.addEventListener("click", async () => {
+    const res = await apiPost("/api/opui/imu/calibration/cancel");
+    if (res.ok) {
+      toast(t("Calibration cancelled"));
+      refreshImuCalibrationStatus();
+    } else {
+      toast(res.error || t("Failed"));
+    }
+  });
+
+  startImuCalibrationPoll();
+  return block;
+}
+
+function updateImuCalibrationBlock(data) {
+  const block = document.getElementById("imu-calibration-custom-root");
+  if (!block || !data?.ok) return;
+  imuCalibrationLastState = data;
+
+  const statusRow = block.querySelector("#imu-calibration-status-row");
+  const statusText = block.querySelector("#imu-calibration-status-text");
+  const progressSlot = block.querySelector("#imu-calibration-progress-slot");
+  const anglesRow = block.querySelector("#imu-calibration-angles-row");
+  const anglesText = block.querySelector("#imu-calibration-angles-text");
+  const errorRow = block.querySelector("#imu-calibration-error-row");
+  const errorText = block.querySelector("#imu-calibration-error-text");
+  const cancelRow = block.querySelector("#imu-calibration-cancel-row");
+
+  const status = data.status || {};
+  const state = status.state || "idle";
+  const progress = status.progress || 0;
+  const error = status.error;
+
+  if (statusRow) statusRow.hidden = false;
+  if (statusText) statusText.textContent = formatImuState(state);
+
+  if (progressSlot) {
+    progressSlot.innerHTML = "";
+    if (state === "static_collecting" || state === "dynamic_collecting") {
+      progressSlot.appendChild(createProgressRow(t("Progress"), progress));
+    }
+  }
+
+  if (anglesRow && anglesText) {
+    const angles = data.angles;
+    if (angles) {
+      anglesRow.hidden = false;
+      anglesText.textContent = `R ${angles.roll_deg.toFixed(1)}°  P ${angles.pitch_deg.toFixed(1)}°  Y ${angles.yaw_deg.toFixed(1)}°`;
+    } else {
+      anglesRow.hidden = true;
+    }
+  }
+
+  if (errorRow && errorText) {
+    if (error) {
+      errorRow.hidden = false;
+      errorText.textContent = error;
+    } else {
+      errorRow.hidden = true;
+    }
+  }
+
+  if (cancelRow) {
+    cancelRow.hidden = !(state === "static_collecting" || state === "dynamic_collecting" || state === "computing");
+  }
+}
+
+async function refreshImuCalibrationStatus() {
+  try {
+    const data = await apiGet("/api/opui/imu/calibration");
+    updateImuCalibrationBlock(data);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function startImuCalibrationPoll() {
+  stopImuCalibrationPoll();
+  imuCalibrationPoll = setInterval(() => {
+    const app = document.getElementById("app");
+    if (app?.dataset.screen === "settings" && currentPanelRef === "imu_calibration") {
+      refreshImuCalibrationStatus();
+    } else {
+      stopImuCalibrationPoll();
+    }
+  }, 1000);
+}
+
+function stopImuCalibrationPoll() {
+  if (imuCalibrationPoll) {
+    clearInterval(imuCalibrationPoll);
+    imuCalibrationPoll = null;
   }
 }
 

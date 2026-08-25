@@ -51,6 +51,22 @@ PANELS: list[dict[str, Any]] = [
     ],
   },
   {
+    "id": "imu_calibration",
+    "title": "IMU Calibration",
+    "custom": "imu_calibration",
+    "widgets": [
+      {"type": "bool", "param": "ImuCalibrationEnabled", "label": "Use IMU Calibration",
+       "desc": "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, the stock camera-based calibration is replaced by IMU-to-vehicle calibration.",
+       "needs_cycle": True},
+      {"type": "action", "action": "imu_calibration_start", "label": "Start IMU Calibration", "button": "START",
+       "desc": "Park on level ground, then drive straight to calibrate the device orientation.",
+       "visible_if": {"param": "ImuCalibrationEnabled", "eq": "1"}},
+      {"type": "action", "action": "imu_calibration_reset", "label": "Reset IMU Calibration", "button": "RESET",
+       "confirm": "Are you sure you want to clear the IMU calibration and switch back to stock calibration?",
+       "visible_if": {"param": "ImuCalibrationEnabled", "eq": "1"}},
+    ],
+  },
+  {
     "id": "network",
     "title": "Network",
     "custom": "network",
