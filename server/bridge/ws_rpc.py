@@ -13,7 +13,6 @@ from webui.server.bridge.device_api import device_extras, device_pair_url, regul
 from webui.server.bridge.steering_api import torque_versions
 from webui.server.bridge.firehose_api import firehose_status
 from webui.server.bridge.storage_api import clear_storage, snapshot_storage
-from webui.server.bridge.home_api import snapshot_home
 from webui.server.bridge.i18n_api import snapshot_i18n
 from webui.server.bridge.imu_calibration_api import (
   snapshot_imu_calibration,
@@ -41,7 +40,6 @@ from webui.server.bridge.osm_api import (
   osm_fetch_regions,
   osm_map_size_mb,
   osm_panel_custom,
-  osm_regions,
   osm_select_region,
 )
 from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param
@@ -405,7 +403,6 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
         return {"ok": True, "simulation": dict(SIM)}
       m = _DEV_PRESET.match(clean_path)
       if method == "POST" and m:
-        from webui.server.routes.dev import api_dev_presets
         # inline preset logic
         from webui.dev.mock_runtime import SIM
         preset = m.group(1)

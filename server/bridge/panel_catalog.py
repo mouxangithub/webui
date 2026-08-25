@@ -56,7 +56,7 @@ PANELS: list[dict[str, Any]] = [
     "custom": "imu_calibration",
     "widgets": [
       {"type": "bool", "param": "ImuCalibrationEnabled", "label": "Use IMU Calibration",
-       "desc": "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, the stock camera-based calibration is replaced by IMU-to-vehicle calibration.",
+       "desc": "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration.",
        "needs_cycle": True},
       {"type": "action", "action": "imu_calibration_start", "label": "Start IMU Calibration", "button": "START",
        "desc": "Park on level ground, then drive straight to calibrate the device orientation.",
