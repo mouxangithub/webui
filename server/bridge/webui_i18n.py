@@ -368,6 +368,26 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Computing calibration...": "Computing calibration...",
     "Collecting static data — keep parked": "Collecting static data — keep parked",
     "Collecting dynamic data — drive straight": "Collecting dynamic data — drive straight",
+    "Use IMU Calibration": "Use IMU Calibration",
+    "UseIMUCalibrationDescription": (
+      "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration."
+    ),
+    "Start IMU Calibration": "Start IMU Calibration",
+    "StartIMUCalibrationDescription": (
+      "Park on level ground, then drive straight to calibrate the device orientation."
+    ),
+    "Reset IMU Calibration": "Reset IMU Calibration",
+    "ResetIMUCalibrationDescription": (
+      "Revert to the stock camera-based calibration and discard IMU calibration data."
+    ),
+    "Are you sure you want to clear the IMU calibration and switch back to stock calibration?": (
+      "Are you sure you want to clear the IMU calibration and switch back to stock calibration?"
+    ),
+    "Status": "Status",
+    "Estimated orientation": "Estimated orientation",
+    "Error": "Error",
+    "CANCEL": "CANCEL",
+    "Idle": "Idle",
   },
   "zh-CHS": {
     "Web UI": "Web UI",
@@ -720,6 +740,32 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Enable driver camera preview in Web UI while offroad. Turn off before driving.": (
       "离路时在 Web UI 中预览驾驶员摄像头，上路前请关闭。"
     ),
+    "IMU Calibration": "IMU 校准",
+    "Calibration in progress": "校准进行中",
+    "Progress": "进度",
+    "Calibration cancelled": "校准已取消",
+    "Calibration failed": "校准失败",
+    "Calibration completed": "校准完成",
+    "Computing calibration...": "正在计算校准…",
+    "Collecting static data — keep parked": "正在收集静态数据 — 请保持停车",
+    "Collecting dynamic data — drive straight": "正在收集动态数据 — 请直线行驶",
+    "Use IMU Calibration": "使用 IMU 校准",
+    "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration.": (
+      "为大角度或任意角度安装的设备启用自动校准。启用后，IMU-to-vehicle 校准将替代原厂基于相机的校准。"
+    ),
+    "Start IMU Calibration": "开始 IMU 校准",
+    "Park on level ground, then drive straight to calibrate the device orientation.": (
+      "将车辆停放在水平地面上，然后直线行驶以校准设备安装方向。"
+    ),
+    "Reset IMU Calibration": "重置 IMU 校准",
+    "Are you sure you want to clear the IMU calibration and switch back to stock calibration?": (
+      "确定要清除 IMU 校准并恢复为原厂校准吗？"
+    ),
+    "Status": "状态",
+    "Estimated orientation": "估算方向",
+    "Error": "错误",
+    "CANCEL": "取消",
+    "Idle": "空闲",
   },
   "zh-CHT": {
     "Web UI": "Web UI",
@@ -1008,6 +1054,23 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Computing calibration...": "正在計算校正…",
     "Collecting static data — keep parked": "正在收集靜態資料 — 請保持停車",
     "Collecting dynamic data — drive straight": "正在收集動態資料 — 請直線行駛",
+    "Use IMU Calibration": "使用 IMU 校正",
+    "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration.": (
+      "為大角度或任意角度安裝的裝置啟用自動校正。啟用後，IMU-to-vehicle 校正將替代原廠相機校正。"
+    ),
+    "Start IMU Calibration": "開始 IMU 校正",
+    "Park on level ground, then drive straight to calibrate the device orientation.": (
+      "將車輛停放在水平地面上，然後直線行駛以校正裝置安裝方向。"
+    ),
+    "Reset IMU Calibration": "重置 IMU 校正",
+    "Are you sure you want to clear the IMU calibration and switch back to stock calibration?": (
+      "確定要清除 IMU 校正並恢復為原廠校正嗎？"
+    ),
+    "Status": "狀態",
+    "Estimated orientation": "估算方向",
+    "Error": "錯誤",
+    "CANCEL": "取消",
+    "Idle": "閒置",
   },
 }
 

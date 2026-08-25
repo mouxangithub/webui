@@ -3156,7 +3156,7 @@ let imuCalibrationLastState = null;
 function formatImuState(state) {
   const map = {
     idle: "Idle",
-    static_collecting: "Collecting static data — keep the car parked on level ground",
+    static_collecting: "Collecting static data — keep parked",
     dynamic_collecting: "Collecting dynamic data — drive straight",
     computing: "Computing calibration...",
     completed: "Calibration completed",
