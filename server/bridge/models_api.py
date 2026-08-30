@@ -11,7 +11,15 @@ from typing import Any
 # device manager writes.
 _SOURCE_KEYS: dict[str, str] = {
   "qcom": "ModelManager_ActiveBundle",
-  "usbgpu": "ModelManager_ActiveBundleUSBGPU",
+  "usbgpu": "ModelManager_ActiveBundleChestnut",
+}
+
+# The webui uses "usbgpu" to refer to the external big-model source, but the
+# openpilot model manager/fetcher internally calls it "chestnut". Map here so
+# the rest of the code can stay aligned with the device-side naming.
+_SOURCE_TO_BACKEND: dict[str, str] = {
+  "qcom": "qcom",
+  "usbgpu": "chestnut",
 }
 
 _MODEL_TYPES = {
@@ -94,7 +102,7 @@ def _active_source(state: dict[str, Any] | None) -> str:
   return "usbgpu" if big_active else "qcom"
 
 
-def _read_live_model_manager(timeout_ms: int = 2500) -> Any | None:
+def _read_live_model_manager(timeout_ms: int = 1000) -> Any | None:
   try:
     import openpilot.cereal.messaging as messaging
     sm = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
@@ -112,9 +120,10 @@ def _cached_bundles(params: Any, source: str) -> list[Any]:
   """Read cached bundles for a source. Matches sunnypilot's get_cached_bundles."""
   try:
     from openpilot.sunnypilot.models.fetcher import ModelFetcher, ModelParser
-    if source not in ModelFetcher.MODEL_SOURCES:
+    backend_source = _SOURCE_TO_BACKEND.get(source, source)
+    if backend_source not in ModelFetcher.MODEL_SOURCES:
       return []
-    _, suffix = ModelFetcher.MODEL_SOURCES[source]
+    _, suffix = ModelFetcher.MODEL_SOURCES[backend_source]
     raw = params.get(f"ModelManager_ModelsCache{suffix}")
     if not raw:
       return []
@@ -129,7 +138,8 @@ def _cached_bundles(params: Any, source: str) -> list[Any]:
 def _selected_bundle(params: Any, source: str) -> Any | None:
   try:
     from openpilot.sunnypilot.models.helpers import get_selected_bundle
-    return get_selected_bundle(params, source)
+    backend_source = _SOURCE_TO_BACKEND.get(source, source)
+    return get_selected_bundle(params, backend_source)
   except Exception:
     return None
 
@@ -358,6 +368,7 @@ def _resolve_ref(ref: str, p: Any) -> tuple[Any, str] | None:
     source_bundles: dict[str, list[Any]] = {}
     for src in ("qcom", "usbgpu"):
       source_bundles[src] = _bundles_for_source(p, src, mm if src == _active_source(_device_state()) else None)
+    # resolve_bundle_by_ref keys only matter for lookup; keep webui source names.
     return resolve_bundle_by_ref(ref, source_bundles)
   except Exception:
     return None

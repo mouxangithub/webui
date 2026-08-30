@@ -2734,14 +2734,15 @@ function buildModelSlots(m, data, gen, container) {
         toast(t("Model list is still loading. Tap Refresh Model List and try again."));
         return;
       }
-      const latest = await apiGet("/api/opui/models");
-      if (panelRenderStale(gen)) return;
-      const fresh = latest?.ok ? latest : m;
-      const tree = fresh.slots?.[source]?.tree || slot.tree || [];
+      // Open the tree immediately using the data we already have. The previous
+      // synchronous apiGet could block for >2s while the live model manager is
+      // polled, which made the SELECT button feel unresponsive.
+      const tree = m.slots?.[source]?.tree || slot.tree || [];
+      const activeRef = m.slots?.[source]?.active_ref || "Default";
       const ref = await showTree({
         title: source === "usbgpu" ? t("Select a Big Model") : t("Select a Model"),
         folders: tree,
-        selectedRef: fresh.slots?.[source]?.active_ref || "Default",
+        selectedRef: activeRef,
         searchable: true,
         getFolders: async () => {
           const r = await apiGet("/api/opui/models");

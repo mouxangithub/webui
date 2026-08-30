@@ -4170,8 +4170,8 @@ body.opui-system-wait-open {
 }
 
 .opui-models-status-row {
-  min-height: auto;
-  padding: 16px 20px;
+  min-height: 170px;
+  padding: 20px;
   justify-content: space-between;
 }
 
