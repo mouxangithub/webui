@@ -296,7 +296,7 @@ def _models_status_impl() -> dict[str, Any]:
     selected = _selected_bundle(p, source)
     entry, _ = _bundle_entry(selected, favorites) if selected is not None else ({}, "")
     slots[source] = {
-      "bundles": bundles,
+      "bundles": [_bundle_entry(bundle, favorites)[0] for bundle in bundles],
       "tree": _build_source_tree(bundles, favorites, source),
       "selected": entry,
       "active_ref": getattr(selected, "ref", "") or "Default",

@@ -4205,6 +4205,43 @@ body.opui-system-wait-open {
 .opui-models-status-name--failed { color: #e74c3c; }
 .opui-models-status-name--loading { color: #daca25; }
 
+.opui-models-slot-row {
+  justify-content: space-between;
+}
+
+.opui-models-slot-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 24px;
+  margin-right: 8px;
+  font-size: 50px;
+  line-height: 1.1;
+  color: #c8c8c8;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opui-models-slot-value--active {
+  color: #5cdb7f;
+  font-weight: 600;
+}
+
+.opui-models-cache-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 24px;
+  margin-right: 8px;
+  font-size: 50px;
+  line-height: 1.1;
+  color: #c8c8c8;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* IMU calibration panel */
 .opui-imu-calibration-block {
   display: contents;
