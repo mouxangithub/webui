@@ -1,5 +1,5 @@
 """
-PC dev bootstrap — mock openpilot so webuid can run on Windows/Linux without AGNOS.
+PC dev bootstrap — mock openpilot runtime so the webui can start on Windows/Linux without AGNOS build.
 
 Usage (from openpilot root):
   py -3 webui/dev/run_pc.py [--port 5080]
@@ -8,47 +8,40 @@ Usage (from openpilot root):
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-WEBUI_ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-  parser = argparse.ArgumentParser(description="op Web UI PC 开发预览服务")
+  parser = argparse.ArgumentParser(description="openpilot webui PC 开发预览服务")
   parser.add_argument("--port", type=int, default=5080)
   parser.add_argument("--host", type=str, default="127.0.0.1")
-  parser.add_argument("--tls", action="store_true", help="HTTPS (for WebCodecs over LAN IP testing)")
   args = parser.parse_args()
 
-  # Install mocks before any webui.server import
-  sys.path.insert(0, str(WEBUI_ROOT.parent if (WEBUI_ROOT.parent / "webui").is_dir() else ROOT))
-  from webui.webuid import ensure_runtime
+  if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-  op_root = str(ROOT)
-  if not (Path(op_root) / "openpilot").is_dir() and (Path(op_root).parent / "openpilot").is_dir():
-    op_root = str(Path(op_root).parent)
-  os.environ.setdefault("OPENPILOT_ROOT", op_root)
-  ensure_runtime()
+  logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-  from webui.server.app_factory import create_app
-  from webui.server.run_server import run_web_app
+  from webui.dev.mock_runtime import install_openpilot_mocks
+  install_openpilot_mocks(str(ROOT))
 
-  app = create_app()
+  from aiohttp import web
+  from webui.server.routes import register_routes
 
-  scheme = "https" if args.tls else "http"
-  print()
-  print(f"  op Web UI PC 预览: {scheme}://{args.host}:{args.port}/")
-  if args.tls:
-    print("  TLS: 可用 https://<本机局域网IP>:{port}/ 测试 WebCodecs（需信任自签证书）".format(port=args.port))
-    print("  HTTP: http://<本机局域网IP>:{port}/ 会自动跳转到 HTTPS".format(port=args.port))
-  print()
-  print("  说明: Mock Params + 模拟行车状态；右下角 Dev 面板可切换离路/行驶、无屏模式等。")
-  print("  与车机 1:1 差距见 webui/dev/README.md")
-  print()
-  run_web_app(app, host=args.host, port=args.port, tls=args.tls)
+  app = web.Application(client_max_size=32 * 1024 * 1024)
+  register_routes(app)
+
+  from webui.server.bridge.state_hub import start_state_hub
+  start_state_hub()
+
+  print(f"\n  openpilot webui PC 预览: http://{args.host}:{args.port}/\n")
+  print("  说明: Mock Params + 模拟状态；在浏览器打开上方链接即可预览 UI。\n")
+  web.run_app(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

@@ -112,7 +112,7 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
       return {"ok": True, "action": action, "apn": apn}
 
     if action == "models_cancel_download":
-      p.remove("ModelManager_DownloadIndex")
+      p.remove("ModelManager_DownloadRef")
       return {"ok": True, "action": action}
 
     if action == "developer_delete_error_log":
@@ -134,6 +134,11 @@ def run_action(action: str, payload: dict[str, Any] | None = None) -> dict[str, 
         return blocked
       p.put_bool("IsDriverViewEnabled", action == "driver_view_enable", block=True)
       return {"ok": True, "action": action}
+
+    if action == "onroad_preview":
+      is_preview = p.get_bool("IsOnroadPreview")
+      p.put_bool("IsOnroadPreview", not is_preview)
+      return {"ok": True, "action": action, "is_preview": not is_preview}
 
     if action == "bookmark":
       try:

@@ -155,6 +155,7 @@ def device_extras() -> dict[str, Any]:
       "dev_pc": True,
       "headless": is_headless_mode(),
       "driver_view_enabled": False,
+      "onroad_preview": False,
     }
   try:
     from openpilot.common.params import Params
@@ -171,6 +172,7 @@ def device_extras() -> dict[str, Any]:
       "offroad_mode": p.get_bool("OffroadMode"),
       "headless": is_headless_mode(),
       "driver_view_enabled": p.get_bool("IsDriverViewEnabled"),
+      "onroad_preview": p.get_bool("IsOnroadPreview"),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}

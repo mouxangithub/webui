@@ -1,7 +1,6 @@
 /** WebRTC livestream client — proxies SDP via webui, media to webrtcd on device. */
 
 
-
 import { apiGet, apiPost } from "./api.js";
 import { tr } from "./i18n.js";
 import {
@@ -22,17 +21,10 @@ import { tryAttachWebCodecsDecode, stopWebCodecsDecode, tuneVideoReceiver } from
 import { syncModelOverlayViewport } from "./model_viewport.js";
 
 
-
 export const CAM = {
-
   ROAD: "road",
-
   WIDE: "wideRoad",
-
-  DRIVER: "driver",
-
 };
-
 
 
 /** Matches openpilot onroad wide/road hysteresis (m/s). */
@@ -42,9 +34,7 @@ const WIDE_MAX_MS = 10.0;
 const ROAD_MIN_MS = 15.0;
 
 
-
 const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-
 
 
 let roadDisableTimer = null;
@@ -61,9 +51,6 @@ function scheduleRoadDisable() {
   cancelRoadDisableTimer();
   roadDisableTimer = setTimeout(() => {
     roadDisableTimer = null;
-    if (!roadStreaming && !driverViewActive) {
-      apiPost("/api/opui/action/webrtc_disable").catch(() => {});
-    }
   }, ROAD_DISABLE_IDLE_MS);
 }
 
@@ -71,17 +58,12 @@ let roadPc = null;
 let roadStreaming = false;
 let roadCamera = CAM.ROAD;
 
-let driverViewActive = false;
-
-let driverViewResumeCamera = CAM.ROAD;
-
 let prewarmPromise = null;
 
 let roadVideoBound = false;
 
 let manualCamera = null;
 let manualCameraOverride = false;
-
 
 
 function setCameraStatus(msg) {
@@ -105,7 +87,6 @@ function setCameraStatus(msg) {
   }
 
 }
-
 
 
 export function isCameraPlaying() {
@@ -132,11 +113,6 @@ function bindRoadVideoPlayback(video, wrap) {
     notifyCameraReady(true);
   };
   const onWaiting = () => {
-    if (roadStreaming && !driverViewActive) {
-      wrap.classList.remove("is-playing");
-      setCameraStatus(tr("Buffering camera…"));
-      notifyCameraReady(false);
-    }
   };
   video.addEventListener("playing", onPlaying);
   video.addEventListener("waiting", onWaiting);
@@ -147,23 +123,11 @@ function bindRoadVideoPlayback(video, wrap) {
 }
 
 
-
-function setDriverLoading(msg) {
-  const loading = document.getElementById("driver-cam-loading");
-  const text = document.getElementById("driver-cam-loading-text");
-  if (!loading) return;
-  loading.hidden = false;
-  if (text) text.textContent = msg || tr("camera starting");
-}
-
-
-
 function sleep(ms) {
 
   return new Promise((r) => setTimeout(r, ms));
 
 }
-
 
 
 function waitIceComplete(pc) {
@@ -199,11 +163,9 @@ function waitIceComplete(pc) {
 }
 
 
-
 async function wakeWebrtcd() {
 
   const wakeMsg = tr("Starting live stream service (~4s)…");
-  setDriverLoading(wakeMsg);
   setCameraStatus(wakeMsg);
 
   await apiPost("/api/opui/action/webrtc_enable");
@@ -211,14 +173,12 @@ async function wakeWebrtcd() {
   for (let i = 3; i >= 0; i--) {
     if (i > 0) {
       const tick = tr("Starting live stream service ({s}s)…").replace("{s}", String(i));
-      setDriverLoading(tick);
       setCameraStatus(tick);
     }
     await sleep(1000);
   }
 
 }
-
 
 
 async function waitWebrtcdReady() {
@@ -231,7 +191,6 @@ async function waitWebrtcdReady() {
   }
   return false;
 }
-
 
 
 async function ensureWebrtcd() {
@@ -259,7 +218,6 @@ async function ensureWebrtcd() {
   }
 
 }
-
 
 
 /** Background warm-up after page load — avoids ~30s first SDP on user click. */
@@ -295,13 +253,11 @@ export function prewarmWebrtc() {
 }
 
 
-
 export async function notifyWebrtc(payload) {
 
   return apiPost("/api/opui/webrtc/notify", payload);
 
 }
-
 
 
 export async function switchCamera(camera) {
@@ -326,13 +282,11 @@ export async function switchCamera(camera) {
 }
 
 
-
 export function getCurrentCamera() {
 
   return roadCamera || CAM.ROAD;
 
 }
-
 
 
 export function setManualCamera(camera) {
@@ -344,7 +298,6 @@ export function setManualCamera(camera) {
 }
 
 
-
 export function clearManualCamera() {
 
   manualCamera = null;
@@ -352,7 +305,6 @@ export function clearManualCamera() {
   manualCameraOverride = false;
 
 }
-
 
 
 function pickRoadCamera(st) {
@@ -374,10 +326,7 @@ function pickRoadCamera(st) {
 }
 
 
-
 export function updateRoadCameraForState(st) {
-
-  if (!roadStreaming || driverViewActive) return;
 
   if (!st?.started) return;
 
@@ -394,7 +343,6 @@ export function updateRoadCameraForState(st) {
 }
 
 
-
 async function createStream(videoEl, initCamera) {
 
   if (roadPc) {
@@ -408,7 +356,6 @@ async function createStream(videoEl, initCamera) {
   stopWebCodecsDecode();
 
   roadStreaming = false;
-
 
 
   const pc = new RTCPeerConnection(ICE);
@@ -458,13 +405,11 @@ async function createStream(videoEl, initCamera) {
   };
 
 
-
   const offer = await pc.createOffer();
 
   await pc.setLocalDescription(offer);
 
   await waitIceComplete(pc);
-
 
 
   const resp = await apiPost("/api/opui/webrtc/offer", {
@@ -516,7 +461,6 @@ async function createStream(videoEl, initCamera) {
 }
 
 
-
 async function tuneStreamForBrowser() {
   await applyStreamQuality(getQualityPreference(), { silent: true });
 }
@@ -536,13 +480,11 @@ export {
 };
 
 
-
 export function isRoadStreaming() {
 
   return roadStreaming;
 
 }
-
 
 
 export function applyPreviewOffUi(wrapEl) {
@@ -584,7 +526,6 @@ export async function startRoadStream(videoEl, wrapEl) {
   wrap?.classList.remove("preview-off");
 
 
-
   if (roadStreaming) {
 
     wrap?.classList.add("streaming");
@@ -598,7 +539,6 @@ export async function startRoadStream(videoEl, wrapEl) {
   clearManualCamera();
 
 
-
   const boot = await apiGet("/api/opui/bootstrap").catch(() => ({}));
 
   if (boot.dev_pc) {
@@ -608,7 +548,6 @@ export async function startRoadStream(videoEl, wrapEl) {
     return;
 
   }
-
 
 
   setCameraStatus(tr("Starting camera service…"));
@@ -637,14 +576,7 @@ export async function startRoadStream(videoEl, wrapEl) {
 }
 
 
-
 export async function stopRoadStream(videoEl, wrapEl) {
-
-  if (driverViewActive) {
-
-    await stopDriverView();
-
-  }
 
   if (roadPc) {
 
@@ -677,200 +609,6 @@ export async function stopRoadStream(videoEl, wrapEl) {
   setCameraStatus("");
 
   scheduleRoadDisable();
-
-}
-
-
-
-async function switchToDriverCamera(driverVideoEl, st) {
-
-  const roadVideo = document.getElementById("road-video");
-
-  await apiPost("/api/opui/action/driver_view_enable");
-
-  driverViewActive = true;
-
-  driverViewResumeCamera = pickRoadCamera(st || {});
-
-  setDriverLoading(tr("Switching to driver camera…"));
-
-  await switchCamera(CAM.DRIVER);
-
-  if (driverVideoEl && roadVideo?.srcObject) {
-
-    driverVideoEl.srcObject = roadVideo.srcObject;
-
-    await driverVideoEl.play().catch(() => {});
-
-  }
-
-}
-
-
-
-export async function startDriverView(driverVideoEl, st) {
-
-  const boot = await apiGet("/api/opui/bootstrap").catch(() => ({}));
-
-  if (boot.dev_pc) return;
-
-
-
-  if (roadStreaming && roadPc) {
-
-    await switchToDriverCamera(driverVideoEl, st);
-
-    return;
-
-  }
-
-
-
-  setDriverLoading(tr("Starting camera service…"));
-
-  await prewarmWebrtc();
-
-  await ensureWebrtcd();
-
-
-
-  const roadVideo = document.getElementById("road-video");
-
-  const wrap = document.getElementById("camera-wrap");
-
-  if (st?.started && roadVideo && wrap) {
-
-    setDriverLoading(tr("WebRTC negotiating…"));
-
-    await startRoadStream(roadVideo, wrap);
-
-    if (roadStreaming) {
-
-      await switchToDriverCamera(driverVideoEl, st);
-
-      return;
-
-    }
-
-  }
-
-
-
-  setDriverLoading(tr("WebRTC negotiating (first time ~30s)…"));
-
-  driverViewActive = true;
-
-  roadPc = await createStream(driverVideoEl, CAM.DRIVER);
-
-  roadStreaming = true;
-
-  roadCamera = CAM.DRIVER;
-
-  await tuneStreamForBrowser();
-
-  await apiPost("/api/opui/action/driver_view_enable");
-
-}
-
-
-
-export async function stopDriverView() {
-
-  if (!driverViewActive) return;
-
-
-
-  const driverVideo = document.getElementById("driver-video");
-
-  if (driverVideo) driverVideo.srcObject = null;
-
-
-
-  const onroad = document.getElementById("camera-wrap")?.classList.contains("is-onroad");
-
-  if (onroad && roadStreaming) {
-
-    await switchCamera(driverViewResumeCamera || CAM.ROAD);
-
-    driverViewActive = false;
-
-    await apiPost("/api/opui/action/driver_view_disable");
-
-    return;
-
-  }
-
-
-
-  if (roadPc) {
-
-    roadPc.close();
-
-    roadPc = null;
-
-  }
-
-  stopWebCodecsDecode();
-
-  roadStreaming = false;
-
-  roadCamera = CAM.ROAD;
-
-  driverViewActive = false;
-
-  await apiPost("/api/opui/action/webrtc_disable");
-
-  await apiPost("/api/opui/action/driver_view_disable");
-
-}
-
-
-
-export async function openDriverCamera(st) {
-  const video = document.getElementById("driver-video");
-  const loading = document.getElementById("driver-cam-loading");
-  if (!video) return;
-  setDriverLoading(tr("camera starting"));
-
-  const onPlaying = () => {
-
-    if (loading) loading.hidden = true;
-
-    video.removeEventListener("playing", onPlaying);
-
-    video.removeEventListener("loadeddata", onPlaying);
-
-  };
-
-  video.addEventListener("playing", onPlaying);
-
-  video.addEventListener("loadeddata", onPlaying);
-
-  await startDriverView(video, st);
-
-  const roadVideo = document.getElementById("road-video");
-
-  if (roadVideo?.srcObject && !video.srcObject) {
-
-    video.srcObject = roadVideo.srcObject;
-
-    await video.play().catch(() => {});
-
-  }
-
-  if (loading && video.readyState >= 2) loading.hidden = true;
-
-}
-
-
-
-export async function closeDriverCamera() {
-
-  const dlg = document.getElementById("driver-camera-dialog");
-
-  if (dlg?.open) dlg.close();
-
-  await stopDriverView();
 
 }
 

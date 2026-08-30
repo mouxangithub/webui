@@ -3,12 +3,17 @@ import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
 } from "./panels.js?v=108";
-import { startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindDriverCameraDialog, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop } from "./onroad.js?v=119";
+import {
+  startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop,
+} from "./onroad.js?v=119";
 import { setRecommendedOverlayFps } from "./webrtc_stream_adaptive.js";
 import { getOverlayProjectionSize, syncModelOverlayViewport } from "./model_viewport.js";
-import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers } from "./home.js";
-import { updateSidebarMetrics, updateSidebarMode, updateSidebarRecording } from "./sidebar.js";
-import { bindDmArcClick } from "./hud_sp.js";
+import { updateHomeScreen, showHomeLoading, refreshHomeScreen, bindHomeHeader, applyLiveStartupBlockers, getLastHome } from "./home.js";
+import {
+  updateSidebarMetrics, updateSidebarMode, updateSidebarRecording,
+  updateSidebarEgpu,
+} from "./sidebar.js?v=1";
+import { initBodyLayout, updateBodyLayout, stopBodyLayout } from "./body_layout.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOverlayEnabled, hasOverlayGeometry } from "./model_canvas.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
@@ -34,6 +39,7 @@ const panelTitle = $("#panel-title");
 let panels = [];
 let currentPanel = "device";
 let lastStarted = false;
+let lastIsBody = false;
 let lastUiState = null;
 let devPc = false;
 let onroadSidebarVisible = false;
@@ -327,6 +333,7 @@ function setScreen(name) {
   app.dataset.screen = name;
   opuiWs.syncScreen(name);
   $("#screen-home").hidden = name !== "home";
+  $("#screen-body").hidden = name !== "body";
   $("#screen-settings").hidden = name !== "settings";
   $("#screen-onroad").hidden = name !== "onroad";
   settingsSidebar.hidden = name !== "settings";
@@ -340,6 +347,7 @@ function setScreen(name) {
     opuiWs.unwatchModelOverlay();
     stopModelOverlayPoll();
     stopOnroadHudAnimLoop();
+    stopBodyLayout();
     if (opuiWs.lastHome?.data) {
       updateHomeScreen(opuiWs.lastHome.data);
     } else if (opuiWs.bootstrap?.home) {
@@ -347,6 +355,17 @@ function setScreen(name) {
     } else {
       refreshHomeScreen();
     }
+  } else if (name === "body") {
+    onroadSidebarVisible = false;
+    metricsSidebar.hidden = false;
+    app.classList.remove("opui--onroad-sidebar-hidden");
+    notifyPanelWatch(null);
+    cancelOverlaySync();
+    opuiWs.unwatchModelOverlay();
+    stopModelOverlayPoll();
+    stopOnroadHudAnimLoop();
+    initBodyLayout();
+    if (lastUiState?.ok) updateBodyLayout(lastUiState);
   } else if (name === "onroad") {
     metricsSidebar.hidden = !onroadSidebarVisible;
     app.classList.toggle("opui--onroad-sidebar-hidden", !onroadSidebarVisible);
@@ -615,6 +634,7 @@ async function bootstrap() {
   ]);
   panels = panelResult;
   syncStaticUiStrings();
+  updateHomeScreen(getLastHome());
   if (!panels.length) {
     panels = [
       { id: "device", title: "Device" },
@@ -631,6 +651,7 @@ function handleState(st) {
   updateSidebarMetrics(st);
   updateSidebarMode(!!st.started);
   updateSidebarRecording(st);
+  updateSidebarEgpu(st);
   updateScreenSaverState(st);
   updateAlertSound(st);
 
@@ -642,11 +663,31 @@ function handleState(st) {
     syncDrivingPersonality(st.personality, st.personality_index);
   }
 
+  const isBody = !!st.is_body;
+  if (isBody) {
+    if (app.dataset.screen === "settings") {
+      // keep settings visible; body replaces home/onroad behind it
+    } else if (app.dataset.screen !== "body") {
+      setScreen("body");
+    }
+    updateBodyLayout(st);
+    if (st.started) cameraPreview = false;
+    lastStarted = !!st.started;
+    lastIsBody = true;
+    updateCameraPreviewUi();
+    return;
+  }
+
+  if (lastIsBody && app.dataset.screen === "body") {
+    setScreen(st.started ? "onroad" : "home");
+  }
+  lastIsBody = isBody;
+
   if (st.started) {
     if (!lastStarted) {
       onroadSidebarVisible = false;
     }
-    if (app.dataset.screen === "home") {
+    if (app.dataset.screen === "home" || app.dataset.screen === "body") {
       setScreen("onroad");
     } else if (app.dataset.screen === "onroad" && !devPc) {
       ensureRoadStream();
@@ -656,7 +697,7 @@ function handleState(st) {
     if (lastStarted) {
       stopRoadStream().catch(() => {});
     }
-    if (app.dataset.screen === "onroad" && !cameraPreview) {
+    if ((app.dataset.screen === "onroad" || app.dataset.screen === "body") && !cameraPreview) {
       setScreen("home");
     }
     if (cameraPreview && app.dataset.screen === "onroad") {
@@ -775,6 +816,7 @@ window.addEventListener("opui:language-changed", () => {
   refreshWebUiUpdateI18n();
   renderNav();
   clearPanelDomCache();
+  refreshHomeScreen();
   if (app.dataset.screen === "settings") loadCurrentPanel({ force: true });
   if (lastUiState?.ok) updateSidebarMetrics(lastUiState);
 });
@@ -859,11 +901,6 @@ $("#btn-sidebar-bottom").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("btn-home-camera-preview")?.addEventListener("click", () => {
-  cameraPreview = true;
-  setScreen("onroad");
-});
-
 document.getElementById("sidebar-mic")?.addEventListener("click", () => {
   openSettings("toggles");
 });
@@ -877,8 +914,6 @@ $("#home-exp-banner")?.addEventListener("click", () => openSettings("toggles"));
 
 bindExperimentalButton();
 bindCameraSwitcher();
-bindDriverCameraDialog();
-bindDmArcClick();
 bindHomeHeader();
 bindOnboardingDialog();
 initModelCanvas();

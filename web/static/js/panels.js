@@ -10,7 +10,7 @@ import { opuiWs } from "./ws.js";
 import {
   showConfirm, showKeyboard, showTree, showHtml, showMultiOption, showQrPair,
   createSpToggle, createProgressRow, createDualButton, bindRowExpand, experimentalE2eHtml,
-} from "./components.js";
+} from "./components.js?v=2";
 import { reopenOnboarding } from "./onboarding.js";
 
 function t(s) {
@@ -430,6 +430,15 @@ export function setGlobalState(st) {
   updateVehicleBrandCapabilities(st);
   syncMadsLimitedParams(st);
   updateSubpanelStates();
+  refreshDualButtonRows();
+}
+
+function refreshDualButtonRows() {
+  const root = document.getElementById("panel-content");
+  if (!root || !panelDataRef?.widgets) return;
+  for (const w of panelDataRef.widgets) {
+    if (w.type === "dual_button") updateDualButtonRow(root, w);
+  }
 }
 
 export function setHomeState(home) {
@@ -634,16 +643,20 @@ function updateSlaCapabilities(st) {
 }
 
 function updateModelsCapabilities(st) {
-  const btn = document.querySelector("[data-models-select] button");
-  if (btn) btn.disabled = !st?.is_offroad;
-  const camRow = document.querySelector('[data-param="CameraOffset"]');
-  if (camRow) camRow.hidden = !st?.custom_model_active;
+  const offroad = !!st?.is_offroad;
+  const root = typeof document !== "undefined" ? document.getElementById("panel-content") : null;
+  root?.querySelectorAll("[data-models-select='1'] button").forEach((b) => {
+    b.disabled = !offroad;
+  });
+  const models = st?.models_state || {};
+  const camRow = root?.querySelector('[data-param="CameraOffset"]');
+  if (camRow) camRow.hidden = !(models.qcom_selected || models.usbgpu_selected);
   const turnDesire = paramIsOn(panelDataRef?.values?.LaneTurnDesire);
   const advanced = paramIsOn(panelDataRef?.values?.ShowAdvancedControls);
-  const laneTurnRow = document.querySelector('[data-param="LaneTurnValue"]');
+  const laneTurnRow = root?.querySelector('[data-param="LaneTurnValue"]');
   if (laneTurnRow) laneTurnRow.hidden = !(turnDesire && advanced);
   const lagdOn = paramIsOn(panelDataRef?.values?.LagdToggle);
-  const delayRow = document.querySelector('[data-param="LagdToggleDelay"]');
+  const delayRow = root?.querySelector('[data-param="LagdToggleDelay"]');
   if (delayRow) delayRow.hidden = lagdOn || !advanced;
 }
 
@@ -1079,8 +1092,8 @@ function updateEngagedWidgets() {
     label?.classList.toggle("disabled", disabled);
   });
   root.querySelectorAll("[data-offroad-only='1']").forEach((row) => {
-    const input = row.querySelector("input[type=checkbox], button");
     const disabled = !globalState.is_offroad;
+    const input = row.querySelector("input[type=checkbox], button");
     if (input) input.disabled = disabled;
   });
 }
@@ -1239,12 +1252,19 @@ function updateDualButtonRow(root, w) {
   const right = w.right || {};
   const row = root.querySelector(`[data-dual="${CSS.escape(`${left.label || ""}|${right.label || ""}`)}"]`);
   if (!row) return;
+  const offroad = globalState.is_offroad;
+  const onroadPreview = !!deviceExtrasCache?.onroad_preview;
   for (const side of ["left", "right"]) {
     const cfg = w[side];
-    if (!cfg?.toggle || !cfg.param) continue;
     const btn = row.querySelector(`[data-side="${side}"]`);
     if (!btn) continue;
-    btn.classList.toggle("primary", paramIsOn(cfg.value));
+    if (cfg?.toggle && cfg.param) {
+      btn.classList.toggle("primary", paramIsOn(cfg.value));
+    }
+    if (cfg?.offroad_only) {
+      const isOnroadPreview = cfg.action === "onroad_preview";
+      btn.disabled = !offroad && !(isOnroadPreview && onroadPreview);
+    }
   }
 }
 
@@ -1443,7 +1463,6 @@ function prunePanelWidgets(widgets, panelData) {
       kept.push(w);
       continue;
     }
-    if (w.offroad_only && !globalState.is_offroad) continue;
     if (!widgetVisible(w, panelData)) continue;
     kept.push(w);
   }
@@ -1503,8 +1522,6 @@ function renderGenericPanel(container, data, panelId = "") {
 
 function renderWidget(w, panelData) {
   const kind = resolveWidgetType(w);
-  const offroad = globalState.is_offroad;
-  if (w.offroad_only && !offroad) return null;
 
   if (!widgetVisible(w, panelData)) return null;
 
@@ -1561,7 +1578,6 @@ function renderWidget(w, panelData) {
     if (w.custom === "stream_preview_quality") return renderStreamPreviewQualityRow(w);
     if (w.custom === "stream_webcodecs") return renderStreamWebcodecsRow();
     if (w.custom === "stream_diagnostics") return renderStreamDiagnosticsRow();
-    if (w.custom === "driver_camera") return renderDriverCameraRow();
     if (w.custom === "always_offroad") {
       const active = !!deviceExtrasCache?.offroad_mode;
       return renderAlwaysOffroadRow(active);
@@ -1838,6 +1854,7 @@ function formatMaxTimeLabel(index, valueMap) {
 
 function dualButtonClass(side) {
   if (side.action === "shutdown" || side.action === "reset_all_params") return "danger";
+  if (side.action === "onroad_preview" && deviceExtrasCache?.onroad_preview) return "primary";
   return "";
 }
 
@@ -1935,10 +1952,6 @@ async function showTrainingGuide() {
 }
 
 async function runDualSideAction(side) {
-  if (side.custom === "driver_camera") {
-    window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
-    return;
-  }
   if (side.action === "open_regulatory") {
     const reg = await apiGet("/api/opui/device/regulatory");
     await showHtml({
@@ -1982,6 +1995,20 @@ async function runDualSideAction(side) {
       }
       if (!(await showConfirm({ message: t("Are you sure you want to power off?"), confirmText: t("Power Off") }))) return;
     }
+    if (side.action === "onroad_preview") {
+      const res = await apiPost("/api/opui/action/onroad_preview");
+      if (res.ok) {
+        // Toggle the local cache state
+        if (deviceExtrasCache) {
+          deviceExtrasCache.onroad_preview = res.is_preview;
+        }
+        // Refresh to update button states
+        requestPanelRefresh();
+        return;
+      }
+      toast(res.error || "Failed");
+      return;
+    }
     if (side.confirm && !(await showConfirm({ message: t(side.confirm), confirmText: t("Yes") }))) return;
     const res = await apiPost(`/api/opui/action/${encodeURIComponent(side.action)}`);
     if (res.ok) toast(t(side.label));
@@ -2015,8 +2042,15 @@ function renderDualButtonRow(w) {
   if (right.toggle) {
     rBtn.classList.toggle("primary", paramIsOn(right.value));
   }
-  if (left.offroad_only && !offroad) lBtn.disabled = true;
-  if (right.offroad_only && !offroad) rBtn.disabled = true;
+  // onroad_preview is enabled when offroad OR when already in preview mode
+  const isOnroadPreviewEnabled = (s) => {
+    if (s.action !== "onroad_preview") return true;
+    return offroad || deviceExtrasCache?.onroad_preview;
+  };
+  if (left.offroad_only && !offroad && !deviceExtrasCache?.onroad_preview) lBtn.disabled = true;
+  if (right.offroad_only && !offroad && !deviceExtrasCache?.onroad_preview) rBtn.disabled = true;
+  if (!isOnroadPreviewEnabled(left)) lBtn.disabled = true;
+  if (!isOnroadPreviewEnabled(right)) rBtn.disabled = true;
   if (right.hide_when_onroad && !offroad) {
     rBtn.remove();
   } else if (left.hide_when_onroad && !offroad) {
@@ -2131,6 +2165,7 @@ function renderActionRow(w) {
   const row = document.createElement("div");
   row.className = "opui-sp-row";
   if (w.action) row.dataset.action = w.action;
+  if (w.offroad_only) row.dataset.offroadOnly = "1";
   const disabled = (w.offroad_only && !globalState.is_offroad);
   const calHtml = (w.dynamic_desc === "calibration")
     ? buildCalibrationDescHtml(w, deviceExtrasCache?.calibration)
@@ -2639,122 +2674,10 @@ async function renderModelsPanel(container, data) {
     return;
   }
 
-  const pickRow = document.createElement("div");
-  pickRow.className = "opui-sp-row opui-sp-row--has-action";
-  pickRow.dataset.modelsSelect = "1";
-  const modelName = m.active_name || formatBundleDisplay(data.values?.ModelManager_ActiveBundle) || "—";
-  const modelDesc = !globalState.is_offroad
-    ? t("Only available when vehicle is off, or always offroad mode is on")
-    : modelName;
-  pickRow.innerHTML = `
-    <div class="opui-sp-row-text">
-      <div class="opui-sp-row-title">${escapeHtml(t("Current Model"))}</div>
-      <div class="opui-sp-row-desc">${escapeHtml(modelDesc)}</div>
-    </div>
-    <button type="button" class="opui-btn opui-btn--action" ${globalState.is_offroad ? "" : "disabled"}>${escapeHtml(t("SELECT"))}</button>`;
-  pickRow.querySelector("button")?.addEventListener("click", async () => {
-    if (!globalState.is_offroad) {
-      toast(t("Changing model is only allowed while offroad."));
-      return;
-    }
-    if (m.model_manager_online === false) {
-      toast(t("Model list is still loading. Tap Refresh Model List and try again."));
-    }
-    const ref = await showTree({
-      title: t("Select a Model"),
-      folders: m.tree || [],
-      selectedRef: m.active_ref,
-      searchable: true,
-      getFolders: async () => {
-        const latest = await apiGet("/api/opui/models");
-        return latest?.tree || [];
-      },
-      onFavorite: async (modelRef) => {
-        const res = await apiPost("/api/opui/models/favorite", { ref: modelRef });
-        if (!res.ok) {
-          toast(res.error || t("Failed"));
-          return false;
-        }
-        return true;
-      },
-    });
-    if (!ref) return;
-    const latest = await apiGet("/api/opui/models");
-    const bundle = (latest?.tree || m.tree || []).flatMap((f) => f.bundles || []).find((b) => b.ref === ref);
-    const res = await apiPost("/api/opui/models/select", { ref, index: bundle?.index });
-    if (res.ok) {
-      if (res.needs_reset_cal) {
-        const reset = await showConfirm({
-          message: t("Model download has started in the background. We suggest resetting calibration. Would you like to do that now?"),
-          confirmText: t("Reset Calibration"),
-          cancelText: t("Cancel"),
-        });
-        if (reset) {
-          const cal = await apiPost("/api/opui/action/reset_calibration");
-          if (cal.ok) toast(t("Reset Calibration"));
-          else toast(cal.error || t("Failed"));
-        }
-      }
-      toast(t("Model selected"));
-      await renderModelsPanel(container, data);
-    } else toast(res.error || t("Failed"));
-  });
-  container.appendChild(pickRow);
+  container.appendChild(buildModelSlots(m, data, gen, container));
 
-  const downloadRoot = document.createElement("div");
-  downloadRoot.dataset.modelsDownload = "1";
-  container.appendChild(downloadRoot);
-
-  const paintModelsDownload = (status) => {
-    downloadRoot.innerHTML = "";
-    const hasDownload = status.download?.name && status.download_index != null && status.download_index !== "";
-    if (!hasDownload) return;
-    const cancel = document.createElement("div");
-    cancel.className = "opui-sp-row opui-sp-row--has-action";
-    cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Cancel Download"))}</div></div>
-      <button type="button" class="opui-btn opui-btn--action danger">${escapeHtml(t("Cancel"))}</button>`;
-    cancel.querySelector("button")?.addEventListener("click", async () => {
-      await apiPost("/api/opui/action/models_cancel_download");
-      toast(t("Download cancelled"));
-      await renderModelsPanel(container, data);
-    });
-    downloadRoot.appendChild(cancel);
-    const types = {
-      supercombo: t("Driving Model"),
-      vision: t("Vision Model"),
-      policy: t("Policy Model"),
-      offPolicy: t("Off-Policy Model"),
-      onPolicy: t("On-Policy Model"),
-    };
-    const parts = status.download.models?.length
-      ? status.download.models
-      : Object.keys(types).map((type) => ({ type, progress: 0 }));
-    for (const part of parts) {
-      const label = types[part.type] || part.type;
-      downloadRoot.appendChild(createProgressRow(`${label} — ${status.download.name}`, part.progress || 0));
-    }
-  };
-
-  const syncModelsExtras = (status) => {
-    paintModelsDownload(status);
-    const clearRow = container.querySelector('[data-action="models_clear_cache"]');
-    if (clearRow && status.cache_size_mb != null) {
-      const text = clearRow.querySelector(".opui-sp-row-text");
-      if (text) {
-        let d = text.querySelector(".opui-sp-row-desc");
-        if (!d) {
-          d = document.createElement("div");
-          d.className = "opui-sp-row-desc";
-          text.appendChild(d);
-        }
-        d.textContent = `${Number(status.cache_size_mb).toFixed(2)} ${t("MB")}`;
-      }
-    }
-  };
-
-  syncModelsExtras(m);
   appendPanelWidgets(container, data);
-  syncModelsExtras(m);
+  syncModelsExtras(m, container);
 
   modelsPanelPoll = setInterval(async () => {
     if (panelRenderStale(gen)) {
@@ -2763,9 +2686,233 @@ async function renderModelsPanel(container, data) {
     }
     try {
       const latest = await apiGet("/api/opui/models");
-      if (latest?.ok) syncModelsExtras(latest);
+      if (latest?.ok) {
+        paintModelsDownload(container, latest);
+        const clearRow = container.querySelector('[data-action="models_clear_cache"]');
+        if (clearRow && latest.cache_size_mb != null) {
+          const text = clearRow.querySelector(".opui-sp-row-text");
+          if (text) {
+            let d = text.querySelector(".opui-sp-row-desc");
+            if (!d) {
+              d = document.createElement("div");
+              d.className = "opui-sp-row-desc";
+              text.appendChild(d);
+            }
+            d.textContent = `${Number(latest.cache_size_mb).toFixed(2)} ${t("MB")}`;
+          }
+        }
+      }
     } catch { /* ignore transient poll errors */ }
   }, 500);
+}
+
+function buildModelSlots(m, data, gen, container) {
+  const wrap = document.createElement("div");
+  wrap.dataset.modelsSlots = "1";
+
+  const sources = m.usbgpu_enabled ? ["qcom", "usbgpu"] : ["qcom"];
+  for (const source of sources) {
+    const slot = m.slots?.[source] || { tree: [], selected: {}, active_ref: "Default", default_label: "" };
+    const row = document.createElement("div");
+    row.className = "opui-sp-row opui-sp-row--has-action";
+    row.dataset.modelsSelect = "1";
+    row.dataset.modelsSource = source;
+
+    const title = source === "usbgpu" ? t("Big Model") : t("Small Model");
+    const carryActive = m.carry_source === source;
+    const selectedName = slot.selected?.name || slot.default_label || "—";
+    const subtitle = !globalState.is_offroad
+      ? t("Only available when vehicle is off, or always offroad mode is on")
+      : selectedName;
+
+    row.innerHTML = `
+      <div class="opui-sp-row-text">
+        <div class="opui-sp-row-title">${escapeHtml(title)}${carryActive ? ` <span class="opui-models-carry">${escapeHtml(t("(driving)"))}</span>` : ""}</div>
+        <div class="opui-sp-row-desc">${escapeHtml(subtitle)}</div>
+      </div>
+      <button type="button" class="opui-btn opui-btn--action" ${globalState.is_offroad ? "" : "disabled"}>${escapeHtml(t("SELECT"))}</button>`;
+    row.querySelector("button")?.addEventListener("click", async () => {
+      if (!globalState.is_offroad) {
+        toast(t("Changing model is only allowed while offroad."));
+        return;
+      }
+      if (m.model_manager_online === false) {
+        toast(t("Model list is still loading. Tap Refresh Model List and try again."));
+        return;
+      }
+      const latest = await apiGet("/api/opui/models");
+      if (panelRenderStale(gen)) return;
+      const fresh = latest?.ok ? latest : m;
+      const tree = fresh.slots?.[source]?.tree || slot.tree || [];
+      const ref = await showTree({
+        title: source === "usbgpu" ? t("Select a Big Model") : t("Select a Model"),
+        folders: tree,
+        selectedRef: fresh.slots?.[source]?.active_ref || "Default",
+        searchable: true,
+        getFolders: async () => {
+          const r = await apiGet("/api/opui/models");
+          if (!r?.ok) return tree;
+          return r.slots?.[source]?.tree || tree;
+        },
+        onFavorite: async (modelRef) => {
+          const res = await apiPost("/api/opui/models/favorite", { ref: modelRef });
+          if (!res.ok) {
+            toast(res.error || t("Failed"));
+            return false;
+          }
+          return true;
+        },
+      });
+      if (!ref) return;
+      const res = await apiPost("/api/opui/models/select", { ref, source });
+      if (res?.ok) {
+        if (res.needs_reset_cal) {
+          const reset = await showConfirm({
+            message: t("Model download has started in the background. We suggest resetting calibration. Would you like to do that now?"),
+            confirmText: t("Reset Calibration"),
+            cancelText: t("Cancel"),
+          });
+          if (reset) {
+            const cal = await apiPost("/api/opui/action/reset_calibration");
+            if (cal.ok) toast(t("Reset Calibration"));
+            else toast(cal.error || t("Failed"));
+          }
+        }
+        toast(t("Model selected"));
+        await renderModelsPanel(container, data);
+      } else toast(res?.error || t("Failed"));
+    });
+    wrap.appendChild(row);
+  }
+
+  const statusRow = buildModelStatusRow(m);
+  if (statusRow) wrap.appendChild(statusRow);
+
+  const downloadRoot = document.createElement("div");
+  downloadRoot.dataset.modelsDownload = "1";
+  wrap.appendChild(downloadRoot);
+  paintModelsDownload(container, m);
+
+  if (m.usbgpu_enabled) {
+    const note = buildModelsStatusNote(m);
+    if (note) {
+      const noteRow = document.createElement("div");
+      noteRow.className = "opui-models-status-note";
+      noteRow.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-desc">${escapeHtml(note)}</div></div>`;
+      wrap.appendChild(noteRow);
+    }
+  }
+
+  return wrap;
+}
+
+function buildModelsStatusNote(m) {
+  if (!m.usbgpu_enabled) return "";
+  const smallSlot = m.slots?.qcom || {};
+  const bigSlot = m.slots?.usbgpu || {};
+  const smallName = smallSlot.selected?.name || smallSlot.default_label || "Stock";
+  const bigName = bigSlot.selected?.name || bigSlot.default_label || "Big Stock";
+  if (m.big_state === "failed") {
+    if (!bigSlot.selected?.name) {
+      return t("Big model unavailable, {fallback} is driving until the next drive.").replace("{fallback}", smallName);
+    }
+    return t("Big model unavailable until the next drive.");
+  }
+  if (m.big_state === "loading") {
+    if (!bigSlot.selected?.name) {
+      return t("{name} drives until the big model is ready.").replace("{name}", smallName);
+    }
+    return t("Getting the big model ready.");
+  }
+  if (!bigSlot.selected?.name) {
+    return t("{name} will drive. If it fails during a drive, {fallback} takes over until the next drive.")
+      .replace("{name}", bigName)
+      .replace("{fallback}", smallName);
+  }
+  return t("{name} will drive when the eGPU is ready.").replace("{name}", bigName);
+}
+
+function buildModelStatusRow(m) {
+  const sources = m.usbgpu_enabled ? ["qcom", "usbgpu"] : ["qcom"];
+  const labels = { qcom: t("small"), usbgpu: t("big") };
+  const segments = [];
+  for (const source of sources) {
+    const slot = m.slots?.[source] || { selected: {}, default_label: "—" };
+    const name = slot.selected?.internal || slot.selected?.name || slot.default_label || "—";
+    const isActive = source === m.carry_source && name === m.carry_internal;
+    let stateClass = isActive ? "active" : "inactive";
+    if (source === "usbgpu" && m.big_state) {
+      stateClass = m.big_state === "failed" ? "failed" : "loading";
+    }
+    if (segments.length) {
+      segments.push(`<span class="opui-models-status-separator">|</span>`);
+    }
+    segments.push(`<span class="opui-models-status-label">${escapeHtml(labels[source])}</span>`);
+    segments.push(`<span class="opui-models-status-name opui-models-status-name--${stateClass}">${escapeHtml("● " + name)}</span>`);
+  }
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-models-status-row";
+  row.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Model Status"))}</div><div class="opui-models-status-segments">${segments.join("")}</div></div>`;
+  return row;
+}
+
+function paintModelsDownload(container, status) {
+  const root = container.querySelector("[data-models-download='1']");
+  if (!root) return;
+  root.innerHTML = "";
+  const hasDownload = status.download?.name && status.download?.status;
+  if (!hasDownload) return;
+
+  const cancel = document.createElement("div");
+  cancel.className = "opui-sp-row opui-sp-row--has-action";
+  const verifying = !!status.download?.verifying;
+  cancel.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t(verifying ? "Cancel Verification" : "Cancel Download"))}</div></div>
+    <button type="button" class="opui-btn opui-btn--action danger">${escapeHtml(t("Cancel"))}</button>`;
+  cancel.querySelector("button")?.addEventListener("click", async () => {
+    await apiPost("/api/opui/action/models_cancel_download");
+    toast(t(verifying ? "Verification cancelled" : "Download cancelled"));
+    const container2 = document.getElementById("panel-content");
+    const data = panelDataRef;
+    if (container2 && data) await renderModelsPanel(container2, data);
+  });
+  root.appendChild(cancel);
+
+  const types = {
+    supercombo: t("Driving Model"),
+    vision: t("Vision Model"),
+    policy: t("Policy Model"),
+    offPolicy: t("Off-Policy Model"),
+    onPolicy: t("On-Policy Model"),
+    navigation: t("Navigation Model"),
+  };
+  const parts = status.download.models?.length
+    ? status.download.models
+    : Object.keys(types).map((type) => ({ type, progress: 0 }));
+  let name = status.download.name;
+  if (status.queued_name && status.queued_name !== status.download.internal) {
+    name += `  |  ${status.queued_name} ${t("queued")}`;
+  }
+  for (const part of parts) {
+    const label = types[part.type] || part.type;
+    root.appendChild(createProgressRow(`${label} — ${name}`, part.progress || 0));
+  }
+}
+
+function syncModelsExtras(status, container) {
+  paintModelsDownload(container, status);
+  const clearRow = container.querySelector('[data-action="models_clear_cache"]');
+  if (clearRow && status.cache_size_mb != null) {
+    const text = clearRow.querySelector(".opui-sp-row-text");
+    if (text) {
+      let d = text.querySelector(".opui-sp-row-desc");
+      if (!d) {
+        d = document.createElement("div");
+        d.className = "opui-sp-row-desc";
+        text.appendChild(d);
+      }
+      d.textContent = `${Number(status.cache_size_mb).toFixed(2)} ${t("MB")}`;
+    }
+  }
 }
 
 function applyOsmPanelValues(patch) {
@@ -3645,24 +3792,6 @@ function renderLanguageRow() {
       window.dispatchEvent(new CustomEvent("opui:language-changed"));
     }
   });
-  return row;
-}
-
-function renderDriverCameraRow() {
-  const row = document.createElement("div");
-  row.className = "opui-sp-row";
-  const disabled = !globalState.is_offroad;
-  row.innerHTML = `
-    <div class="opui-sp-row-text">
-      <div class="opui-sp-row-title">${escapeHtml(t("Driver Camera"))}</div>
-      <div class="opui-sp-row-desc">${escapeHtml(t("Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"))}</div>
-    </div>
-    <button type="button" class="opui-btn opui-btn--action" ${disabled ? "disabled" : ""}>${escapeHtml(t("PREVIEW"))}</button>`;
-  if (!disabled) {
-    row.querySelector("button")?.addEventListener("click", () => {
-      window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
-    });
-  }
   return row;
 }
 

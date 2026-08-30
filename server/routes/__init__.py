@@ -25,7 +25,7 @@ from webui.server.bridge.network_api import (
 )
 from webui.server.bridge.webrtc_api import webrtc_notify, webrtc_offer, webrtc_schema
 from webui.server.bridge.trips_api import trips_stats
-from webui.server.bridge.models_api import models_select, models_status
+from webui.server.bridge.models_api import models_select, models_status, models_toggle_favorite
 from webui.server.bridge.design_tokens import tokens_payload
 from webui.server.bridge.assets_api import resolve_asset
 from webui.server.bridge.stream_health_api import snapshot_stream_health
@@ -251,11 +251,21 @@ async def api_models_select(request: web.Request) -> web.Response:
     body = await request.json()
     ref = str(body.get("ref", ""))
     index = body.get("index")
+    source = str(body.get("source", "qcom"))
     if index is not None:
       index = int(index)
   except Exception:
     return json_response({"ok": False, "error": "invalid json"}, status=400)
-  return json_response(models_select(ref, index))
+  return json_response(models_select(ref, index, source=source))
+
+
+async def api_models_favorite(request: web.Request) -> web.Response:
+  try:
+    body = await request.json()
+    ref = str(body.get("ref", ""))
+  except Exception:
+    return json_response({"ok": False, "error": "invalid json"}, status=400)
+  return json_response(models_toggle_favorite(ref))
 
 
 async def api_tokens(_request: web.Request) -> web.Response:
@@ -562,6 +572,7 @@ def register_routes(app: web.Application) -> None:
   app.router.add_get("/api/opui/trips", api_trips)
   app.router.add_get("/api/opui/models", api_models)
   app.router.add_post("/api/opui/models/select", api_models_select)
+  app.router.add_post("/api/opui/models/favorite", api_models_favorite)
   app.router.add_get("/api/opui/tokens", api_tokens)
   app.router.add_get("/api/opui/assets/{path:.*}", api_asset)
   app.router.add_get("/api/opui/model/overlay", api_model_overlay)
@@ -617,3 +628,6 @@ def register_routes(app: web.Application) -> None:
     return web.FileResponse(WEB_DIR / "index.html")
 
   app.router.add_get("/", index)
+
+  from webui.server.routes.dev import register_dev_routes
+  register_dev_routes(app)

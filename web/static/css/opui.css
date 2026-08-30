@@ -268,6 +268,39 @@ html.opui-portrait-host .opui-modal-scroll {
   pointer-events: auto;
 }
 
+.opui-sidebar-btn--dcam {
+  position: absolute;
+  left: 226px;
+  top: 160px;
+  width: 64px;
+  height: 64px;
+  background-image: url("/api/opui/assets/icons_mici/settings/device/cameras.png");
+  background-size: 100% 100%;
+  opacity: 1;
+}
+
+.opui-sidebar-btn--dcam:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.opui-sidebar-btn--egpu {
+  background-image: var(--opui-egpu-img, none) !important;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.opui-sidebar-btn--egpu-loading {
+  animation: opui-egpu-pulse 1s ease-in-out infinite;
+}
+
+@keyframes opui-egpu-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 .opui-sidebar-network {
   position: absolute;
   left: 58px;
@@ -588,23 +621,6 @@ html.opui-portrait-host .opui-modal-scroll {
 @keyframes opui-pulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
-}
-
-.opui-home-camera-preview {
-  margin-top: 24px;
-  width: 100%;
-  min-height: 120px;
-  border: none;
-  border-radius: 24px;
-  background: #465bea;
-  color: #fff;
-  font-size: 42px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.opui-home-camera-preview:active {
-  background: #3a4bc4;
 }
 
 .opui-prime {
@@ -2549,6 +2565,39 @@ html.opui-portrait-host .opui-modal-scroll {
 
 .opui-dev-row input[type="range"] { flex: 1; }
 
+.opui-screen--body {
+  background: #000;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.opui[data-screen="body"] .opui-main,
+.opui[data-screen="body"].opui--onroad-sidebar-hidden .opui-main {
+  left: var(--onroad-sidebar-w);
+  width: calc(100% - var(--onroad-sidebar-w));
+}
+
+.opui-body-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.opui-body-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 25%;
+  text-align: center;
+  font-size: 95px;
+  font-weight: 500;
+  color: #fff;
+  pointer-events: none;
+}
+
 /* Scale is computed in app.js fitOpuiScale() for portrait rotation support */
 
 /* sunnypilot SP list_view (170px rows, left toggle) */
@@ -3305,8 +3354,15 @@ body.opui-modal-open {
   background-repeat: no-repeat;
   background-position: 36px center;
   background-size: 48px 48px;
+  cursor: pointer;
+}
+.opui-tree-search:hover {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 .opui-tree-search::placeholder { color: #888; }
+.opui-tree-dialog-item--pinned {
+  margin-bottom: 35px;
+}
 .opui-tree-body {
   margin: 0;
 }
@@ -3490,128 +3546,6 @@ body.opui-modal-open {
   cursor: pointer;
 }
 .opui-multi-opt.selected { background: #465BEA; }
-
-.opui-driver-cam {
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  background: #000;
-  color: #fff;
-  max-width: none;
-  overflow: hidden;
-}
-.opui-driver-cam--fullscreen {
-  width: 100vw;
-  height: 100vh;
-  max-width: none;
-  margin: 0;
-}
-.opui-driver-cam--fullscreen::backdrop {
-  background: #000;
-}
-.opui-driver-cam__header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 28px 32px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0) 100%);
-  pointer-events: none;
-}
-.opui-driver-cam__title {
-  margin: 0;
-  font-size: 44px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
-}
-.opui-driver-cam__viewport {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  overflow: hidden;
-  background: #000;
-}
-.opui-driver-cam__viewport video {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: cover;
-  background: #000;
-  border-radius: 0;
-  transform: scale(1.45);
-  transform-origin: top center;
-}
-.opui-driver-cam__loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  padding: 48px;
-  font-size: 36px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-  text-align: center;
-  background: rgba(0, 0, 0, 0.62);
-  pointer-events: none;
-  z-index: 2;
-}
-.opui-driver-cam__loading[hidden] {
-  display: none !important;
-}
-.opui-driver-cam__loading p {
-  margin: 0;
-  max-width: 72%;
-  line-height: 1.35;
-}
-.opui-driver-cam__spinner {
-  width: 56px;
-  height: 56px;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top-color: rgba(255, 255, 255, 0.92);
-  border-radius: 50%;
-  animation: opui-spin 0.9s linear infinite;
-}
-.opui-driver-cam__face {
-  position: absolute;
-  border: 8px solid rgba(255, 255, 255, 0.75);
-  border-radius: 28px;
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 1;
-}
-.opui-driver-cam__close {
-  margin: 0;
-  pointer-events: auto;
-  flex-shrink: 0;
-  width: 96px;
-  height: 96px;
-  background-size: 44px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-}
-.opui-driver-cam h3 {
-  font-size: 70px;
-  margin: 0 0 24px;
-}
-.opui-driver-cam video { width: 100%; max-width: 900px; background: #000; border-radius: 12px; }
-.opui-driver-cam .opui-btn {
-  margin-top: 24px;
-  height: 160px;
-  min-width: 280px;
-  font-size: 52px;
-  border-radius: 20px;
-}
 
 .opui-dm-arc--rhd { left: auto; right: 66px; }
 
@@ -4212,4 +4146,66 @@ body.opui-system-wait-open {
   font-size: 32px;
   color: #666;
   padding-top: 4px;
+}
+
+/* Models panel */
+.opui-sp-row--progress {
+  min-height: 140px;
+}
+
+.opui-sp-row--progress .opui-progress {
+  flex-shrink: 0;
+}
+
+.opui-models-carry {
+  color: #5cdb7f;
+  font-weight: 600;
+}
+
+.opui-models-status-note {
+  padding: 18px 24px;
+  font-size: 34px;
+  line-height: 1.45;
+  color: #a8a8a8;
+}
+
+.opui-models-status-row {
+  min-height: auto;
+  padding: 16px 20px;
+}
+
+.opui-models-status-row .opui-sp-row-title {
+  font-size: 44px;
+  margin-bottom: 10px;
+}
+
+.opui-models-status-segments {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  font-size: 38px;
+}
+
+.opui-models-status-separator {
+  color: #555;
+}
+
+.opui-models-status-label {
+  color: #808080;
+  text-transform: capitalize;
+}
+
+.opui-models-status-name {
+  font-weight: 600;
+}
+
+.opui-models-status-name--active { color: #5cdb7f; }
+.opui-models-status-name--inactive { color: #808080; }
+.opui-models-status-name--failed { color: #e74c3c; }
+.opui-models-status-name--loading { color: #daca25; }
+
+/* IMU calibration panel */
+.opui-imu-calibration-block {
+  display: contents;
 }

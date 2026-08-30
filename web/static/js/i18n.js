@@ -154,8 +154,6 @@ const STATIC_UI_KEYS = {
   "multi-cancel": "Cancel",
   "multi-select": "Select",
   "html-ok": "OK",
-  "driver-cam-title": "Driver Camera Preview",
-  "driver-cam-loading-text": "camera starting",
   "confirm-cancel": "Cancel",
   "confirm-ok": "Confirm",
   "webui-update-later": "Close",
@@ -165,14 +163,9 @@ const STATIC_UI_KEYS = {
   "btn-cam-road": "Long focus",
   "btn-cam-wide": "Wide angle",
   "btn-cam-exit": "Exit",
-  "btn-home-camera-preview-label": "Driving preview",
   "sunnylink": "sunnylink",
   "Decline": "Decline",
   "Agree": "Agree",
-  "Driver Camera Preview enabled": "Driver Camera Preview enabled",
-  "Driver Camera Preview disabled": "Driver Camera Preview disabled",
-  "Driver Camera Preview": "Driver Camera Preview",
-  "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.": "Offroad only. Enables camerad for driver-facing preview in WebUI. Blocks onroad while enabled.",
   "No built-in display — use this Web UI as your primary interface.": "No built-in display — use this Web UI as your primary interface.",
   "Bookmark route": "Bookmark route",
   "Route bookmarked": "Route bookmarked",
@@ -196,16 +189,8 @@ const STATIC_UI_TITLES = {
 };
 
 const STATIC_ARIA_LABELS = {
-  "driver-cam-close": "Close",
   "btn-close-settings": "Close",
 };
-
-export function syncDriverCamUi() {
-  const title = document.getElementById("driver-cam-title");
-  if (title) title.textContent = tr("Driver Camera Preview");
-  const close = document.getElementById("driver-cam-close");
-  if (close) close.setAttribute("aria-label", tr("Close"));
-}
 
 export function syncStaticUiStrings() {
   for (const [id, key] of Object.entries(STATIC_UI_KEYS)) {
@@ -220,7 +205,6 @@ export function syncStaticUiStrings() {
     const el = document.getElementById(id);
     if (el) el.setAttribute("aria-label", tr(key));
   }
-  syncDriverCamUi();
   const treeSearch = document.getElementById("tree-search");
   if (treeSearch) treeSearch.placeholder = tr("Search");
 }

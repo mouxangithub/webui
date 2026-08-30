@@ -325,6 +325,7 @@ export function showTree(opts) {
     if (search) {
       search.value = "";
       search.placeholder = tr("Search");
+      search.readOnly = true;
     }
     const cancelBtn = document.getElementById("tree-cancel");
     if (cancelBtn) cancelBtn.textContent = tr("Cancel");
@@ -354,17 +355,72 @@ export function showTree(opts) {
       return name;
     };
 
+    const findSelectedNode = () => {
+      for (const folder of treeFolders) {
+        for (const b of folder.bundles || []) {
+          if (b.ref === selectedRef || b.name === selectedRef) {
+            return { folder, bundle: b };
+          }
+        }
+      }
+      return null;
+    };
+
+    const selectedNode = findSelectedNode();
+
+    const renderBundleRow = (b, options = {}) => {
+      const { indent = 0, pinned = false } = options;
+      const row = document.createElement("button");
+      row.type = "button";
+      const indentClass = indent > 0 ? " opui-tree-dialog-item--child" : "";
+      const pinnedClass = pinned ? " opui-tree-dialog-item--pinned" : "";
+      const selected = b.ref === pick || (pick === "" && b.ref === "Default");
+      row.className = `opui-tree-dialog-item${indentClass}${pinnedClass}` + (selected ? " selected" : "");
+      row.innerHTML = `<span class="opui-tree-dialog-label">${escapeHtml(b.name || b.ref)}</span>`;
+      if (onFavorite && b.ref !== "Default") {
+        const star = document.createElement("span");
+        star.className = "opui-tree-star";
+        star.textContent = b.fav ? "★" : "☆";
+        star.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const result = await onFavorite(b.ref);
+          if (result === false) return;
+          await reloadFolders();
+          render();
+        });
+        row.appendChild(star);
+      }
+      row.addEventListener("click", () => {
+        pick = b.ref;
+        syncSelectBtn();
+        render();
+      });
+      return row;
+    };
+
     const render = () => {
       body.innerHTML = "";
       const q = query.toLowerCase().trim();
       const searching = !!q;
+
+      // Pin the currently selected item at the very top, matching GUI TreeOptionDialog.
+      if (selectedNode?.bundle) {
+        body.appendChild(renderBundleRow(selectedNode.bundle, { pinned: true }));
+      }
+
       for (const folder of treeFolders) {
         const bundles = (folder.bundles || []).filter((b) => {
           const label = (b.name || b.ref || "").toLowerCase();
+          const internal = (b.internal || "").toLowerCase();
           const folderName = folderLabel(folder.name).toLowerCase();
-          return !q || label.includes(q) || folderName.includes(q);
+          return !q || label.includes(q) || internal.includes(q) || folderName.includes(q);
         });
-        if (!bundles.length) continue;
+        // Skip the pinned selected node in its original folder to avoid duplication.
+        const visibleBundles = selectedNode?.bundle
+          ? bundles.filter((b) => !(b.ref === selectedNode.bundle.ref && b.name === selectedNode.bundle.name))
+          : bundles;
+        if (!visibleBundles.length) continue;
+
         const hasFolder = !!(folder.name != null && folder.name !== "");
         const isOpen = searching || !hasFolder || expanded.has(folder.name);
         if (hasFolder) {
@@ -380,42 +436,45 @@ export function showTree(opts) {
           body.appendChild(hdr);
           if (!isOpen) continue;
         }
-        for (const b of bundles) {
-          const row = document.createElement("button");
-          row.type = "button";
-          const indent = hasFolder ? " opui-tree-dialog-item--child" : "";
-          row.className = `opui-tree-dialog-item${indent}` + (b.ref === pick ? " selected" : "");
-          row.innerHTML = `<span class="opui-tree-dialog-label">${escapeHtml(b.name || b.ref)}</span>`;
-          if (onFavorite) {
-            const star = document.createElement("span");
-            star.className = "opui-tree-star";
-            star.textContent = b.fav ? "★" : "☆";
-            star.addEventListener("click", async (e) => {
-              e.stopPropagation();
-              const result = await onFavorite(b.ref);
-              if (result === false) return;
-              await reloadFolders();
-              render();
-            });
-            row.appendChild(star);
-          }
-          row.addEventListener("click", () => {
-            pick = b.ref;
-            syncSelectBtn();
-            render();
-          });
-          body.appendChild(row);
+        for (const b of visibleBundles) {
+          body.appendChild(renderBundleRow(b, { indent: hasFolder ? 1 : 0 }));
         }
       }
     };
 
-    if (search) search.oninput = () => { query = search.value; render(); };
+    const openSearch = async () => {
+      const result = await showKeyboard({ title: tr("Enter search query"), value: query, maxLen: 64 });
+      if (result !== null) {
+        query = result;
+        if (search) search.value = query;
+        render();
+      }
+    };
+
+    if (search) {
+      search.oninput = null;
+      search.onclick = openSearch;
+      search.onfocus = () => {
+        search.blur();
+        openSearch();
+      };
+    }
     syncSelectBtn();
     const close = () => {
+      if (search) {
+        search.readOnly = false;
+        search.onclick = null;
+        search.onfocus = null;
+      }
       popModal(root);
       resolve(null);
     };
     selectBtn.onclick = () => {
+      if (search) {
+        search.readOnly = false;
+        search.onclick = null;
+        search.onfocus = null;
+      }
       popModal(root);
       resolve(pick);
     };

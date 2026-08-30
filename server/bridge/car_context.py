@@ -50,6 +50,7 @@ class WebuiCarContext:
   subaru_sng_available: bool = True
   pcm_cruise_speed: bool | None = None
   max_lateral_accel: float = 3.0
+  is_body: bool = False
   car_platform_bundle: dict[str, Any] = field(default_factory=dict)
 
 
@@ -131,6 +132,7 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
       ctx.max_lateral_accel = float(getattr(ctx.CP, "maxLateralAccel", 3.0) or 3.0)
       ctx.brand = ctx.CP.brand or ""
       ctx.platform = ctx.CP.carFingerprint or ""
+      ctx.is_body = bool(getattr(ctx.CP, "notCar", False))
       ctx.torque_control_allowed = ctx.CP.steerControlType != car.CarParams.SteerControlType.angle
       if ctx.CP.alphaLongitudinalAvailable:
         ctx.has_longitudinal_control = p.get_bool("AlphaLongitudinalEnabled")
@@ -189,7 +191,10 @@ def refresh_car_context(sm: Any, started: bool) -> WebuiCarContext:
     ctx.is_release_branch = p.get_bool("IsReleaseSpBranch")
     ctx.is_development_branch = p.get_bool("IsTestedBranch") or p.get_bool("IsDevelopmentBranch")
     ctx.is_sp_release = ctx.is_release_branch
-    ctx.custom_model_active = p.get("ModelManager_ActiveBundle") is not None
+    ctx.custom_model_active = (
+      p.get("ModelManager_ActiveBundle") is not None
+      or p.get("ModelManager_ActiveBundleUSBGPU") is not None
+    )
 
     ctx.mads_limited = False
     ctx.tesla_has_vehicle_bus = False

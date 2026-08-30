@@ -46,6 +46,19 @@ def _cpu_temp_c(ds) -> int | None:
 PING_TIMEOUT_NS = 80_000_000_000
 
 
+def _models_state(p) -> dict[str, bool]:
+  """Mirror sunnypilot's source-aware active-bundle check, used by the Models panel visibility logic."""
+  if p is None:
+    return {"qcom_selected": False, "usbgpu_selected": False}
+  try:
+    return {
+      "qcom_selected": bool(p.get("ModelManager_ActiveBundle")),
+      "usbgpu_selected": bool(p.get("ModelManager_ActiveBundleUSBGPU")),
+    }
+  except Exception:
+    return {"qcom_selected": False, "usbgpu_selected": False}
+
+
 def _sunnylink_metric() -> dict[str, str]:
   try:
     from openpilot.common.params import Params
@@ -162,6 +175,52 @@ def _cruise_speed_raw(cs, ctrl) -> float:
   return v_cruise_cluster
 
 
+def _egpu_state(ds, started: bool, sm=None) -> dict[str, Any] | None:
+  """Mirror sunnypilot sidebarSP _get_home_icon eGPU logic."""
+  try:
+    from openpilot.common.params import Params
+    p = Params()
+    chestnut_present = bool(ds.chestnutPresent) if hasattr(ds, "chestnutPresent") else False
+    if not chestnut_present:
+      return None
+    usbgpu_compiled = False
+    try:
+      from openpilot.selfdrive.modeld.helpers import usbgpu_compiled as _usbgpu_compiled
+      usbgpu_compiled = _usbgpu_compiled()
+    except Exception:
+      pass
+    usbgpu_active = p.get("UsbGpuActive")
+    usbgpu_loading = p.get_bool("UsbGpuLoading")
+    model_runner_tinygrad = False
+    try:
+      for source in ("usbgpu", "tici"):
+        key = f"ActiveBundle{source.capitalize()}"
+        bundle = p.get(key)
+        if bundle:
+          model_runner_tinygrad = bundle.get("runner") == "tinygrad" if isinstance(bundle, dict) else False
+          break
+    except Exception:
+      pass
+    big_model_selected = usbgpu_compiled or model_runner_tinygrad
+    big_model_failed = False
+    if started and chestnut_present:
+      big_model_failed = (
+        usbgpu_active is False
+        or not chestnut_present
+        or (usbgpu_active is True and sm is not None and sm.valid.get("modelV2") and not sm["modelV2"].alive)
+      )
+    loading = usbgpu_loading or (big_model_selected and started and usbgpu_active is None)
+    if loading:
+      return {"state": "loading"}
+    if big_model_selected and big_model_failed:
+      return {"state": "failed"}
+    if big_model_selected:
+      return {"state": "green"}
+    return {"state": "gray"}
+  except Exception:
+    return None
+
+
 def build_state_from_sm(sm) -> dict[str, Any]:
   global _v_ego_cluster_seen
   from webui.server.bridge.car_context import get_car_context
@@ -245,6 +304,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   turn_signals = car_ctx.turn_signals
   blindspot = car_ctx.blindspot
   rocket_fuel_enabled = car_ctx.rocket_fuel_enabled
+  p = None
   try:
     from openpilot.common.params import Params
     p = Params()
@@ -270,6 +330,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   is_release_branch = car_ctx.is_release_branch
   is_development_branch = car_ctx.is_development_branch
   custom_model_active = car_ctx.custom_model_active
+  is_body = car_ctx.is_body
   live_lateral_delay = None
   steer_actuator_delay = car_ctx.steer_actuator_delay
   tesla_has_vehicle_bus = car_ctx.tesla_has_vehicle_bus
@@ -457,6 +518,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "is_release_branch": is_release_branch,
     "is_development_branch": is_development_branch,
     "custom_model_active": custom_model_active,
+    "is_body": is_body,
+    "models_state": _models_state(p),
     "live_lateral_delay": live_lateral_delay,
     "steer_actuator_delay": steer_actuator_delay,
     "tesla_has_vehicle_bus": tesla_has_vehicle_bus,
@@ -487,6 +550,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       "panda_unknown": panda_unknown,
       "panda_online": panda_online,
       "sunnylink": sunnylink,
+      "egpu_state": _egpu_state(ds, started, sm),
     },
     "controls": {
       "lat_active": bool(ctrl.latActive) if hasattr(ctrl, "latActive") else None,

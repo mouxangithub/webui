@@ -1,5 +1,5 @@
 import { apiGet, apiPut } from "./api.js";
-import { tr, syncDriverCamUi } from "./i18n.js";
+import { tr } from "./i18n.js";
 import { updateSpHud } from "./hud_sp.js";
 import { updateDevUi } from "./hud_dev.js";
 import { updateCircularAlert } from "./hud_circular.js";
@@ -9,8 +9,6 @@ import {
   startRoadStream as startRoadWebrtc,
   stopRoadStream as stopRoadWebrtc,
   updateRoadCameraForState,
-  openDriverCamera,
-  closeDriverCamera,
   prewarmWebrtc,
   isRoadStreaming,
   isCameraPlaying,
@@ -33,7 +31,6 @@ let expHeldMode = null;
 let expHoldUntil = 0;
 let lastOnroadState = null;
 let lastHudDigest = "";
-let lastDriverFaceKey = "";
 let hudAnimRafId = null;
 
 function updateAnimatedOnroadHud(st) {
@@ -124,13 +121,6 @@ function hudDigest(st) {
     st.developer_ui,
     st.torque_bar ? 1 : 0,
   ].join("|");
-}
-
-function driverFaceKey(st) {
-  const df = st?.driver_face;
-  if (!df?.visible || !df.box) return "";
-  const b = df.box;
-  return `${b.x}|${b.y}|${b.size}|${df.alpha}|${df.source_size?.w}|${df.source_size?.h}`;
 }
 
 function applyCruiseStyle(st) {
@@ -352,48 +342,6 @@ export function updateOnroadHud(st) {
 
   updateTorqueBar(st, Number(st.developer_ui) || 0);
   updateCameraBottomFade(st);
-
-  const faceKey = driverFaceKey(st);
-  if (faceKey !== lastDriverFaceKey) {
-    lastDriverFaceKey = faceKey;
-    updateDriverCameraOverlay(st);
-  }
-}
-
-function updateDriverCameraOverlay(st) {
-  const dlg = document.getElementById("driver-camera-dialog");
-  if (!dlg?.open) return;
-
-  const loading = document.getElementById("driver-cam-loading");
-  const video = document.getElementById("driver-video");
-  const face = document.getElementById("driver-face-box");
-  if (!loading || !video || !face) return;
-
-  const hasFrame = video.readyState >= 2 && !video.paused;
-  loading.hidden = hasFrame;
-
-  const df = st?.driver_face;
-  if (!hasFrame || !df?.visible || !df.box) {
-    face.hidden = true;
-    return;
-  }
-
-  const vw = video.videoWidth || df.source_size?.w || 1928;
-  const vh = video.videoHeight || df.source_size?.h || 1208;
-  const rect = video.getBoundingClientRect();
-  const scaleX = rect.width / vw;
-  const scaleY = rect.height / vh;
-  const box = df.box;
-  const size = (box.size || 220) * Math.min(scaleX, scaleY);
-  const left = (box.x || 0) * scaleX;
-  const top = (box.y || 0) * scaleY;
-
-  face.hidden = false;
-  face.style.width = `${size}px`;
-  face.style.height = `${size}px`;
-  face.style.left = `${left}px`;
-  face.style.top = `${top}px`;
-  face.style.opacity = String(df.alpha ?? 0.7);
 }
 
 function updateCameraSwitcherButtons() {
@@ -442,44 +390,6 @@ export function bindExperimentalButton() {
     expHoldUntil = performance.now() + 2000;
     applyExperimentalButton({ ...st, experimental_mode: next });
     updateRoadCameraForState({ ...st, experimental_mode: next });
-  });
-}
-
-export function bindDriverCameraDialog() {
-  const dlg = document.getElementById("driver-camera-dialog");
-  if (!dlg) return;
-
-  const video = document.getElementById("driver-video");
-  const loading = document.getElementById("driver-cam-loading");
-  const onVideoFrame = () => {
-    if (loading) loading.hidden = true;
-    if (lastOnroadState) updateDriverCameraOverlay(lastOnroadState);
-  };
-  video?.addEventListener("loadeddata", onVideoFrame);
-  video?.addEventListener("playing", onVideoFrame);
-
-  window.addEventListener("opui:open-driver-camera", async () => {
-    try {
-      syncDriverCamUi();
-      if (loading) {
-        loading.hidden = false;
-        const text = document.getElementById("driver-cam-loading-text");
-        if (text) text.textContent = tr("camera starting");
-      }
-      if (!dlg.open) dlg.showModal();
-      await openDriverCamera(lastOnroadState);
-    } catch (err) {
-      console.warn("Driver camera:", err);
-      const text = document.getElementById("driver-cam-loading-text");
-      if (text) text.textContent = String(err.message || err);
-    }
-  });
-
-  const onClose = () => closeDriverCamera().catch(() => {});
-  document.getElementById("driver-cam-close")?.addEventListener("click", () => dlg.close());
-  dlg.addEventListener("close", onClose);
-  dlg.addEventListener("click", (ev) => {
-    if (ev.target === dlg) dlg.close();
   });
 }
 

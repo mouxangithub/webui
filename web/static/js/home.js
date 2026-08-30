@@ -25,6 +25,10 @@ const HOME_SKELETON = `
 let homeView = "home";
 let lastHome = null;
 
+export function getLastHome() {
+  return lastHome;
+}
+
 export function showHomeLoading() {
   const prime = document.getElementById("home-prime");
   const setup = document.getElementById("home-setup");

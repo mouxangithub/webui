@@ -81,6 +81,7 @@ SIM: dict[str, Any] = {
   "agnos_ready_to_reboot": False,
   "agnos_sim_rebooting": False,
   "agnos_sim_reboot_until": 0.0,
+  "is_body": False,
 }
 
 
@@ -326,6 +327,7 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "can_start": not _mock_startup_blockers(s),
     "alert_sound": str(s.get("alert_sound", "none") or "none"),
     "quiet_mode": _mock_quiet_mode(),
+    "is_body": bool(s.get("is_body", False)),
   }
 
 

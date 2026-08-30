@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>openpilot</title>
   <link rel="icon" href="/static/favicon.svg?v=2" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/css/opui.css?v=128" />
+  <link rel="stylesheet" href="/static/css/opui.css?v=133" />
 </head>
 <body>
   <div id="bootstrap-banner" class="opui-bootstrap-banner" hidden></div>
@@ -47,6 +47,9 @@
     </aside>
 
     <main id="main" class="opui-main">
+      <!-- BODY (notCar) -->
+      <section id="screen-body" class="opui-screen opui-screen--body" hidden></section>
+
       <!-- HOME (offroad) -->
       <section id="screen-home" class="opui-screen opui-screen--home">
         <header class="opui-home-header">
@@ -68,9 +71,6 @@
         <div class="opui-home-content">
           <div class="opui-home-col opui-home-col--left">
             <div id="home-prime" class="opui-home-prime-wrap"></div>
-            <button type="button" id="btn-home-camera-preview" class="opui-home-camera-preview">
-              <span id="btn-home-camera-preview-label">Driving preview</span>
-            </button>
           </div>
           <div class="opui-home-col opui-home-col--right">
             <button type="button" id="home-exp-banner" class="opui-home-exp" hidden>
@@ -264,20 +264,7 @@
       </div>
     </div>
 
-    <dialog id="driver-camera-dialog" class="opui-dialog opui-driver-cam opui-driver-cam--fullscreen">
-      <header class="opui-driver-cam__header">
-        <h2 id="driver-cam-title" class="opui-driver-cam__title">Driver Camera Preview</h2>
-        <button type="button" id="driver-cam-close" class="opui-close opui-driver-cam__close" aria-label="Close"></button>
-      </header>
-      <div class="opui-driver-cam__viewport">
-        <video id="driver-video" autoplay playsinline muted></video>
-        <div id="driver-cam-loading" class="opui-driver-cam__loading">
-          <div class="opui-driver-cam__spinner" aria-hidden="true"></div>
-          <p id="driver-cam-loading-text">camera starting</p>
-        </div>
-        <div id="driver-face-box" class="opui-driver-cam__face" hidden></div>
-      </div>
-    </dialog>
+    
 
     <dialog id="onboarding-dialog" class="opui-dialog opui-onboarding" hidden>
       <div id="onboarding-terms">
@@ -362,6 +349,6 @@
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=119"></script>
+  <script type="module" src="/static/js/app.js?v=124"></script>
 </body>
 </html>

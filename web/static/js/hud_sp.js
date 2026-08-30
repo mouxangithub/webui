@@ -541,17 +541,3 @@ function drawDmArc(dm, hideDm, devUi) {
   applyArcPath(hArc, dm.h_arc);
   applyArcPath(vArc, dm.v_arc);
 }
-
-let dmArcBound = false;
-
-export function bindDmArcClick() {
-  if (dmArcBound) return;
-  const wrap = document.getElementById("dm-arc-wrap");
-  if (!wrap) return;
-  dmArcBound = true;
-  wrap.addEventListener("click", (ev) => {
-    if (wrap.hidden) return;
-    ev.stopPropagation();
-    window.dispatchEvent(new CustomEvent("opui:open-driver-camera"));
-  });
-}

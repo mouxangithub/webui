@@ -8,7 +8,6 @@ from typing import Any
 def trips_stats(source: str | None = None) -> dict[str, Any]:
   import os
   from openpilot.common.params import Params
-  from openpilot.selfdrive.ui.sunnypilot.lib.drive_stats import refresh_local_drive_stats, fetch_cloud_drive_stats
 
   p = Params()
   data_source = source or p.get("TripsDataSource") or "local"
@@ -28,6 +27,11 @@ def trips_stats(source: str | None = None) -> dict[str, Any]:
       }
 
   try:
+    from openpilot.selfdrive.ui.sunnypilot.lib.drive_stats import (
+      fetch_cloud_drive_stats,
+      refresh_local_drive_stats,
+    )
+
     # Always refresh local stats in the background
     local_stats = refresh_local_drive_stats(p, "LocalDriveStats")
 

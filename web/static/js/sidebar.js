@@ -173,3 +173,29 @@ export function updateSidebarRecording(st) {
   if (!mic) return;
   mic.hidden = !st?.recording_audio;
 }
+
+const EGPU_ASSETS = {
+  loading: "icons_mici/egpu.png",
+  failed: "icons_mici/egpu_orange.png",
+  green: "icons_mici/egpu_green.png",
+  gray: "icons_mici/egpu_gray.png",
+};
+
+function assetUrl(rel) {
+  return `/api/opui/assets/${rel.replace(/^\//, "")}`;
+}
+
+export function updateSidebarEgpu(st) {
+  const btn = document.getElementById("btn-sidebar-bottom");
+  if (!btn) return;
+  const state = st?.device?.egpu_state;
+  if (!state) {
+    btn.classList.remove("opui-sidebar-btn--egpu", "opui-sidebar-btn--egpu-loading");
+    btn.style.removeProperty("--opui-egpu-img");
+    return;
+  }
+  const icon = EGPU_ASSETS[state.state] || EGPU_ASSETS.gray;
+  btn.classList.add("opui-sidebar-btn--egpu");
+  btn.classList.toggle("opui-sidebar-btn--egpu-loading", state.state === "loading");
+  btn.style.setProperty("--opui-egpu-img", `url("${assetUrl(icon)}")`);
+}

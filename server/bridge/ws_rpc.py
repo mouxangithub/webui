@@ -239,7 +239,8 @@ def dispatch_http(method: str, path: str, body: dict[str, Any] | None = None) ->
 
     if method == "POST" and clean_path == "/api/opui/models/select":
       index = body.get("index")
-      return models_select(str(body.get("ref", "")), int(index) if index is not None else None)
+      source = str(body.get("source", "qcom"))
+      return models_select(str(body.get("ref", "")), int(index) if index is not None else None, source=source)
 
     if method == "POST" and clean_path == "/api/opui/models/favorite":
       return models_toggle_favorite(str(body.get("ref", "")))

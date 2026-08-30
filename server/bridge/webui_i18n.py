@@ -246,7 +246,6 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Full-screen alert": "Full-screen alert",
     "Home · Update": "Home · Update",
     "Home · Alerts": "Home · Alerts",
-    "Driving preview": "Driving preview",
     "Open link": "Open link",
     "Scan QR code": "Scan QR code",
     "Sponsor sunnylink": "Sponsor sunnylink",
@@ -372,6 +371,7 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "UseIMUCalibrationDescription": (
       "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration."
     ),
+    "turn on ignition to use": "turn on ignition to use",
     "Start IMU Calibration": "Start IMU Calibration",
     "StartIMUCalibrationDescription": (
       "Park on level ground, then drive straight to calibrate the device orientation."
@@ -630,7 +630,6 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Full-screen alert": "全屏告警",
     "Home · Update": "Home·更新",
     "Home · Alerts": "Home·告警",
-    "Driving preview": "行车画面预览",
     "Open link": "打开链接",
     "Scan QR code": "扫描二维码",
     "Sponsor sunnylink": "赞助 sunnylink",
@@ -750,14 +749,24 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Collecting static data — keep parked": "正在收集静态数据 — 请保持停车",
     "Collecting dynamic data — drive straight": "正在收集动态数据 — 请直线行驶",
     "Use IMU Calibration": "使用 IMU 校准",
+    "UseIMUCalibrationDescription": (
+      "为大角度或任意角度安装的设备启用自动校准。启用后，IMU-to-vehicle 校准将替代原厂基于相机的校准。"
+    ),
     "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration.": (
       "为大角度或任意角度安装的设备启用自动校准。启用后，IMU-to-vehicle 校准将替代原厂基于相机的校准。"
     ),
+    "turn on ignition to use": "点火以使用",
     "Start IMU Calibration": "开始 IMU 校准",
+    "StartIMUCalibrationDescription": (
+      "将车辆停放在水平地面上，然后直线行驶以校准设备安装方向。"
+    ),
     "Park on level ground, then drive straight to calibrate the device orientation.": (
       "将车辆停放在水平地面上，然后直线行驶以校准设备安装方向。"
     ),
     "Reset IMU Calibration": "重置 IMU 校准",
+    "ResetIMUCalibrationDescription": (
+      "恢复为原厂基于相机的校准并清除 IMU 校准数据。"
+    ),
     "Are you sure you want to clear the IMU calibration and switch back to stock calibration?": (
       "确定要清除 IMU 校准并恢复为原厂校准吗？"
     ),
@@ -968,6 +977,20 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "No built-in display — use this Web UI as your primary interface.": (
       "無內建螢幕 — 請將此 Web UI 作為主介面。"
     ),
+    "Offroad": "離路",
+    "On road · Engaged": "行駛·啟用",
+    "On road · Disengaged": "行駛·未啟用",
+    "Lateral only": "僅橫向",
+    "Critical alert": "嚴重告警",
+    "E2E green": "E2E 綠燈",
+    "Standstill timer": "靜止計時",
+    "Longitudinal only": "僅縱向",
+    "Full-screen alert": "全屏告警",
+    "Home · Update": "Home·更新",
+    "Home · Alerts": "Home·告警",
+    "Confidence · low": "置信度 · 低",
+    "Confidence · high": "置信度 · 高",
+    "On road · overlay": "行車 · 模型疊加",
     "Web Stream": "Web 直播",
     "No built-in screen — brightness and screen saver do not apply. Camera stream settings below are used by Web UI.": (
       "無內建螢幕 — 亮度與螢幕保護設定不適用。下方相機串流設定供 Web UI 使用。"
@@ -1055,14 +1078,24 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Collecting static data — keep parked": "正在收集靜態資料 — 請保持停車",
     "Collecting dynamic data — drive straight": "正在收集動態資料 — 請直線行駛",
     "Use IMU Calibration": "使用 IMU 校正",
+    "UseIMUCalibrationDescription": (
+      "為大角度或任意角度安裝的裝置啟用自動校正。啟用後，IMU-to-vehicle 校正將替代原廠相機校正。"
+    ),
     "Enable auto-calibration for devices mounted at large or arbitrary angles. When enabled, IMU-to-vehicle calibration replaces the stock camera-based calibration.": (
       "為大角度或任意角度安裝的裝置啟用自動校正。啟用後，IMU-to-vehicle 校正將替代原廠相機校正。"
     ),
+    "turn on ignition to use": "點火以使用",
     "Start IMU Calibration": "開始 IMU 校正",
+    "StartIMUCalibrationDescription": (
+      "將車輛停放在水平地面上，然後直線行駛以校正裝置安裝方向。"
+    ),
     "Park on level ground, then drive straight to calibrate the device orientation.": (
       "將車輛停放在水平地面上，然後直線行駛以校正裝置安裝方向。"
     ),
     "Reset IMU Calibration": "重置 IMU 校正",
+    "ResetIMUCalibrationDescription": (
+      "恢復為原廠相機校正並清除 IMU 校正資料。"
+    ),
     "Are you sure you want to clear the IMU calibration and switch back to stock calibration?": (
       "確定要清除 IMU 校正並恢復為原廠校正嗎？"
     ),
