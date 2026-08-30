@@ -2850,7 +2850,9 @@ function buildModelStatusRow(m) {
   const row = document.createElement("div");
   row.className = "opui-sp-row opui-models-status-row";
   row.dataset.modelsStatusRow = "1";
-  row.innerHTML = `<div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Model Status"))}</div><div class="opui-models-status-segments">${segments.join("")}</div></div>`;
+  row.innerHTML = `
+    <div class="opui-sp-row-text"><div class="opui-sp-row-title">${escapeHtml(t("Model Status"))}</div></div>
+    <div class="opui-models-status-segments">${segments.join("")}</div>`;
   return row;
 }
 
