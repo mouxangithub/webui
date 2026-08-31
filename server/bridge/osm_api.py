@@ -284,10 +284,15 @@ def osm_download_progress() -> dict[str, Any]:
   if os.environ.get("WEBUI_DEV_PC") == "1":
     return {"ok": True, "progress": 0, "active": False, "downloading": False, "done": 0, "total": 0, "dev_pc": True}
   try:
-    p = _shm_params()
-    downloading = bool(p.get("OSMDownloadLocations"))
-    pending = bool(p.get_bool("OsmDbUpdatesCheck"))
-    progress_raw = p.get("OSMDownloadProgress")
+    from openpilot.common.params import Params
+    # OSMDownloadLocations lives in mem-params (mapd consumes it there),
+    # while OsmDbUpdatesCheck and OSMDownloadProgress are written to persistent
+    # params by mapd/mapd_manager.
+    mem_p = _shm_params()
+    persist_p = Params()
+    downloading = bool(mem_p.get("OSMDownloadLocations"))
+    pending = bool(persist_p.get_bool("OsmDbUpdatesCheck"))
+    progress_raw = persist_p.get("OSMDownloadProgress")
     total = done = 0
     if progress_raw:
       try:
