@@ -1,6 +1,6 @@
 # WebUI ↔ op助手 上车测试交接手册
 
-> **版本**：WebUI `0.4.7`（`?v=77`）  
+> **版本**：WebUI `0.4.8`（`?v=78`）
 > **角色**：开发者在 PC 抛光 → op助手 + 人类在车上按清单验收 → 反馈回开发
 
 ---
@@ -12,6 +12,7 @@
 | **画布** | 2160×1080 BIG UI（`openpilot/system/ui`） |
 | **Web 栈** | WebRTC 摄像头 + WebGL/Canvas overlay + DOM HUD |
 | **数据** | cereal / Params 经 `webui/server/bridge/*` |
+| **设置面板** | 16 个（含 IMU Calibration、Models 1:1 模型管理器） |
 | **P0 上车** | overlay 标定（车道线 / 彩虹路径 / 前车 chevron）— **唯一必须真机项** |
 | **⛔ 不追求** | VisionIPC 像素 1:1、浏览器触控注入原生 raylib |
 
@@ -26,7 +27,7 @@
 ```bash
 # Windows PC
 py -3 E:\sp\webui\dev\run_pc.py --port 5080
-# 浏览器 http://127.0.0.1:5080/?v=77
+# 浏览器 http://127.0.0.1:5080/?v=78
 ```
 
 - Dev 面板预设：`onroad_overlay`、`confidence_low/high`、`onroad_engaged`
@@ -38,7 +39,7 @@ py -3 E:\sp\webui\dev\run_pc.py --port 5080
 python3.12 -m webui.webuid --host 0.0.0.0 --port 5080
 ```
 
-- 同网段 PC 浏览器访问 `http://<车机IP>:5080/?v=77`
+- 同网段 PC 浏览器访问 `https://<车机IP>:5080/?v=78`（首次需信任自签证书）
 - scrcpy 投屏对照原生 UI
 
 ### 阶段 C — op助手验收

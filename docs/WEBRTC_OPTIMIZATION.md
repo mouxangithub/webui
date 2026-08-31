@@ -1,7 +1,7 @@
 # WebUI WebRTC 直播优化方案
 
-> **版本**：v1.0  
-> **适用范围**：Sunnylink / openpilot WebUI 行车预览、驾驶员监控预览  
+> **版本**：v1.1
+> **适用范围**：Sunnylink / openpilot WebUI 行车预览、驾驶员监控预览
 > **核心约束**：**不得影响 openpilot 正常上路辅助驾驶**；所有优化仅作用于直播旁路（`stream_encoderd` / `webrtcd` / 浏览器），安全优先级永远高于画质与流畅度。
 
 ---
@@ -267,28 +267,29 @@ await notifyWebrtc({ type: "livestreamSettings", data: { quality: "auto" } });
 - [x] 默认 med 码率
 - [x] HUD / overlay 延后
 - [x] 驾驶员监控 UI + i18n
+- [x] 行车 **road / wide / driver** 手动切换（onroad 右上角切换按钮）
 - [x] WS 连接时停 HTTP overlay 重复轮询
 
 ### Phase 1 — 低风险（已完成）
 
-1. [x] **浏览器默认 `auto`**，初始档位 med（1.5M），丢包自动降 low  
-2. [x] **设置页增加「预览画质」**：流畅 / 标准 / 高清 / 自动（存 `localStorage`）  
-3. [x] **`document.hidden` 时暂停 overlay 绘制** + `livestreamVideoEnable: false`  
+1. [x] **浏览器默认 `auto`**，初始档位 med（1.5M），丢包自动降 low
+2. [x] **设置页增加「预览画质」**：流畅 / 标准 / 高清 / 自动（存 `localStorage`）
+3. [x] **`document.hidden` 时暂停 overlay 绘制** + `livestreamVideoEnable: false`
 4. [x] **弱网/高温提示**：降档时 toast
 
 ### Phase 2 — 设备侧增强（已完成）
 
-1. [x] **webrtcd 降档阈值微调**（med_level 0.03，down_samples 3，初始 med）  
-2. [x] **高温联动**：`thermal overheated/critical` → 强制 low + 关 overlay  
-3. [x] **直播诊断**：`GET /api/opui/stream/health` + Device 面板  
+1. [x] **webrtcd 降档阈值微调**（med_level 0.03，down_samples 3，初始 med）
+2. [x] **高温联动**：`thermal overheated/critical` → 强制 low + 关 overlay
+3. [x] **直播诊断**：`GET /api/opui/stream/health` + Device 面板
 4. [x] **直播上限默认 3 Mbps**（`STREAM_BITRATE` / `loggerd.h`）
 
 ### Phase 3 — 架构级（已完成）
 
-1. [x] **按需编码**：`LivestreamActiveCamera` + `encoderd` 跳过非活跃路  
-2. [x] **WebCodecs 硬解**：`webrtc_webcodecs.js` + Device 面板「硬件解码」开关（不支持时自动回退 `<video>`）  
-3. [x] **overlay 与视频解耦**：WS 按 fps 推送（5/10/15Hz），高温跳过投影  
-4. [x] **encoder lag 联动**：`LivestreamEncoderLagging` → webrtcd 强制 low + 前端 toast  
+1. [x] **按需编码**：`LivestreamActiveCamera` + `encoderd` 跳过非活跃路
+2. [x] **WebCodecs 硬解**：`webrtc_webcodecs.js` + Device 面板「硬件解码」开关（不支持时自动回退 `<video>`）
+3. [x] **overlay 与视频解耦**：WS 按 fps 推送（5/10/15Hz），高温跳过投影
+4. [x] **encoder lag 联动**：`LivestreamEncoderLagging` → webrtcd 强制 low + 前端 toast
 5. [x] **CPU/内存自动降档**：内存 ≥85% 或 CPU ≥92°C → 流畅模式
 
 ---
@@ -311,10 +312,10 @@ await notifyWebrtc({ type: "livestreamSettings", data: { quality: "auto" } });
 
 ### 8.1 路测检查项
 
-- [ ] engaged 时开关 WebUI 预览，**转向/制动/巡航无异常**  
-- [ ] 弱网下降码率后，**qlog 主路视频完整**（与直播无关）  
-- [ ] 长时间预览后设备温度，对比不开预览的基线（ΔT 可接受）  
-- [ ] `stream_encoderd` 日志无持续 `encoder lag`  
+- [ ] engaged 时开关 WebUI 预览，**转向/制动/巡航无异常**
+- [ ] 弱网下降码率后，**qlog 主路视频完整**（与直播无关）
+- [ ] 长时间预览后设备温度，对比不开预览的基线（ΔT 可接受）
+- [ ] `stream_encoderd` 日志无持续 `encoder lag`
 - [ ] 关闭预览后 `IsLiveStreaming=False`，进程退出
 
 ### 8.2 建议指标

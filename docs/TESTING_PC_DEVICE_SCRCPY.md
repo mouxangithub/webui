@@ -11,7 +11,7 @@
 py -3 webui/dev/run_pc.py --port 5080
 ```
 
-浏览器：`http://127.0.0.1:5080/?v=77`
+浏览器：`http://127.0.0.1:5080/?v=78`
 
 | 项 | 说明 |
 |----|------|
@@ -29,8 +29,8 @@ py -3 webui/dev/run_pc.py --port 5080
 python3.12 -m webui.webuid --host 0.0.0.0 --port 5080
 ```
 
-- 本机：`http://127.0.0.1:5080/?v=77`
-- 局域网：`http://<tici-ip>:5080/?v=77`
+- 本机：`http://127.0.0.1:5080/?v=78`
+- 局域网：`https://<tici-ip>:5080/?v=78`（首次需信任自签证书）
 
 健康检查：
 
@@ -39,7 +39,7 @@ curl -s http://127.0.0.1:5080/api/opui/bootstrap | head
 curl -s "http://127.0.0.1:5080/api/opui/model/overlay?w=1600&h=900" | head
 ```
 
-op助手：`webui_health_check(host=127.0.0.1, cache_bust=77)`
+op助手：`webui_health_check(host=127.0.0.1, cache_bust=78)`
 
 ---
 
@@ -56,7 +56,7 @@ op助手：`webui_health_check(host=127.0.0.1, cache_bust=77)`
 
 | 现象 | 处理 |
 |------|------|
-| 旧 UI / 无新功能 | 强刷 `?v=77`，清站点缓存 |
+| 旧 UI / 无新功能 | 强刷 `?v=78`，清站点缓存 |
 | `confidence_ball` 无数据 | 重启 Python（新 state_api） |
 | 5080 被占用 | `webui_service_status` 查 PID，杀旧进程 |
 | overlay 空 | 检查 onroad、`modeld`、WebRTC 权限 |

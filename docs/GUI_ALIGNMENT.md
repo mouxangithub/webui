@@ -1,8 +1,8 @@
 # WebUI ↔ 原生 BIG GUI 对齐清单
 
-> 画布：**2160×1080**（`openpilot/system/ui` BIG UI）  
-> 对照源码：`openpilot/selfdrive/ui/onroad/*`、`sunnypilot/onroad/*`、`layouts/sidebar.py`、`layouts/home.py`  
-> Web 实现：`webui/web/static/*`、`webui/server/bridge/*`  
+> 画布：**2160×1080**（`openpilot/system/ui` BIG UI）
+> 对照源码：`openpilot/selfdrive/ui/onroad/*`、`sunnypilot/onroad/*`、`layouts/sidebar.py`、`layouts/home.py`
+> Web 实现：`webui/web/static/*`、`webui/server/bridge/*`
 > 相关：`webui/docs/GAP_VS_DEVICE.md`（管线级差异）
 
 **图例**：✅ 行为/布局已对齐 · 🟡 近似实现（非像素 1:1）· ❌ 未实现 · ⛔ 架构性不可 1:1
@@ -26,7 +26,7 @@
 |------|------|------|
 | **行车 HUD** | ~98% | ~90% |
 | **离路 Home + 侧栏** | ~92% | ~84% |
-| **设置 15 面板** | ~95% | ~87% |
+| **设置 16 面板** | ~95% | ~87% |
 | **全产品** | **~95%** | **~88%** |
 
 ---
@@ -44,6 +44,10 @@
 | Home | UPDATE/ALERTS i18n | ✅ |
 | 引导 | Web onboarding API + UI | ✅ |
 | op助手 | `webui_list_dev_presets`、`webui_onboarding_status` | ✅ |
+| 设置 | **Models** 模型管理器 1:1（文件夹树、下载进度、收藏、选择） | ✅ |
+| 设置 | **IMU Calibration** 面板（状态轮询、取消标定） | ✅ |
+| 行车 | 相机 **广角 / 长焦手动切换**（实验模式自动切换） | ✅ |
+| 入口 | HTTP → HTTPS 自动跳转（服务 WebCodecs / 驾驶员相机） | ✅ |
 
 **部署**：强刷 `?v=78`。P0 overlay 仍待上车。
 

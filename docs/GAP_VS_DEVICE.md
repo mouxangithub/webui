@@ -6,13 +6,13 @@
 
 ## 三句话总结
 
-1. **功能对齐 ~94%**：v71–v77 行车/设置补丁已基本覆盖（除上车验证项）。
+1. **功能对齐 ~95%**：v71–v78 行车/设置补丁已基本覆盖（除上车验证项）。
 2. **视觉对齐 ~85%**：WebGL2 + CSS/DOM 近似 raylib。
 3. **不是 1:1**：VisionIPC / GPU shader 为架构差异。
 
 ## v0.4.8 / v78
 
-边框 0.12、`onroad_fade` 底纹、SLA/SCC/E2E/ICBM 动效对齐、路沿 alpha、Home i18n、Web onboarding、op助手新工具。强刷 `?v=78`
+边框 0.12、`onroad_fade` 底纹、SLA/SCC/E2E/ICBM 动效对齐、路沿 alpha、Home i18n、Web onboarding、op助手新工具；新增 **IMU Calibration** 面板、**Models** 模型管理器 1:1（文件夹树 / 下载进度 / 收藏 / 选择）、行车 **广角 / 长焦手动切换**、HTTP→HTTPS 自动跳转。强刷 `?v=78`
 
 ## v0.4.7 / v77
 

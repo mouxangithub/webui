@@ -1,7 +1,7 @@
 # 未来项目：raylib 原生 UI 镜像投屏
 
-> **状态**：规划文档，**不在当前 WebUI 仓库范围内实现**。  
-> **当前主线**：继续完善 WebUI 对原生 BIG UI 的功能/视觉还原（见 [GUI_ALIGNMENT.md](./GUI_ALIGNMENT.md)）。  
+> **状态**：规划文档，**不在当前 WebUI 仓库范围内实现**。
+> **当前主线**：继续完善 WebUI 对原生 BIG UI 的功能/视觉还原（见 [GUI_ALIGNMENT.md](./GUI_ALIGNMENT.md)）。
 > **相关**：PC/车机/scrcpy 对照测试见 [TESTING_PC_DEVICE_SCRCPY.md](./TESTING_PC_DEVICE_SCRCPY.md)。
 
 ---
@@ -271,7 +271,7 @@ UI_MIRROR=1 UI_MIRROR_URL=ws://127.0.0.1:5081/stream ...
 
 | 文档 | 用途 |
 |------|------|
-| [GUI_ALIGNMENT.md](./GUI_ALIGNMENT.md) | **当前** WebUI 对齐清单（v74+） |
+| [GUI_ALIGNMENT.md](./GUI_ALIGNMENT.md) | **当前** WebUI 对齐清单（v78+ / v0.4.8） |
 | [GAP_VS_DEVICE.md](./GAP_VS_DEVICE.md) | WebUI vs raylib 管线差异 |
 | [TESTING_PC_DEVICE_SCRCPY.md](./TESTING_PC_DEVICE_SCRCPY.md) | PC / 车机 / scrcpy 测试与触控工作量 |
 | `openpilot/system/ui/README.md` | RECORD / BURN_IN 等 UI 环境变量 |

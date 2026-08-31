@@ -1,6 +1,6 @@
 # WebUI 上车验收清单
 
-> 强刷 `?v=77` · 对照 scrcpy 原生 BIG UI  
+> 强刷 `?v=78` · 对照 scrcpy 原生 BIG UI
 > P0 必须上车；P1/P2 可在 PC mock 预检但上车仍建议复核
 
 ---
@@ -27,8 +27,10 @@
 
 - [ ] Home：Prime ✓、UPDATE pill、offroad alerts
 - [ ] 侧栏：Wi-Fi 分级图标、蜂窝 / 热点状态
-- [ ] 设置 15 面板可打开、保存 Params 生效
+- [ ] 设置 16 面板可打开、保存 Params 生效（含 IMU Calibration、Models 1:1）
 - [ ] OSM 区域列表（离线包 `full` 标记）
+- [ ] Models 面板：文件夹树、下载进度、收藏、选择正常
+- [ ] IMU Calibration 面板：状态显示、取消标定可用
 - [ ] 语言切换关键文案无截断
 
 ## 报告
