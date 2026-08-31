@@ -82,6 +82,7 @@ def _mock_regions(region_type: str = "Country", country: str = "") -> dict[str, 
         "ok": True,
         "region_type": "Province",
         "states": [
+          {"name": "All", "title": "All provinces"},
           {"name": "BJ", "title": "Beijing"},
           {"name": "SH", "title": "Shanghai"},
           {"name": "GD", "title": "Guangdong"},
@@ -173,11 +174,12 @@ def osm_fetch_regions(region_type: str = "Country", country: str = "") -> dict[s
   # picker from our embedded table so it works offline and avoids 404s.
   if key == "State" and country == "CN":
     try:
-      from openpilot.sunnypilot.mapd.china_provinces import CHINA_PROVINCES
+      from openpilot.sunnypilot.mapd.china_provinces import CHINA_ALL_REF, CHINA_PROVINCES
       provinces = sorted(
         [{"name": ref, "title": name} for ref, name, _ in CHINA_PROVINCES],
         key=lambda p: p["title"],
       )
+      provinces.insert(0, {"name": CHINA_ALL_REF, "title": "All provinces"})
       data = {"ok": True, "region_type": "Province", "states": provinces}
       _REGIONS_CACHE[cache_key] = data
       _save_disk_cache(cache_key, data)
