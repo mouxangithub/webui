@@ -1,31 +1,33 @@
 # op Web UI（openpilot 设备界面 Web 镜像）
 
-与 `ai/` **并行**的独立子仓库：在浏览器中复刻 sunnypilot BIG UI（15 个设置面板 + 行车 HUD + WebRTC 相机）。
+与 `ai/` **并行**的独立子仓库：在浏览器中复刻 sunnypilot BIG UI（16 个设置面板 + 行车 HUD + WebRTC 相机）。
 
 | 项目 | 说明 |
 |------|------|
 | 安装位置 | `<openpilot>/webui`（git submodule） |
-| Web 入口 | `http://<设备IP>:5080` |
+| Web 入口 | `https://<设备IP>:5080`（HTTP 会自动跳转 HTTPS，用于 WebCodecs 相机） |
 | 进程入口 | `python3 -m webui.webuid` |
 | 版本标识 | **当前 git commit**（`bootstrap.version`），非语义化版本号 |
 | 与 ai | 独立进程、独立端口（ai `:5090`） |
 
-## 功能（v0.4 / GUI v55）
+## 功能（v0.4.8 / GUI v78）
 
-### 设置面板（15 个，对齐 sunnypilot BIG UI）
+### 设置面板（16 个，对齐 sunnypilot BIG UI）
 
-Device · Network · sunnylink · Toggles · Software · Models · Steering · Cruise · Visuals · Display · OSM · Trips · Vehicle · Firehose · Developer
+Device · Network · sunnylink · Toggles · Software · Models · Steering · Cruise · Visuals · Display · OSM · Trips · Vehicle · Firehose · IMU Calibration · Developer
 
 - Params 读写（bool / int / choice / readonly）
-- 系统动作：重启、关机、卸载、标定重置、**openpilot 固件 updater**、sunnylink 备份
+- 系统动作：重启、关机、卸载、标定重置、**IMU 标定**、**openpilot 固件 updater**、sunnylink 备份
 - Wi-Fi 扫描与连接（NetworkManager / WifiManager）
 - Software 分支切换与更新状态（**整包 openpilot**，与 Web UI 自更新无关）
+- **Models 模型管理器**：文件夹树、下载进度、收藏、选择，已与车机 GUI 1:1 对齐（v0.4.8 进一步优化模型选择体验）
+- **Display 面板**：屏幕亮度、行车亮度、熄屏延时、屏保、相机流设置
 
 ### 行车界面（Onroad）
 
 - 状态机：HOME / SETTINGS / ONROAD
 - 边框四色、HUD、侧栏指标、告警（含 full 布局）
-- WebRTC 前路/驾驶员相机
+- WebRTC 前路 / 驾驶员相机，支持 **广角 / 长焦手动切换**（实验模式下按车速自动切换）
 - 模型叠加：车道线、路径色带、实验渐变、彩虹路径、Chevron 指标
 
 ### Web UI 自更新（git）
@@ -44,7 +46,7 @@ Device · Network · sunnylink · Toggles · Software · Models · Steering · C
 
 ```bash
 py -3 webui/dev/run_pc.py --port 5080
-# 浏览器 http://127.0.0.1:5080/?v=55
+# 浏览器 http://127.0.0.1:5080/?v=78
 ```
 
 右下角 **Dev 模拟面板** 可切换离路/行驶/告警。详见 [dev/README.md](dev/README.md)。
@@ -80,7 +82,7 @@ cd "$OPENPILOT_ROOT" && PYTHONPATH="$OPENPILOT_ROOT" python3 -m webui.webuid --p
 cd webui
 git fetch origin main
 git pull --ff-only origin main
-# 若改了 Python 服务端，重启 webui 进程；仅静态资源则浏览器强刷 ?v=55
+# 若改了 Python 服务端，重启 webui 进程；仅静态资源则浏览器强刷 ?v=78
 ```
 
 ### 与 openpilot 更新的区别
@@ -102,11 +104,15 @@ git pull --ff-only origin main
 | `GET /api/opui/panels` | 面板 schema |
 | `GET /api/opui/state` | 行车/UI 状态 |
 | `POST /api/opui/webrtc/offer` | WebRTC SDP |
+| `GET /api/opui/imu/calibration` | IMU 标定状态 |
+| `POST /api/opui/imu/calibration/cancel` | 取消 IMU 标定 |
+| `GET/POST /api/opui/models/...` | 模型列表 / 选择 / 收藏 / 下载状态 |
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（若存在）。
 
 ## 已知限制
 
 - PC 上无 NetworkManager 时 Wi-Fi 面板显示不可用
-- 模型叠加为 Canvas 近似，非原生 shader
+- WebCodecs / 驾驶员相机需要 HTTPS 或 localhost；车机首次访问需信任自签证书
+- 模型叠加为 Canvas/WebGL 近似，非原生 shader
 - Web UI 自更新要求 `webui/.git` 存在且 `git fetch` 可达远端
