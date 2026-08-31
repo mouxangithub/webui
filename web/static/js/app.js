@@ -2,7 +2,7 @@ import { apiGet, apiPost } from "./api.js";
 import {
   loadPanelList, renderPanel, setGlobalState, setHomeState, setSubpanelNavigator,
   applyPanelSync, syncDrivingPersonality, notifyPanelWatch, applyPanelCustom, clearPanelDomCache,
-} from "./panels.js?v=109";
+} from "./panels.js?v=111";
 import {
   startRoadStream, stopRoadStream, updateOnroadHud, bindExperimentalButton, bindCameraSwitcher, prewarmWebrtc, isCameraPlaying, isRoadStreaming, updateStreamDeviceState, onDocumentVisibilityChange, isOverlayAllowed, shouldDrawModelOverlay, getOverlayFpsHint, isPreviewStreamEnabled, applyPreviewOffUi, stopOnroadHudAnimLoop,
 } from "./onroad.js?v=119";

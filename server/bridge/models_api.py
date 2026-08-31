@@ -4,8 +4,89 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 from typing import Any
+
+# Lazily-initialized SubMaster instances. Creating a SubMaster on every request
+# costs ~500-900 ms of cold import/initialization overhead, which makes the
+# models panel feel sluggish. Re-use them across requests and only pay the
+# update/poll cost.
+_STATE_SM: Any = None
+_MM_SM: Any = None
+_SM_LOCK = threading.Lock()
+
+# Cached latest readings so HTTP handlers can return immediately without waiting
+# for the next live message. A background thread keeps these warm.
+_STATE_CACHE: dict[str, Any] | None = None
+_MM_CACHE: Any = None
+_WARMER_STARTED = False
+_WARMER_LOCK = threading.Lock()
+
+
+def _get_state_sm() -> Any:
+  global _STATE_SM
+  if _STATE_SM is None:
+    import openpilot.cereal.messaging as messaging
+    _STATE_SM = messaging.SubMaster(["deviceState"], poll="deviceState")
+  return _STATE_SM
+
+
+def _get_mm_sm() -> Any:
+  global _MM_SM
+  if _MM_SM is None:
+    import openpilot.cereal.messaging as messaging
+    _MM_SM = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
+  return _MM_SM
+
+
+def _warm_submasters() -> None:
+  """Background thread: keep SubMaster sockets warm and cache latest values."""
+  global _STATE_CACHE, _MM_CACHE
+  try:
+    state_sm = _get_state_sm()
+    mm_sm = _get_mm_sm()
+    while True:
+      with _SM_LOCK:
+        state_sm.update(100)
+        if state_sm.valid.get("deviceState"):
+          ds = state_sm["deviceState"]
+          try:
+            from openpilot.common.params import Params
+            p = Params()
+          except Exception:
+            p = None
+          try:
+            _STATE_CACHE = {
+              "started": bool(getattr(ds, "started", False)),
+              "chestnutPresent": bool(getattr(ds, "chestnutPresent", False)),
+              "usbgpuActive": p.get_bool("UsbGpuActive") if p else None,
+              "usbgpuLoading": p.get_bool("UsbGpuLoading") if p else False,
+            }
+          except Exception:
+            _STATE_CACHE = None
+        mm_sm.update(100)
+        if mm_sm.valid.get("modelManagerSP"):
+          _MM_CACHE = mm_sm["modelManagerSP"]
+      time.sleep(0.05)
+  except Exception:
+    pass
+
+
+def _start_submaster_warmers() -> None:
+  global _WARMER_STARTED
+  with _WARMER_LOCK:
+    if _WARMER_STARTED:
+      return
+    _WARMER_STARTED = True
+    t = threading.Thread(target=_warm_submasters, daemon=True)
+    t.start()
+
+
+def start_warmers() -> None:
+  """Public hook for the app factory to start SubMaster warmers early."""
+  _start_submaster_warmers()
+
 
 # Mirror sunnypilot/models/helpers.py — kept in sync so webui picks the same key the
 # device manager writes.
@@ -63,13 +144,20 @@ def _usbgpu_present() -> bool:
 
 
 def _device_state() -> dict[str, Any] | None:
-  """Read the live usbgpu status from deviceState + Params."""
+  """Read the live usbgpu status from deviceState + Params.
+
+  Uses the background warmer cache when available so the HTTP handler can
+  return immediately; falls back to a short poll if the cache is empty.
+  """
+  _start_submaster_warmers()
   try:
-    import openpilot.cereal.messaging as messaging
-    sm = messaging.SubMaster(["deviceState"], poll="deviceState")
-    deadline = time.monotonic() + 0.6
+    if _STATE_CACHE is not None:
+      return _STATE_CACHE
+    sm = _get_state_sm()
+    deadline = time.monotonic() + 0.4
     while time.monotonic() < deadline:
-      sm.update(120)
+      with _SM_LOCK:
+        sm.update(120)
       if sm.valid.get("deviceState"):
         ds = sm["deviceState"]
         try:
@@ -103,12 +191,19 @@ def _active_source(state: dict[str, Any] | None) -> str:
 
 
 def _read_live_model_manager(timeout_ms: int = 1000) -> Any | None:
+  """Return the latest modelManagerSP message.
+
+  Uses the background warmer cache when available; falls back to a short poll.
+  """
+  _start_submaster_warmers()
   try:
-    import openpilot.cereal.messaging as messaging
-    sm = messaging.SubMaster(["modelManagerSP"], poll="modelManagerSP")
+    if _MM_CACHE is not None:
+      return _MM_CACHE
+    sm = _get_mm_sm()
     deadline = time.monotonic() + timeout_ms / 1000.0
     while time.monotonic() < deadline:
-      sm.update(200)
+      with _SM_LOCK:
+        sm.update(200)
       if sm.valid.get("modelManagerSP"):
         return sm["modelManagerSP"]
   except Exception:

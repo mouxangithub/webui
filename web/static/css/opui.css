@@ -3365,6 +3365,8 @@ body.opui-modal-open {
 }
 .opui-tree-body {
   margin: 0;
+  flex: 1 1 0;
+  min-height: 0;
 }
 .opui-tree-dialog-item {
   display: flex;
@@ -4150,7 +4152,7 @@ body.opui-system-wait-open {
 
 /* Models panel */
 .opui-sp-row--progress {
-  min-height: 140px;
+  min-height: 170px;
 }
 
 .opui-sp-row--progress .opui-progress {
@@ -4216,6 +4218,7 @@ body.opui-system-wait-open {
 .opui-models-status-name--loading { color: #daca25; }
 
 .opui-models-slot-row {
+  min-height: 170px;
   justify-content: space-between;
 }
 

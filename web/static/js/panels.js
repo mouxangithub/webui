@@ -2669,35 +2669,50 @@ function formatStat(v) {
   return String(v);
 }
 
+function renderModelsSkeleton() {
+  return `<div class="opui-home-skeleton" style="padding:40px 20px">
+    <div class="opui-home-skeleton-bar"></div>
+    <div class="opui-home-skeleton-bar"></div>
+    <div class="opui-home-skeleton-bar opui-home-skeleton-bar--short"></div>
+  </div>`;
+}
+
 async function renderModelsPanel(container, data) {
   stopModelsPanelPoll();
   const gen = beginPanelRender();
-  container.innerHTML = "";
-  const m = await apiGet("/api/opui/models");
-  if (panelRenderStale(gen)) return;
-  if (!m.ok) {
-    container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(m.error || t("Failed"))}</p>`;
-    return;
-  }
-  lastModelsStatus = m;
+  container.innerHTML = renderModelsSkeleton();
 
-  container.appendChild(buildModelSlots(m, data, gen, container));
-  buildModelsPanelWidgets(container, data, m);
-  syncModelsExtras(m, container);
-
-  modelsPanelPoll = setInterval(async () => {
-    if (panelRenderStale(gen)) {
-      stopModelsPanelPoll();
+  try {
+    const m = await apiGet("/api/opui/models");
+    if (panelRenderStale(gen)) return;
+    if (!m.ok) {
+      container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(m.error || t("Failed"))}</p>`;
       return;
     }
-    try {
-      const latest = await apiGet("/api/opui/models");
-      if (latest?.ok) {
-        lastModelsStatus = latest;
-        updateModelsPanelLive(latest, container);
+    lastModelsStatus = m;
+
+    container.innerHTML = "";
+    container.appendChild(buildModelSlots(m, data, gen, container));
+    buildModelsPanelWidgets(container, data, m);
+    syncModelsExtras(m, container);
+
+    modelsPanelPoll = setInterval(async () => {
+      if (panelRenderStale(gen)) {
+        stopModelsPanelPoll();
+        return;
       }
-    } catch { /* ignore transient poll errors */ }
-  }, 500);
+      try {
+        const latest = await apiGet("/api/opui/models");
+        if (latest?.ok) {
+          lastModelsStatus = latest;
+          updateModelsPanelLive(latest, container);
+        }
+      } catch { /* ignore transient poll errors */ }
+    }, 500);
+  } catch {
+    if (panelRenderStale(gen)) return;
+    container.innerHTML = `<p class="opui-muted" style="padding:48px">${escapeHtml(t("Failed"))}</p>`;
+  }
 }
 
 function buildModelSlots(m, data, gen, container) {

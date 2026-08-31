@@ -12,6 +12,13 @@ from webui.server.routes.dev import register_dev_routes
 
 def create_app() -> web.Application:
   start_state_hub()
+  # Pre-warm the model-manager SubMaster sockets so the first /api/opui/models
+  # request does not pay the cold-start/import cost on the HTTP hot path.
+  try:
+    from webui.server.bridge.models_api import start_warmers
+    start_warmers()
+  except Exception:
+    pass
   app = web.Application()
   register_routes(app)
   register_dev_routes(app)
