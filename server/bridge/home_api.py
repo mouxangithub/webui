@@ -103,6 +103,7 @@ def snapshot_home_core(*, started: bool | None = None) -> dict[str, Any]:
     update_available = p.get_bool("UpdateAvailable")
     fetch_available = p.get_bool("UpdaterFetchAvailable")
     experimental = p.get_bool("ExperimentalMode")
+    hide_firehose_prompt = p.get_bool("HideFirehosePrompt")
 
     prime_info = prime_status_from_cache()
     gate = get_startup_gate()
@@ -125,6 +126,7 @@ def snapshot_home_core(*, started: bool | None = None) -> dict[str, Any]:
       "alert_count": len(slow.get("offroad_alerts") or []),
       "offroad_alerts": slow.get("offroad_alerts") or [],
       "dongle_id": dongle,
+      "hide_firehose_prompt": hide_firehose_prompt,
       "headless": headless,
       "startup_blockers": gate.get("blockers") or [],
       "ignition": bool(gate.get("ignition")),
@@ -169,6 +171,7 @@ def _mock_home() -> dict[str, Any]:
     "alert_count": len(alerts),
     "offroad_alerts": alerts,
     "dongle_id": "dev-preview-0000",
+    "hide_firehose_prompt": bool(SIM.get("hide_firehose_prompt")),
     "headless": bool(SIM.get("headless")),
     "startup_blockers": _mock_startup_blockers(SIM),
     **agnos_home_fields(),

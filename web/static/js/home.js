@@ -315,6 +315,11 @@ function renderSetupCard(home) {
   if (!el) return;
   el.dataset.loaded = "1";
 
+  if (home.hide_firehose_prompt) {
+    el.innerHTML = "";
+    return;
+  }
+
   if (!home.paired) {
     el.innerHTML = `
       <div class="opui-setup-card">

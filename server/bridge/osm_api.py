@@ -75,8 +75,19 @@ def _shm_params():
   return Params("/dev/shm/params")
 
 
-def _mock_regions(region_type: str = "Country") -> dict[str, Any]:
+def _mock_regions(region_type: str = "Country", country: str = "") -> dict[str, Any]:
   if region_type == "State":
+    if country == "CN":
+      return {
+        "ok": True,
+        "region_type": "Province",
+        "states": [
+          {"name": "BJ", "title": "Beijing"},
+          {"name": "SH", "title": "Shanghai"},
+          {"name": "GD", "title": "Guangdong"},
+        ],
+        "dev_pc": True,
+      }
     return {
       "ok": True,
       "region_type": "State",
@@ -92,6 +103,7 @@ def _mock_regions(region_type: str = "Country") -> dict[str, Any]:
     "region_type": "Country",
     "countries": [
       {"name": "US", "title": "United States"},
+      {"name": "CN", "title": "China"},
       {"name": "CA", "title": "Canada"},
       {"name": "DE", "title": "Germany"},
     ],
@@ -147,14 +159,32 @@ def osm_regions() -> dict[str, Any]:
   return {"ok": True, "lazy": True}
 
 
-def osm_fetch_regions(region_type: str = "Country") -> dict[str, Any]:
+def osm_fetch_regions(region_type: str = "Country", country: str = "") -> dict[str, Any]:
   key = region_type or "Country"
-  if key in _REGIONS_CACHE:
-    return _REGIONS_CACHE[key]
+  cache_key = f"{key}:{country}"
+  if cache_key in _REGIONS_CACHE:
+    return _REGIONS_CACHE[cache_key]
   if os.environ.get("WEBUI_DEV_PC") == "1":
-    data = _mock_regions(key)
-    _REGIONS_CACHE[key] = data
+    data = _mock_regions(key, country)
+    _REGIONS_CACHE[cache_key] = data
     return data
+
+  # Chinese provinces are not in pfeiferj/mapd's static state list; build the
+  # picker from our embedded table so it works offline and avoids 404s.
+  if key == "State" and country == "CN":
+    try:
+      from openpilot.sunnypilot.mapd.china_provinces import CHINA_PROVINCES
+      provinces = sorted(
+        [{"name": ref, "title": name} for ref, name, _ in CHINA_PROVINCES],
+        key=lambda p: p["title"],
+      )
+      data = {"ok": True, "region_type": "Province", "states": provinces}
+      _REGIONS_CACHE[cache_key] = data
+      _save_disk_cache(cache_key, data)
+      return data
+    except Exception as exc:
+      return {"ok": False, "error": str(exc)}
+
   try:
     import requests
     base_url = "https://raw.githubusercontent.com/pfeiferj/openpilot-mapd/main/"
@@ -168,28 +198,28 @@ def osm_fetch_regions(region_type: str = "Country") -> dict[str, Any]:
       data = {"ok": True, "region_type": "Country", "countries": countries}
     else:
       states = sorted(
-        [{"name": k, "title": v.get("full_name", k)} for k, v in raw.items()],
+        [{"name": k, "title": v.get("full_name", k)} for k, v in raw.items() if k != "All"],
         key=lambda s: s["title"],
       )
-      states.insert(0, {"name": "All", "title": "All states (~6.0 GB)"})
+      states.insert(0, {"name": "All", "title": raw.get("All", {}).get("full_name", "All states (~6.0 GB)")})
       data = {"ok": True, "region_type": "State", "states": states}
-    _REGIONS_CACHE[key] = data
-    _save_disk_cache(key, data)
+    _REGIONS_CACHE[cache_key] = data
+    _save_disk_cache(cache_key, data)
     return data
   except Exception as exc:
-    if key in _REGIONS_CACHE:
-      return _REGIONS_CACHE[key]
-    cached = _load_disk_cache(key)
+    if cache_key in _REGIONS_CACHE:
+      return _REGIONS_CACHE[cache_key]
+    cached = _load_disk_cache(cache_key)
     if cached:
-      _REGIONS_CACHE[key] = cached
+      _REGIONS_CACHE[cache_key] = cached
       return cached
     bundled = _bundled_regions(key)
     if bundled:
-      _REGIONS_CACHE[key] = bundled
+      _REGIONS_CACHE[cache_key] = bundled
       return bundled
     if os.environ.get("WEBUI_DEV_PC") == "1":
-      data = _mock_regions(key)
-      _REGIONS_CACHE[key] = data
+      data = _mock_regions(key, country)
+      _REGIONS_CACHE[cache_key] = data
       return data
     return {"ok": False, "error": str(exc)}
 
@@ -232,12 +262,13 @@ def _osm_param_values(p) -> dict[str, str]:
   return out
 
 
-def osm_clear_incomplete_us() -> dict[str, Any]:
-  """Rollback country when US state picker is cancelled without a selection."""
+def osm_clear_incomplete_selection() -> dict[str, Any]:
+  """Rollback country when US/China state/province picker is cancelled without a selection."""
   try:
     from openpilot.common.params import Params
     p = Params()
-    if p.get("OsmLocationName") != "US" or p.get("OsmStateName"):
+    country = p.get("OsmLocationName")
+    if country not in ("US", "CN") or p.get("OsmStateName"):
       return {"ok": True, "skipped": True, "values": _osm_param_values(p)}
     for key in ("OsmDownloadedDate", "OsmLocal", "OsmLocationName", "OsmLocationTitle", "OsmStateName", "OsmStateTitle"):
       try:

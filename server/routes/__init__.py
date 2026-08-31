@@ -31,7 +31,7 @@ from webui.server.bridge.assets_api import resolve_asset
 from webui.server.bridge.stream_health_api import snapshot_stream_health
 from webui.server.bridge.model_overlay import snapshot_model_overlay
 from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
-from webui.server.bridge.osm_api import osm_download_progress, osm_fetch_regions, osm_map_size_mb, osm_select_region, osm_clear_incomplete_us
+from webui.server.bridge.osm_api import osm_download_progress, osm_fetch_regions, osm_map_size_mb, osm_select_region, osm_clear_incomplete_selection
 from webui.server.bridge.vehicle_api import vehicle_platforms, vehicle_select, vehicle_brand_widgets
 from webui.server.bridge.sunnylink_api import sunnylink_pair_url, sunnylink_status
 from webui.server.bridge.firehose_api import firehose_status
@@ -314,7 +314,8 @@ async def api_ssh_remove(_request: web.Request) -> web.Response:
 
 async def api_osm_regions(request: web.Request) -> web.Response:
   region_type = request.query.get("type", "Country")
-  return json_response(osm_fetch_regions(region_type))
+  country = request.query.get("country", "")
+  return json_response(osm_fetch_regions(region_type, country))
 
 
 async def api_osm_select(request: web.Request) -> web.Response:
@@ -331,7 +332,7 @@ async def api_osm_select(request: web.Request) -> web.Response:
 
 
 async def api_osm_clear(_request: web.Request) -> web.Response:
-  return json_response(osm_clear_incomplete_us())
+  return json_response(osm_clear_incomplete_selection())
 
 
 async def api_osm_size(_request: web.Request) -> web.Response:
