@@ -1617,6 +1617,7 @@ function renderWidget(w, panelData) {
       return renderAlwaysOffroadRow(active);
     }
     if (w.custom === "webui_update") return renderWebUiUpdateRow();
+    if (w.custom === "amap_api_key") return renderAmapApiKeyRow(w);
     if (w.custom === "device_calibration") return null;
     return null;
   }
@@ -2221,6 +2222,56 @@ function renderSshKeysBlock() {
 
   row.querySelector(".opui-sp-row-actions")?.addEventListener("click", (e) => e.stopPropagation());
   bindRowExpand(row, { desc: sshDesc });
+  refresh();
+  return row;
+}
+
+function renderAmapApiKeyRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row";
+  row.dataset.custom = "amap_api_key";
+  if (w.offroad_only) row.dataset.offroadOnly = "1";
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+    </div>
+    <div class="opui-sp-row-actions">
+      <span class="opui-sp-row-value" id="amap-api-key-display"></span>
+      <button type="button" class="opui-btn opui-btn--action" id="amap-api-key-btn">${escapeHtml(t("EDIT"))}</button>
+    </div>`;
+
+  const refresh = () => {
+    const val = panelDataRef?.values?.AmapApiKey || "";
+    const masked = val ? "*".repeat(Math.min(val.length, 12)) : t("Not set");
+    const display = row.querySelector("#amap-api-key-display");
+    if (display) display.textContent = masked;
+  };
+
+  const btn = row.querySelector("#amap-api-key-btn");
+  if (btn) {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (btn.disabled) return;
+      const current = panelDataRef?.values?.AmapApiKey || "";
+      const value = await showKeyboard({
+        title: t("Enter Amap API Key"),
+        value: current,
+        minLen: 0,
+        maxLen: 255,
+      });
+      if (value === null) return;
+      const res = await putParam("AmapApiKey", value);
+      if (res.ok) {
+        if (panelDataRef?.values) panelDataRef.values.AmapApiKey = value;
+        refresh();
+      } else {
+        toast(res.error || t("Save failed"));
+      }
+    });
+  }
+
+  row.querySelector(".opui-sp-row-actions")?.addEventListener("click", (e) => e.stopPropagation());
+  if (w.desc) bindRowExpand(row, { desc: t(w.desc) });
   refresh();
   return row;
 }

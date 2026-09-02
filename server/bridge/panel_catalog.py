@@ -242,6 +242,20 @@ PANELS: list[dict[str, Any]] = [
     ],
   },
   {
+    "id": "navigation",
+    "title": "Navigation",
+    "widgets": [
+      {"type": "bool", "param": "AmapEnabled", "label": "Enable Amap Navigation", "offroad_only": True,
+       "desc": "Use Amap (Gaode) navigation data for map-based features."},
+      {"type": "bool", "param": "CarrotEnabled", "label": "Enable Carrot Navigation", "offroad_only": True,
+       "desc": "Use Carrot navigation data for map-based features."},
+      {"type": "int", "param": "AmapNaviUdpPort", "label": "Amap Navi UDP Port", "min": 1024, "max": 65535, "step": 1,
+       "offroad_only": True, "desc": "UDP port used to receive Amap navigation instructions."},
+      {"type": "custom", "custom": "amap_api_key", "label": "Amap API Key", "offroad_only": True,
+       "desc": "API key for Amap services. Tap EDIT to enter or update the key."},
+    ],
+  },
+  {
     "id": "visuals",
     "title": "Visuals",
     "widgets": [

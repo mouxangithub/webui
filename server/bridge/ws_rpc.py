@@ -42,7 +42,8 @@ from webui.server.bridge.osm_api import (
   osm_panel_custom,
   osm_select_region,
 )
-from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param
+from webui.server.bridge.params_api import batch_get, get_param, panel_values, put_param
+from webui.server.bridge.panel_catalog import panel_schema
 from webui.server.bridge.brightness_api import apply_brightness, snapshot_brightness
 from webui.server.bridge.ssh_api import ssh_fetch_keys, ssh_remove_keys, ssh_status
 from webui.server.bridge.state_hub import get_home, get_state

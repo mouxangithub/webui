@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from webui.server.bridge.model_overlay import OVERLAY_PARAM_KEYS, invalidate_overlay_params_cache
-from webui.server.bridge.panel_catalog import PANELS, get_panel, panel_schema
-
-if TYPE_CHECKING:
-  from openpilot.common.params import ParamKeyType, Params, UnknownKeyName
+from webui.server.bridge.panel_catalog import get_panel
 
 
 def _op_params():
@@ -39,6 +36,9 @@ _CUSTOM_PANEL_PARAMS: dict[str, list[str]] = {
     "OsmStateName",
     "OsmStateTitle",
     "OsmDownloadedDate",
+  ],
+  "navigation": [
+    "AmapApiKey",
   ],
 }
 
@@ -131,7 +131,6 @@ def get_param(key: str) -> dict[str, Any]:
     ptype = _param_type_name(p, key)
     if ptype is None:
       return {"ok": False, "error": f"unknown param: {key}"}
-    val = p.get(key)
     locked = False
     try:
       locked = p.get_bool(key + "Lock")
