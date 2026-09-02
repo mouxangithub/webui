@@ -14,7 +14,6 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS, view_frame_f
 from openpilot.common.transformations.orientation import rot_from_euler
 from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 
-CALIBRATED = log.ExtrinsicsCalibration.Status.calibrated
 INF_POINT = np.array([1000.0, 0.0, 0.0], dtype=np.float64)
 CLIP_MARGIN = 500.0
 MIN_DRAW_DISTANCE = 10.0
@@ -131,7 +130,10 @@ class ModelProjector:
       return self._car_space_transform.any()
 
     calib = sm["extrinsicsCalibration"]
-    if len(calib.rpyCalib) != 3 or calib.calStatus != CALIBRATED:
+    # During IMU dynamic calibration the status is uncalibrated but rpyCalib
+    # already contains a valid incremental rotation. Keep updating the overlay
+    # so it does not freeze while the IMU extrinsics are still converging.
+    if len(calib.rpyCalib) != 3:
       return self._car_space_transform.any()
 
     device_from_calib = rot_from_euler(calib.rpyCalib)
