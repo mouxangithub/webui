@@ -40,6 +40,7 @@ STATE_HUB_SERVICES: tuple[str, ...] = (
   "gpsLocation",
   "carStateSP",
   "liveMapDataSP",
+  "carrotManSP",
   "carParamsSP",
 )
 

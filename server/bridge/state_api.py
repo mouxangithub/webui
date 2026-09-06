@@ -301,6 +301,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
   developer_ui = int(car_ctx.developer_ui or 0)
   torque_bar = car_ctx.torque_bar
   speed_limit_mode = 0
+  amap_enabled = False
+  carrot_panel_side = 0
+  carrot_panel_opacity = 100
   turn_signals = car_ctx.turn_signals
   blindspot = car_ctx.blindspot
   rocket_fuel_enabled = car_ctx.rocket_fuel_enabled
@@ -312,6 +315,9 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     screensaver_enabled = p.get_bool("ScreenSaverEnabled")
     screensaver_timeout_sec = int(p.get("ScreenSaverTimeout", return_default=True) or 300)
     speed_limit_mode = int(p.get("SpeedLimitMode", return_default=True) or 0)
+    amap_enabled = bool(p.get_bool("AmapEnabled"))
+    carrot_panel_side = int(p.get("CarrotPanelSide", return_default=True) or 0)
+    carrot_panel_opacity = int(p.get("CarrotPanelOpacity", return_default=True) or 100)
   except Exception:
     pass
 
@@ -399,6 +405,56 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       if sp_hud["speed_limit_ahead_valid"]:
         sp_hud["speed_limit_ahead"] = round(float(getattr(lmd, "speedLimitAhead", 0) or 0) * conv)
         sp_hud["speed_limit_ahead_dist"] = float(getattr(lmd, "speedLimitAheadDistance", 0) or 0)
+    # Amap lane-line edge bars (mirrors GUI AmapLaneIndicators; gated by AmapEnabled).
+    if amap_enabled and sm.valid.get("carStateSP"):
+      cssp = sm["carStateSP"]
+      sp_hud["amap_lines"] = {
+        "valid": bool(getattr(cssp, "amapLineValid", False)),
+        "left_blocked": bool(getattr(cssp, "amapLeftLineBlocked", False)),
+        "right_blocked": bool(getattr(cssp, "amapRightLineBlocked", False)),
+      }
+    # Carrot navigation HUD panel (mirrors GUI CarrotNavigationPanel reading carrotManSP).
+    if sm.valid.get("carrotManSP"):
+      cmn = sm["carrotManSP"]
+
+      def _txt(name: str) -> str:
+        return str(getattr(cmn, name, "") or "")
+
+      def _num(name: str, default: int = 0) -> int:
+        try:
+          return int(getattr(cmn, name, default) or 0)
+        except (TypeError, ValueError):
+          return default
+
+      sp_hud["carrot_nav"] = {
+        "active": _num("activeCarrot"),
+        "road_limit_speed": _num("nRoadLimitSpeed"),
+        "spd_type": _num("xSpdType", -1),
+        "spd_limit": _num("xSpdLimit"),
+        "spd_dist": _num("xSpdDist"),
+        "spd_countdown": _num("xSpdCountDown"),
+        "turn_info": _num("xTurnInfo", -1),
+        "dist_to_turn": _num("xDistToTurn"),
+        "turn_countdown": _num("xTurnCountDown"),
+        "atc_type": _txt("atcType"),
+        "v_turn_speed": _num("vTurnSpeed"),
+        "road_name": _txt("szPosRoadName"),
+        "tbt_main_text": _txt("szTBTMainText"),
+        "tbt_main_text_next": _txt("szTBTMainTextNext"),
+        "near_dir_name": _txt("szNearDirName"),
+        "desired_speed": _num("desiredSpeed"),
+        "desired_source": _txt("desiredSource"),
+        "traffic_state": _num("trafficState"),
+        "traffic_countdown": _num("trafficCountdown"),
+        "left_sec": _num("leftSec"),
+        "go_pos_dist": _num("nGoPosDist"),
+        "go_pos_time": _num("nGoPosTime"),
+        "goal_name": _txt("szGoalName"),
+        "sdi_descr": _txt("szSdiDescr"),
+        "road_cate": _num("roadCate"),
+        "panel_side": carrot_panel_side,
+        "panel_opacity": max(0, min(100, carrot_panel_opacity)),
+      }
     try:
       if car_ctx.pcm_cruise_speed is not None:
         sp_hud["pcm_cruise_speed"] = bool(car_ctx.pcm_cruise_speed)

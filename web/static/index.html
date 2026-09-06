@@ -134,6 +134,9 @@
         <div id="hud-blinker-r" class="opui-blinker opui-blinker--r" hidden>▶</div>
         <div id="hud-bsl" class="opui-bsl opui-bsl--l" hidden></div>
         <div id="hud-bsr" class="opui-bsl opui-bsl--r" hidden></div>
+        <div id="hud-amap-bar-l" class="opui-amapbar opui-amapbar--l" hidden></div>
+        <div id="hud-amap-bar-r" class="opui-amapbar opui-amapbar--r" hidden></div>
+        <div id="hud-carrot-nav" class="opui-hud-carrot" hidden></div>
         <div id="hud-scc-v" class="opui-hud-scc" hidden>SCC-V</div>
         <div id="hud-scc-m" class="opui-hud-scc opui-hud-scc--map" hidden>SCC-M</div>
         <div id="hud-rocket" class="opui-rocket" hidden>
@@ -338,6 +341,7 @@
       <button type="button" data-preset="confidence_low">Confidence · low</button>
       <button type="button" data-preset="confidence_high">Confidence · high</button>
       <button type="button" data-preset="onroad_overlay">On road · overlay</button>
+      <button type="button" data-preset="carrot_nav">Carrot · nav HUD</button>
       <button type="button" data-preset="software_agnos">Software · AGNOS</button>
     </div>
     <label class="opui-dev-row"><input type="checkbox" id="dev-headless" /> <span id="dev-label-headless">Headless (no display)</span></label>
@@ -349,6 +353,6 @@
     <label class="opui-dev-row"><span id="dev-label-speed">Speed</span> <input type="range" id="dev-speed" min="0" max="150" value="72" /> <span id="dev-speed-val">72</span></label>
     </div>
   </aside>
-  <script type="module" src="/static/js/app.js?v=125"></script>
+  <script type="module" src="/static/js/app.js?v=127"></script>
 </body>
 </html>

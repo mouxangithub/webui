@@ -7,7 +7,38 @@
 
 **图例**：✅ 行为/布局已对齐 · 🟡 近似实现（非像素 1:1）· ❌ 未实现 · ⛔ 架构性不可 1:1
 
-**最后更新：2026-08-14（v78）**
+**最后更新：2026-09-06（v80）**
+
+---
+
+## 0.-2 v80 新增（i18n 全量闭环）
+
+全仓 CJK 扫描结论：侧栏 / dev 面板 / panels / index.html 实际**早已无硬编码中文**（v52 时代的 🟡 记载未销账）；唯一残留是 v79 `hud_carrot_nav.js` 为对齐 GUI 引入的 7 处中文标签。
+
+| 项 | 状态 |
+|------|------|
+| `hud_carrot_nav.js` 标签接入 `tr()`（Destination/Slow down/道路等级×6/测速相机×3/红绿灯×3/Traffic light，共 15 键） | ✅ |
+| `webui_i18n.py` 注册 15 键 en + zh-CHS（zh 值与 GUI 字样一致：高速/红灯/区间测速…） | ✅ |
+| zh-CHS 真实链路验证：服务端 1174 条词典 → `applyI18nPayload` → `tr()` 渲染中文，18/18 断言通过 | ✅ |
+| 英文 locale 下这些标签显示英文（此前恒为中文） | ✅ |
+
+---
+
+## 0.-1 v79 新增（Carrot 导航 HUD 对齐）
+
+对照源：`openpilot/selfdrive/ui/sunnypilot/onroad/amap_lane_indicators.py`（AmapLaneIndicators + CarrotNavigationPanel）。
+
+| 区域 | 项 | 状态 |
+|------|-----|------|
+| 数据 | webui 订阅 `carrotManSP`（`cereal_services.py` STATE_HUB_SERVICES） | ✅ |
+| 数据 | `state_api.sp_hud.carrot_nav`（25 个 carrotManSP 字段 + panel_side/panel_opacity） | ✅ |
+| 数据 | `state_api.sp_hud.amap_lines`（carStateSP 的 amapLineValid/Left/Right，服务端按 `AmapEnabled` 门控） | ✅ |
+| HUD | Carrot 导航面板（`hud_carrot_nav.js`）：TBT 主文本+方向、转向图标(1/2/3/4/7)与回退文案(6=TG/8=目的地/减速)、ATC 徽标(prepare 半透明)、弯道建议速度、转向距离/倒计时、ETA+终点距离+🏁目标名、SDI/路名+道路等级章(高速…乡道)、LIMIT 牌(超速+2 变红)、desiredSpeed 牌、测速相机圆环(区间/减速带/移动)、红绿灯(红/绿/左转绿+倒计时) | ✅ |
+| HUD | 面板位置（`CarrotPanelSide` 0=左/1=右）与不透明度（`CarrotPanelOpacity` 0-100）参数化；边缘车道线条 `AmapLaneIndicators`（左/右竖条，绿=可越/橙=拦截） | ✅ |
+| 设置 | Navigation 面板新增 `CarrotPanelSide`/`CarrotPanelOpacity` 控件（GUI 无此 UI，webui 超集）；`params_keys.h` 注册两键 | ✅ |
+| Dev | PC 预览预设 `carrot_nav`（Dev 面板 "Carrot · nav HUD" 按钮），mock `carrot_nav`/`amap_lines` 样例数据 | ✅ |
+| 修复 | 5d1667c 移动 `panel_schema` 导出后 `routes/__init__.py` 引用未更新导致服务无法启动 | ✅ |
+| 已知差异 | 淡入淡出用 CSS transition 近似 GUI FirstOrderFilter；转向图标走资产 API，加载失败回退文案；GUI `CarrotPanelOpacity` 与 alpha 量纲混用（webui 按百分比解释） | 🟡 |
 
 ---
 
@@ -354,9 +385,9 @@ PYTHONPATH=/data/openpilot:/usr/local/venv/lib/python3.12/site-packages \
 | Home | Prime 勾选纹理 | ✅ 色值对齐 `prime.py`（✓ #465bea / subscribed #86ff4e） |
 | 侧栏 | Wi-Fi 分级纹理 | ✅ 圆点（与 `sidebar.py` 一致） |
 | Steering | Torque 版本树 JSON | ✅ `/api/opui/steering/torque-versions` |
-| 模型 | shader 级精度 | 🟡 canvas 近似 |
+| 模型 | shader 级精度 | 🟡 canvas 近似（架构受限，见 4.1） |
 | 模型 | 车道线/彩虹路径实车 | 🟡 v53 已修，待上车验证 |
-| i18n | 侧栏/dev 面板 | 🟡 dev 预设保留中文；静态 UI 已 i18n |
+| i18n | 侧栏/dev 面板 | ✅ v80 全仓 CJK 扫描清零（此前记载已过时） |
 
 ---
 
@@ -408,6 +439,8 @@ python3.12 -m webui.webuid
 
 | 日期 | 内容 |
 |------|------|
+| 2026-09-06 | **v80**：i18n 全量闭环 — `hud_carrot_nav` 15 标签接入 tr()，`webui_i18n.py` en/zh-CHS 词条，全仓 CJK 扫描清零；销掉 v52 时代"侧栏/dev 仍有中文"的过时记载 |
+| 2026-09-06 | **v79**：Carrot 导航 HUD（面板 + 边缘车道条）全量对齐 `amap_lane_indicators.py`；订阅 `carrotManSP`；Navigation 面板补 `CarrotPanelSide/Opacity`；Dev 预设 `carrot_nav`；修复 5d1667c 引起的 `routes/__init__.py` 启动崩溃 |
 | 2026-08-14 | **v77**：WebGL path/lead 光晕、OSM 全量离线、侧栏 Wi-Fi 图标、扭矩 rAF、Dev 预设 |
 | 2026-08-14 | **v76**：confidence ball、WebGL 车道光晕、OSM 磁盘缓存、Prime checkmark 贴图、mock 梯形车道 |
 | 2026-08-14 | **v75**：`hud_circular.js` E2E 圆环 + 停车计时、OSM 内置离线包、`--dev-ui-adj` |

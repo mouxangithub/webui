@@ -22,6 +22,7 @@ const PRESET_I18N = {
   confidence_low: "Confidence · low",
   confidence_high: "Confidence · high",
   onroad_overlay: "On road · overlay",
+  carrot_nav: "Carrot · nav HUD",
   software_agnos: "Software · AGNOS",
 };
 

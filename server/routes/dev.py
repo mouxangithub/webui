@@ -149,6 +149,12 @@ async def api_dev_presets(request: web.Request) -> web.Response:
       "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 72,
       "alert_sound": "engage", "alert_size": "none",
     },
+    "carrot_nav": {
+      "started": True, "engaged": True, "ui_status": "engaged", "speed_kmh": 95,
+      "alert_text1": "", "alert_text2": "", "alert_size": "none",
+      "torque_bar": True, "torque_utilization": 0.5,
+      "carrot_nav_demo": True, "amap_lines_demo": True,
+    },
     "sound_disengage": {
       "started": True, "engaged": False, "ui_status": "disengaged", "speed_kmh": 45,
       "alert_sound": "disengage", "alert_size": "none",

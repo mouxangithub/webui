@@ -219,6 +219,39 @@ def _mock_dev_ui(s: dict[str, Any]) -> dict[str, Any]:
   }
 
 
+def _mock_carrot_nav(s: dict[str, Any]) -> dict[str, Any]:
+  """Sample carrotManSP payload mirroring GUI CarrotNavigationPanel fields."""
+  return {
+    "active": 1,
+    "road_limit_speed": int(s.get("carrot_road_limit", 120)),
+    "spd_type": 2,
+    "spd_limit": 120,
+    "spd_dist": 2000,
+    "spd_countdown": 45,
+    "turn_info": 2,
+    "dist_to_turn": 350,
+    "turn_countdown": 0,
+    "atc_type": "atc",
+    "v_turn_speed": 40,
+    "road_name": "京沪高速",
+    "tbt_main_text": "京沪高速",
+    "tbt_main_text_next": "G2 济南方向",
+    "near_dir_name": "G2",
+    "desired_speed": 100,
+    "desired_source": "地图",
+    "traffic_state": 1,
+    "traffic_countdown": 32,
+    "left_sec": 0,
+    "go_pos_dist": 125000,
+    "go_pos_time": 5400,
+    "goal_name": "上海",
+    "sdi_descr": "",
+    "road_cate": 1,
+    "panel_side": int(s.get("carrot_panel_side", 0)),
+    "panel_opacity": int(s.get("carrot_panel_opacity", 100)),
+  }
+
+
 def snapshot_dev_ui_state() -> dict[str, Any]:
   from webui.server.bridge.home_api import _mock_startup_blockers
 
@@ -293,6 +326,9 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
       "scc_map_active": s.get("scc_map_active", False),
       "e2e_green_light": s.get("e2e_green_light", False),
       "e2e_lead_depart": s.get("e2e_lead_depart", False),
+      "carrot_nav": _mock_carrot_nav(s) if s["started"] and s.get("carrot_nav_demo", True) else None,
+      "amap_lines": ({"valid": True, "left_blocked": False, "right_blocked": True}
+                     if s["started"] and s.get("amap_lines_demo", True) else None),
     },
     "developer_ui": int(s.get("developer_ui", 0)),
     "recording_audio": bool(s.get("recording_audio", False)),

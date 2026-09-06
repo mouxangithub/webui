@@ -9,7 +9,8 @@ import os
 from aiohttp import web
 
 from webui.server.deps import WEB_DIR, json_response
-from webui.server.bridge.params_api import batch_get, get_param, panel_schema, panel_values, put_param, remove_param
+from webui.server.bridge.panel_catalog import panel_schema
+from webui.server.bridge.params_api import batch_get, get_param, panel_values, put_param, remove_param
 from webui.server.bridge.state_api import snapshot_ui_state
 from webui.server.bridge.system_api import manager_last_error, run_action, software_status
 from webui.server.bridge.network_api import (
