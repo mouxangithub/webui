@@ -12,6 +12,7 @@ from webui.server.bridge.cereal_services import STATE_HUB_SERVICES, filter_known
 from webui.server.bridge.home_api import refresh_home_slow_cache, snapshot_home, snapshot_home_core
 from webui.server.bridge.state_api import build_state_from_sm
 from webui.server.bridge.car_context import refresh_car_context
+from webui.server.bridge.device_api import set_chestnut_snapshot
 from webui.server.bridge.startup_blockers import set_startup_gate_cache, startup_blockers_from_sm
 
 _lock = threading.Lock()
@@ -267,6 +268,10 @@ def _device_loop() -> None:
       refresh_car_context(sm, started)
       try:
         set_startup_gate_cache(startup_blockers_from_sm(sm))
+      except Exception:
+        pass
+      try:
+        set_chestnut_snapshot(sm)
       except Exception:
         pass
       _set_state(build_state_from_sm(sm))

@@ -83,6 +83,8 @@ def _infer_param_type_from_widget(wtype: str | None) -> str | None:
     return "BOOL"
   if wtype in ("option", "int", "choice"):
     return "INT"
+  if wtype == "text":
+    return "STRING"
   return None
 
 

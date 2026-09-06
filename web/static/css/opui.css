@@ -1822,6 +1822,27 @@ html.opui-portrait-host .opui-modal-scroll {
   flex-shrink: 0;
 }
 
+.opui-text-control {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+}
+.opui-text-control .opui-input {
+  width: 480px;
+  min-width: 240px;
+  max-width: 60vw;
+  height: 120px;
+  box-sizing: border-box;
+}
+.opui-text-control button {
+  height: 120px;
+  padding: 0 40px;
+  font-size: 40px;
+  white-space: nowrap;
+}
+.opui-chestnut-row--fault .opui-row-value { color: #e2574c; }
+
 .opui-int-control button {
   width: 120px;
   height: 120px;

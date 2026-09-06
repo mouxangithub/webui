@@ -11,6 +11,39 @@ from typing import Any
 from webui.server.bridge.headless_util import is_headless_mode
 from webui.server.bridge.qr_data_url import qr_data_url as _qr_data_url
 
+# Chestnut expansion-board status snapshot, refreshed by the state hub loop.
+_chestnut_cache: dict[str, Any] | None = None
+_chestnut_lock = __import__("threading").Lock()
+
+
+def set_chestnut_snapshot(sm: Any) -> None:
+  """Stash a lightweight chestnutState summary from the live SubMaster."""
+  global _chestnut_cache
+  try:
+    if not sm.valid.get("chestnutState"):
+      return
+    cs = sm["chestnutState"]
+    snapshot = {
+      "present": True,
+      "temp_c": round(float(cs.tempC), 1),
+      "power_draw_w": round(float(cs.powerDrawW), 1),
+      "power_limit_w": round(float(cs.powerLimitW), 1),
+      "gpu_usage_percent": int(cs.gpuUsagePercent),
+      "fan_speed_rpm": int(cs.fanSpeedRpm),
+      "supply_voltage_mv": int(cs.supplyVoltage),
+      "supply_current_ma": int(cs.supplyCurrent),
+      "supply_fault": bool(cs.supplyFault),
+    }
+  except Exception:
+    return
+  with _chestnut_lock:
+    _chestnut_cache = snapshot
+
+
+def chestnut_snapshot() -> dict[str, Any]:
+  with _chestnut_lock:
+    return dict(_chestnut_cache) if _chestnut_cache else {"present": False}
+
 # Fallback when languages.json is unavailable (codes match openpilot GUI).
 LANGUAGES = [
   ("en", "English"),
@@ -156,6 +189,7 @@ def device_extras() -> dict[str, Any]:
       "headless": is_headless_mode(),
       "driver_view_enabled": False,
       "onroad_preview": False,
+      "chestnut": chestnut_snapshot(),
     }
   try:
     from openpilot.common.params import Params
@@ -173,6 +207,7 @@ def device_extras() -> dict[str, Any]:
       "headless": is_headless_mode(),
       "driver_view_enabled": p.get_bool("IsDriverViewEnabled"),
       "onroad_preview": p.get_bool("IsOnroadPreview"),
+      "chestnut": chestnut_snapshot(),
     }
   except Exception as exc:
     return {"ok": False, "error": str(exc)}

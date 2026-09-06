@@ -188,7 +188,7 @@ function paramIsOn(val) {
 function resolveWidgetType(w) {
   const known = new Set([
     "section", "separator", "html", "action", "subpanel", "custom", "dual_button", "option",
-    "readonly", "bool", "choice", "int", "multiple_button",
+    "readonly", "bool", "choice", "int", "multiple_button", "text",
   ]);
   if (known.has(w.type)) return w.type;
   const pt = String(w.param_type || w.type || "").toUpperCase();
@@ -1252,6 +1252,11 @@ function updateWidgetValue(root, w, panelData = panelDataRef) {
     if (valEl) valEl.textContent = formatValue(w.value) || t("N/A");
     return;
   }
+  if (kind === "text") {
+    const input = el.querySelector("input[type=text]");
+    if (input && document.activeElement !== input) input.value = w.value || "";
+    return;
+  }
   if (kind === "int" || kind === "option") {
     const min = w.min ?? 0;
     const max = w.max ?? 100;
@@ -1607,6 +1612,7 @@ function renderWidget(w, panelData) {
 
   if (kind === "custom") {
     if (w.custom === "ssh_keys") return renderSshKeysBlock();
+    if (w.custom === "chestnut_status") return renderChestnutStatusRow();
     if (w.custom === "device_language") return renderLanguageRow();
     if (w.custom === "stream_headless_mode") return renderStreamHeadlessModeRow(w);
     if (w.custom === "stream_preview_quality") return renderStreamPreviewQualityRow(w);
@@ -1638,6 +1644,10 @@ function renderWidget(w, panelData) {
 
   if (kind === "int") {
     return renderIntRow(w);
+  }
+
+  if (kind === "text") {
+    return renderTextRow(w);
   }
 
   return null;
@@ -1852,6 +1862,83 @@ function renderIntRow(w) {
   plus.addEventListener("click", () => { val = Math.min(max, val + step); save(val); });
 
   ctrl.append(minus, span, plus);
+  row.appendChild(ctrl);
+  return row;
+}
+
+function renderChestnutStatusRow() {
+  const ch = deviceExtrasCache?.chestnut;
+  if (!ch?.present) return null;
+
+  const fault = !!ch.supply_fault;
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-chestnut-row" + (fault ? " opui-chestnut-row--fault" : "");
+  const supply = (ch.supply_voltage_mv || 0) >= 1000
+    ? `${(ch.supply_voltage_mv / 1000).toFixed(1)}V / ${(Math.abs(ch.supply_current_ma) / 1000).toFixed(2)}A`
+    : t("N/A");
+  const status = fault ? t("Supply fault") : t("Power OK");
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Chestnut Expansion Board"))}</div>
+      <div class="opui-sp-row-desc">${escapeHtml(t("Temperature"))}: ${escapeHtml(String(ch.temp_c ?? "N/A"))}°C ·
+        ${escapeHtml(t("Power draw"))}: ${escapeHtml(String(ch.power_draw_w ?? "N/A"))}W ·
+        ${escapeHtml(t("Supply"))}: ${escapeHtml(supply)}</div>
+    </div>
+    <div class="opui-row-value">${escapeHtml(status)}</div>`;
+  return row;
+}
+
+function renderTextRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row";
+  row.dataset.param = w.param;
+  row.dataset.widget = "text";
+  if (w.capability) row.dataset.capability = w.capability;
+  if (w.offroad_only) row.dataset.offroadOnly = "1";
+  if (w.needs_cycle) row.dataset.needsCycle = "1";
+
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+      ${w.desc ? `<div class="opui-sp-row-desc">${escapeHtml(t(w.desc))}</div>` : ""}
+    </div>`;
+
+  const ctrl = document.createElement("div");
+  ctrl.className = "opui-text-control";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "opui-input";
+  input.maxLength = w.maxlength || 60;
+  input.value = w.value || "";
+  if (w.locked || (w.offroad_only && !globalState.is_offroad)) input.disabled = true;
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "opui-btn opui-btn--customize";
+  saveBtn.textContent = t("Save");
+  saveBtn.disabled = input.disabled;
+
+  const commit = async () => {
+    const val = input.value.trim();
+    if (val === (w.value || "")) return;
+    const res = await putParam(w.param, val, !!w.needs_cycle);
+    if (!res.ok) {
+      toast(res.error || t("Save failed"));
+      return;
+    }
+    w.value = val;
+    if (panelDataRef?.values) panelDataRef.values[w.param] = val;
+    toast(t("Saved"));
+  };
+
+  saveBtn.addEventListener("click", commit);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+    }
+  });
+
+  ctrl.append(input, saveBtn);
   row.appendChild(ctrl);
   return row;
 }

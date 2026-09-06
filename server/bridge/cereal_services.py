@@ -42,6 +42,7 @@ STATE_HUB_SERVICES: tuple[str, ...] = (
   "liveMapDataSP",
   "carrotManSP",
   "carParamsSP",
+  "chestnutState",
 )
 
 OVERLAY_SERVICES: tuple[str, ...] = (
