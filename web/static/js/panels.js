@@ -8,7 +8,7 @@ import { renderWebUiUpdateRow, fetchWebUiUpdate, syncWebUiUpdateRow } from "./we
 import { runSoftwareInstallFlow, runRebootFlow } from "./system_wait_overlay.js";
 import { opuiWs } from "./ws.js";
 import {
-  showConfirm, showKeyboard, showTree, showHtml, showMultiOption, showQrPair,
+  showConfirm, showKeyboard, showTextInput, showTree, showHtml, showMultiOption, showQrPair,
   createSpToggle, createProgressRow, createDualButton, bindRowExpand, experimentalE2eHtml,
 } from "./components.js?v=2";
 import { reopenOnboarding } from "./onboarding.js";
@@ -2340,11 +2340,12 @@ function renderAmapApiKeyRow(w) {
       e.stopPropagation();
       if (btn.disabled) return;
       const current = panelDataRef?.values?.AmapApiKey || "";
-      const value = await showKeyboard({
+      const value = await showTextInput({
         title: t("Enter Amap API Key"),
         value: current,
         minLen: 0,
         maxLen: 255,
+        placeholder: t("Amap API Key"),
       });
       if (value === null) return;
       const res = await putParam("AmapApiKey", value);
