@@ -91,6 +91,12 @@ def _default_param_value(ptype: str) -> str:
 
 
 def _read_param_value_with_fallback(p, key: str, ptype: str) -> str:
+  # Carrot tuning keys live in nav_params.json (UnifiedParams), not Params.
+  from webui.server.bridge.carrot_tuning_api import carrot_value_str, is_carrot_key
+  if is_carrot_key(key):
+    val = carrot_value_str(key)
+    if val is not None:
+      return val
   known = _param_type_name(p, key)
   if known is not None:
     return _read_param_value(p, key, known)
@@ -126,6 +132,10 @@ def _read_param_value(p, key: str, ptype: str | None) -> str:
 
 
 def get_param(key: str) -> dict[str, Any]:
+  # Carrot tuning keys live in nav_params.json (UnifiedParams), not Params.
+  from webui.server.bridge.carrot_tuning_api import carrot_get, is_carrot_key
+  if is_carrot_key(key):
+    return carrot_get(key)
   try:
     p = _params()
     ptype = _param_type_name(p, key)
@@ -197,6 +207,10 @@ def _apply_quickboot_file(enabled: bool) -> None:
 
 
 def remove_param(key: str) -> dict[str, Any]:
+  # Carrot tuning keys cannot be removed — reset to compiled-in default.
+  from webui.server.bridge.carrot_tuning_api import carrot_reset, is_carrot_key
+  if is_carrot_key(key):
+    return carrot_reset(key)
   try:
     p = _params()
     p.remove(key)
@@ -209,6 +223,11 @@ def remove_param(key: str) -> dict[str, Any]:
 
 def put_param(key: str, value: str, *, needs_cycle: bool = False) -> dict[str, Any]:
   try:
+    # Carrot tuning keys live in nav_params.json (UnifiedParams), not Params.
+    from webui.server.bridge.carrot_tuning_api import carrot_put, is_carrot_key
+    if is_carrot_key(key):
+      return carrot_put(key, value)
+
     from webui.server.bridge.lite_util import LITE_UNAVAILABLE_PARAMS, is_lite_hw
     if is_lite_hw() and key in LITE_UNAVAILABLE_PARAMS:
       return {"ok": False, "error": f"param unavailable on Lite hardware: {key}"}
