@@ -242,6 +242,64 @@ export function showKeyboard(opts = {}) {
   });
 }
 
+export function showTextInput(opts = {}) {
+  const {
+    title = "Enter text",
+    value = "",
+    password = false,
+    minLen = 0,
+    maxLen = 255,
+    placeholder = "",
+    inputmode = "",
+  } = opts;
+
+  return new Promise((resolve) => {
+    const root = document.createElement("div");
+    root.className = "opui-modal";
+    root.hidden = true;
+    root.innerHTML = `
+      <div class="opui-modal-card opui-modal-card--textinput">
+        <div class="opui-modal-title"></div>
+        <input class="opui-input opui-textinput-field" type="${password ? "password" : "text"}"
+               autocomplete="off" spellcheck="false" maxlength="${maxLen}" />
+        <div class="opui-modal-footer opui-modal-actions opui-modal-actions--split opui-textinput-actions">
+          <button type="button" class="opui-btn opui-btn--dialog opui-btn--secondary opui-textinput-cancel">${tr("Cancel")}</button>
+          <button type="button" class="opui-btn opui-btn--dialog opui-btn--primary opui-textinput-ok">${tr("Confirm")}</button>
+        </div>
+      </div>`;
+    root.querySelector(".opui-modal-title").textContent = title;
+    const input = root.querySelector("input");
+    const okBtn = root.querySelector(".opui-textinput-ok");
+    if (placeholder) input.placeholder = placeholder;
+    if (inputmode) input.setAttribute("inputmode", inputmode);
+    input.value = value;
+
+    const finish = (v) => {
+      popModal(root);
+      root.remove();
+      resolve(v);
+    };
+    const syncOk = () => { okBtn.disabled = input.value.length < minLen; };
+    input.addEventListener("input", syncOk);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && input.value.length >= minLen) finish(input.value);
+      else if (e.key === "Escape") finish(null);
+    });
+    okBtn.addEventListener("click", () => {
+      if (input.value.length >= minLen) finish(input.value);
+    });
+    root.querySelector(".opui-textinput-cancel").addEventListener("click", () => finish(null));
+
+    document.body.appendChild(root);
+    pushModal(root, () => finish(null));
+    syncOk();
+    requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  });
+}
+
 export function showMultiOption(opts) {
   const {
     title = tr("Select"),
