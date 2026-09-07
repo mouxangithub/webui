@@ -4349,3 +4349,26 @@ body.opui-system-wait-open {
   color: #5c5c5c;
   cursor: not-allowed;
 }
+
+/* ===== Road lite view — synthesized driving scene when video stream is off ===== */
+.opui-road-lite {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #0b111d;
+}
+
+.opui-road-lite__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+
+/* HUD (speed / cruise / alerts) stays visible while the lite scene is shown —
+   the default rule hides it until the video plays. */
+.opui-camera-wrap.road-lite-on .opui-hud {
+  visibility: visible !important;
+  pointer-events: none;
+}

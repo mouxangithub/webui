@@ -518,6 +518,44 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     except Exception:
       torque_utilization = 0.0
 
+  steering_angle_deg = None
+  try:
+    val = float(cs.steeringAngleDeg)
+    if val == val:
+      steering_angle_deg = round(val, 1)
+  except Exception:
+    pass
+
+  lead_d_rel = None
+  lead_v_rel = None
+  lead2_d_rel = None
+  lead2_v_rel = None
+  lead2_y_rel = None
+  try:
+    if sm.valid.get("radarState"):
+      lead = sm["radarState"].leadOne
+      if lead is not None and getattr(lead, "present", False):
+        d_rel = float(lead.dRel)
+        v_rel = float(lead.vRel)
+        if d_rel == d_rel:
+          lead_d_rel = round(d_rel, 1)
+        if v_rel == v_rel:
+          lead_v_rel = round(v_rel, 2)
+      # adjacent-lane lead (radar's secondary track; yRel is lateral offset, +left)
+      lead2 = sm["radarState"].leadTwo
+      if lead2 is not None and getattr(lead2, "present", False):
+        d2 = float(lead2.dRel)
+        v2 = float(lead2.vRel)
+        y2 = float(lead2.yRel)
+        if d2 == d2 and 0.0 < d2 < 140.0:
+          lead2_d_rel = round(d2, 1)
+        if v2 == v2:
+          lead2_v_rel = round(v2, 2)
+        if y2 == y2:
+          lead2_y_rel = round(y2, 2)
+  except Exception:
+    pass
+
   driver_face = _driver_face(sm)
   confidence_ball = _confidence_ball(sm, ui_status, started)
 
@@ -624,6 +662,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "recording_audio": recording_audio,
     "torque_bar": torque_bar,
     "torque_utilization": torque_utilization,
+    "steering_angle_deg": steering_angle_deg,
+    "lead_d_rel": lead_d_rel,
+    "lead_v_rel": lead_v_rel,
+    "lead2_d_rel": lead2_d_rel,
+    "lead2_v_rel": lead2_v_rel,
+    "lead2_y_rel": lead2_y_rel,
     "circular_alert_allowed": circular_alert_allowed,
     "confidence_ball": confidence_ball,
     "driver_face": driver_face,

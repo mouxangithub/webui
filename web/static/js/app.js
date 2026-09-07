@@ -16,6 +16,7 @@ import {
 import { initBodyLayout, updateBodyLayout, stopBodyLayout } from "./body_layout.js";
 import { initDevPanel } from "./dev.js";
 import { initModelCanvas, showModelOverlay, scheduleDrawModelOverlay, setModelOverlayEnabled, hasOverlayGeometry } from "./model_canvas.js";
+import { initRoadLite } from "./road_lite.js";
 import { loadI18n, translatePanelTitle, syncStaticUiStrings, tr } from "./i18n.js";
 import { initOnboarding, bindOnboardingDialog } from "./onboarding.js";
 import { initWebUiUpdate, refreshWebUiUpdateI18n } from "./webui_update.js";
@@ -917,6 +918,7 @@ bindCameraSwitcher();
 bindHomeHeader();
 bindOnboardingDialog();
 initModelCanvas();
+initRoadLite();
 applySidebarAssets();
 setupWebSocket();
 initBrowserSounds();
