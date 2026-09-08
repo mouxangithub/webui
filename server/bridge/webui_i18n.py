@@ -403,6 +403,8 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Green light": "Green light",
     "Left-turn green": "Left-turn green",
     "Traffic light": "Traffic light",
+    "ETA": "ETA",
+    "Curve": "Curve",
     "Carrot Tuning": "Carrot Tuning",
     "ATC / Fork": "ATC / Fork",
     "Curve Speed": "Curve Speed",
@@ -908,6 +910,8 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Green light": "绿灯",
     "Left-turn green": "左转绿灯",
     "Traffic light": "信号灯",
+    "ETA": "剩余",
+    "Curve": "弯道",
     "Carrot Tuning": "Carrot 调参",
     "ATC / Fork": "ATC / 岔路",
     "Curve Speed": "弯道限速",
@@ -1344,6 +1348,8 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Error": "錯誤",
     "CANCEL": "取消",
     "Idle": "閒置",
+    "ETA": "剩餘",
+    "Curve": "彎道",
     "Lite Driving Scene": "行車簡潔畫面",
     "Show the lightweight synthesized driving scene and never pull the camera stream. Saves CPU and bandwidth; also used as a fallback when the stream freezes.": (
       "顯示輕量合成的簡潔行車畫面，不再拉取攝影機串流。節省 CPU 與頻寬，同時也是視訊流凍結時的兜底顯示。"

@@ -1175,12 +1175,14 @@ function checkVisibility() {
     active = true;
     host.hidden = false;
     wrap?.classList.add("road-lite-on");
+    document.getElementById("hud")?.classList.add("road-lite-on");
     startRender();
     window.dispatchEvent(new CustomEvent("opui:road-lite", { detail: { active: true } }));
   } else if (!show && active) {
     active = false;
     host.hidden = true;
     wrap?.classList.remove("road-lite-on");
+    document.getElementById("hud")?.classList.remove("road-lite-on");
     stopRender();
     window.dispatchEvent(new CustomEvent("opui:road-lite", { detail: { active: false } }));
   }

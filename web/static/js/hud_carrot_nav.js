@@ -1,14 +1,17 @@
 /**
- * Carrot navigation HUD (mirrors GUI sunnypilot/onroad/amap_lane_indicators.py).
+ * Carrot navigation HUD (glass card redesign).
  *
- * Two components:
- *  - CarrotNavigationPanel: bottom panel fed by state.sp_hud.carrot_nav
- *    (turn icon + ATC, TBT text, ETA/destination, SDI/road name,
- *     road/desired speed boxes, speed camera circle, traffic light).
- *  - AmapLaneIndicators: left/right edge bars fed by state.sp_hud.amap_lines
- *    (orange = lane blocked, green = valid; server-gated by AmapEnabled).
+ * One compact semi-transparent "glass" card fed by state.sp_hud.carrot_nav:
+ *   - head row: turn mini-icon (+ATC tint) | TBT main text + ETA/destination | dist + countdown
+ *   - badge row: road/SDI, desired speed, speed camera, traffic light, curve advisory
  *
- * Labels use tr(); zh-CHS values mirror the native GUI's Chinese strings.
+ * Duplicates are intentionally dropped: the speed limit circle and road-name
+ * chip already live in the top HUD next to the cluster speed, so the card no
+ * longer renders its own LIMIT box / big road row — this keeps the card slim
+ * (560px) and far from the speed area. Opaque blue panel styling is gone;
+ * panel_opacity (CarrotPanelOpacity param) still scales the whole card.
+ *
+ * Also keeps the left/right AmapLaneIndicators edge bars (state.sp_hud.amap_lines).
  */
 
 import { tr } from "./i18n.js";
@@ -37,9 +40,9 @@ const CAMERA_TYPES = {
   100: () => tr("Mobile Speed Camera"),
 };
 const TRAFFIC = {
-  1: { c: "#ff3232", t: () => tr("Red light") },
-  2: { c: "#32ff32", t: () => tr("Green light") },
-  3: { c: "#32ff64", t: () => tr("Left-turn green") },
+  1: { c: "#ff5a5a", t: () => tr("Red light") },
+  2: { c: "#4ade80", t: () => tr("Green light") },
+  3: { c: "#34d399", t: () => tr("Left-turn green") },
 };
 
 let lastNavSig = "";
@@ -58,46 +61,59 @@ function injectStyle() {
   style.id = "opui-hud-carrot-style";
   style.textContent = `
 .opui-hud-carrot {
-  position: absolute; bottom: 120px; width: 790px;
-  padding: 8px 20px 16px 20px; box-sizing: border-box;
-  background: rgba(0, 105, 148, 1); border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 29px; color: #fff; font-family: Inter, sans-serif;
+  position: absolute; bottom: 120px; width: 560px;
+  padding: 12px 16px 12px 14px; box-sizing: border-box;
+  background: rgba(10, 16, 24, 0.55);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.30);
+  color: #fff; font-family: Inter, sans-serif;
   z-index: 5; transition: opacity 0.15s linear;
 }
 .opui-hud-carrot.cn-side-l { left: 12px; }
 .opui-hud-carrot.cn-side-r { right: 12px; }
-.cn-tbt { font-size: 40px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 48px; line-height: 48px; }
-.cn-body { display: flex; align-items: flex-start; }
-.cn-turn { position: relative; width: 160px; min-height: 230px; flex: 0 0 160px; margin-top: 4px; border-radius: 15px; }
-.cn-turn.cn-atc { background: rgba(0, 180, 0, 1); }
-.cn-turn.cn-atc.cn-atc-prepare { background: rgba(0, 180, 0, 0.4); }
-.cn-turn-icon { display: block; width: 128px; height: 128px; margin: 16px auto 0 auto; }
-.cn-turn-fallback { font-size: 35px; font-weight: 700; text-align: center; line-height: 128px; }
-.cn-vturn { font-size: 34px; font-weight: 700; color: #ffc832; text-align: center; }
-.cn-tdist { font-size: 40px; font-weight: 700; text-align: center; }
-.cn-tcd { font-size: 30px; font-weight: 700; color: #ffdc64; text-align: center; }
-.cn-info { flex: 1 1 auto; margin-left: 30px; min-width: 0; }
-.cn-eta { font-size: 50px; font-weight: 700; }
-.cn-dest { font-size: 40px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cn-roadrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 40px; font-weight: 700; min-height: 34px; }
-.cn-cate { font-size: 28px; padding: 2px 8px; border-radius: 8px; background: #646464; }
-.cn-cate.cn-cate-1 { background: rgb(0, 130, 0); }
-.cn-cate.cn-cate-2 { background: rgb(200, 130, 0); }
-.cn-sdi { display: inline-block; font-size: 40px; font-weight: 700; padding: 0 10px; border-radius: 10px; background: rgb(0, 180, 0); }
-.cn-speedrow { display: flex; align-items: flex-end; gap: 20px; margin-top: 10px; }
-.cn-speedbox { text-align: center; }
-.cn-speedbox .lab { font-size: 24px; font-weight: 700; margin-bottom: 2px; }
-.cn-speedbox .val { width: 90px; height: 42px; line-height: 42px; border-radius: 12px; font-size: 36px; font-weight: 700; background: rgba(255,255,255,0.82); color: #000; }
-.cn-speedbox .val.cn-over { background: rgb(255, 50, 50); color: #fff; }
-.cn-speedbox .val.cn-apply { background: rgb(255, 180, 50); color: #fff; }
-.cn-camerarow { display: flex; align-items: center; gap: 15px; margin-top: 10px; }
-.cn-camcircle { width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.78); border: 4px solid rgb(255, 80, 80); color: #000; font-size: 40px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-.cn-camcircle.cn-over { background: rgb(255, 50, 50); color: #fff; }
-.cn-cammeta { font-size: 36px; font-weight: 700; }
-.cn-camtype { font-size: 26px; color: #ffc832; }
-.cn-trafficrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 32px; font-weight: 600; }
-.cn-tdot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(60,60,60,0.9); box-sizing: border-box; }
-.cn-tcd2 { font-size: 30px; font-weight: 700; margin-left: 110px; }
+
+/* head row: turn mini-icon | headline | meta */
+.cn-head { display: flex; align-items: center; gap: 14px; min-height: 60px; }
+.cn-turn-mini {
+  position: relative; flex: 0 0 60px; width: 60px; height: 60px;
+  border-radius: 14px; background: rgba(22, 200, 122, 0.28);
+  display: flex; align-items: center; justify-content: center;
+  box-sizing: border-box; overflow: hidden;
+}
+.cn-turn-mini.cn-atc { background: rgba(22, 200, 122, 0.85); }
+.cn-turn-mini.cn-atc-prepare { background: rgba(22, 200, 122, 0.35); }
+.cn-turn-icon { width: 46px; height: 46px; object-fit: contain; }
+.cn-turn-fallback { font-size: 17px; font-weight: 700; text-align: center; line-height: 1.15; padding: 0 4px; }
+.cn-headline { flex: 1 1 auto; min-width: 0; }
+.cn-tbt { font-size: 29px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cn-sub { font-size: 20px; font-weight: 500; color: rgba(255, 255, 255, 0.72); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cn-turnmeta { flex: 0 0 auto; text-align: right; }
+.cn-tdist { font-size: 29px; font-weight: 700; line-height: 1.1; }
+.cn-tcd { font-size: 19px; font-weight: 700; color: #ffdc64; margin-top: 3px; min-height: 22px; }
+
+/* badge row */
+.cn-badges { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.cn-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 19px; font-weight: 700; line-height: 1;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13); color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+}
+.cn-badge .cn-cate { font-size: 17px; padding: 2px 7px; border-radius: 7px; background: rgba(255, 255, 255, 0.18); }
+.cn-badge .cn-cate.cn-cate-1 { background: rgba(22, 160, 74, 0.85); }
+.cn-badge .cn-cate.cn-cate-2 { background: rgba(217, 145, 10, 0.85); }
+.cn-badge.cn-badge--sdi { background: rgba(22, 160, 74, 0.8); color: #fff; }
+.cn-badge.cn-badge--apply { background: rgba(255, 180, 50, 0.88); color: #101418; }
+.cn-badge.cn-badge--cam { background: rgba(239, 68, 68, 0.82); color: #fff; }
+.cn-badge.cn-badge--cam.is-ok { background: rgba(239, 68, 68, 0.35); }
+.cn-badge.cn-badge--vturn { background: rgba(255, 200, 50, 0.18); color: #ffc832; border: 1px solid rgba(255, 200, 50, 0.45); }
+.cn-badge.cn-tlight { background: rgba(255, 255, 255, 0.10); }
+.cn-badge.cn-tlight i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+/* amap lane edge bars (unchanged behavior) */
 .opui-amapbar {
   position: absolute; top: 55%; transform: translateY(-50%);
   width: 8px; height: 120px; border-radius: 4px;
@@ -107,6 +123,13 @@ function injectStyle() {
 .opui-amapbar--l { left: 12px; }
 .opui-amapbar--r { right: 12px; }
 .opui-amapbar.is-blocked { background: #ff6633; }
+
+/* road-lite mode: the synthesized canvas already draws TBT / traffic light /
+   curve advisory — hide the DOM nav card and edge bars for a clean scene.
+   (road_lite.js toggles road-lite-on on both #camera-wrap and #hud; #hud is
+   the parent of the nav card, the wrap is only its sibling.) */
+#hud.road-lite-on #hud-carrot-nav,
+#hud.road-lite-on .opui-amapbar { display: none !important; }
 `;
   document.head.appendChild(style);
 }
@@ -126,8 +149,8 @@ function etaString(seconds) {
   const hh = String(Math.floor(total / 60) % 24).padStart(2, "0");
   const mm = String(total % 60).padStart(2, "0");
   return minutes >= 60
-    ? `ETA: ${Math.floor(minutes / 60)}h${Math.round(minutes % 60)}m(${hh}:${mm})`
-    : `ETA: ${Math.round(minutes)}min(${hh}:${mm})`;
+    ? `${tr("ETA")} ${Math.floor(minutes / 60)}h${Math.round(minutes % 60)}m · ${hh}:${mm}`
+    : `${tr("ETA")} ${Math.round(minutes)}min · ${hh}:${mm}`;
 }
 
 function hasNavContent(nav) {
@@ -138,7 +161,7 @@ function hasNavContent(nav) {
       || nav.traffic_state > 0 || nav.road_name || nav.sdi_descr || nav.tbt_main_text));
 }
 
-function turnBlockHtml(nav) {
+function turnMiniHtml(nav) {
   const t = nav.turn_info;
   const atc = nav.atc_type ? (nav.atc_type.includes("prepare")
     ? "cn-atc cn-atc-prepare" : "cn-atc") : "";
@@ -148,78 +171,63 @@ function turnBlockHtml(nav) {
   } else {
     inner = `<div class="cn-turn-fallback">${esc(TURN_FALLBACK(t))}</div>`;
   }
-  const vturn = nav.v_turn_speed > 0 && nav.v_turn_speed < 120
-    ? `<div class="cn-vturn">${nav.v_turn_speed}km/h</div>` : "";
-  const dist = nav.dist_to_turn > 0 ? `<div class="cn-tdist">${esc(fmtDist(nav.dist_to_turn, true))}</div>` : "";
-  const cd = nav.turn_countdown > 0 ? `<div class="cn-tcd">${nav.turn_countdown}s</div>` : "";
-  return `<div class="cn-turn ${atc}">${inner}${vturn}${dist}${cd}</div>`;
+  return `<div class="cn-turn-mini ${atc}">${inner}</div>`;
 }
 
-function speedRowHtml(nav, speedKph) {
-  const hasLimit = nav.road_limit_speed > 0;
-  const hasApply = nav.desired_speed > 0 && !!nav.desired_source;
-  if (!hasLimit && !hasApply) return "";
-  const over = hasLimit && speedKph > nav.road_limit_speed + 2;
-  const limit = hasLimit
-    ? `<div class="cn-speedbox"><div class="lab">LIMIT</div><div class="val${over ? " cn-over" : ""}">${nav.road_limit_speed}</div></div>`
-    : "";
-  const src = esc(nav.desired_source).slice(0, 12);
-  const apply = hasApply
-    ? `<div class="cn-speedbox"><div class="lab" style="color:#ffb432">${src}</div><div class="val cn-apply">${nav.desired_speed}</div></div>`
-    : "";
-  return `<div class="cn-speedrow">${limit}${apply}</div>`;
-}
-
-function cameraRowHtml(nav, speedKph, isMetric) {
-  if (!(nav.spd_limit > 0 && nav.spd_dist > 0)) return "";
-  const over = Math.round(speedKph) > nav.spd_limit;
-  const dist = fmtDist(nav.spd_dist, isMetric) + (nav.spd_countdown > 0 ? ` ${nav.spd_countdown}s` : "");
-  const type = CAMERA_TYPES[nav.spd_type] ? `<div class="cn-camtype">${CAMERA_TYPES[nav.spd_type]()}</div>` : "";
-  return `<div class="cn-camerarow"><div class="cn-camcircle${over ? " cn-over" : ""}">${nav.spd_limit}</div><div><div class="cn-cammeta">${esc(dist)}</div>${type}</div></div>`;
-}
-
-function roadRowHtml(nav) {
+function badgesHtml(nav, speedKph) {
+  const badges = [];
   if (nav.sdi_descr) {
-    return `<div class="cn-roadrow"><span class="cn-sdi">${esc(nav.sdi_descr)}</span></div>`;
-  }
-  if (nav.road_name) {
+    badges.push(`<span class="cn-badge cn-badge--sdi">${esc(nav.sdi_descr)}</span>`);
+  } else if (nav.road_name) {
     const cate = ROAD_CATE[nav.road_cate]
-      ? `<span class="cn-cate cn-cate-${nav.road_cate}">${ROAD_CATE[nav.road_cate]()}</span>` : "";
-    return `<div class="cn-roadrow">${cate}<span>${esc(nav.road_name)}</span></div>`;
+      ? `<b class="cn-cate cn-cate-${nav.road_cate}">${ROAD_CATE[nav.road_cate]()}</b>` : "";
+    badges.push(`<span class="cn-badge">${cate}${esc(nav.road_name)}</span>`);
   }
-  return "";
-}
-
-function trafficRowHtml(nav) {
-  if (!(nav.traffic_state > 0)) return "";
-  const info = TRAFFIC[nav.traffic_state] || { c: "#c8c832", t: () => tr("Traffic light") };
-  const cd = nav.traffic_countdown > 0 ? nav.traffic_countdown : nav.left_sec;
-  const cdHtml = cd > 0 ? `<div class="cn-tcd2">${cd}s</div>` : "";
-  return `<div class="cn-trafficrow"><div class="cn-tdot" style="background:${info.c}"></div><span style="color:${info.c}">${info.t()}</span>${cdHtml}</div>`;
+  if (nav.desired_speed > 0 && nav.desired_source) {
+    const src = esc(nav.desired_source).slice(0, 10);
+    badges.push(`<span class="cn-badge cn-badge--apply">${src} ${nav.desired_speed}</span>`);
+  }
+  if (nav.spd_limit > 0 && nav.spd_dist > 0) {
+    const over = Math.round(speedKph) > nav.spd_limit;
+    const type = CAMERA_TYPES[nav.spd_type] ? CAMERA_TYPES[nav.spd_type]() : tr("Camera");
+    badges.push(`<span class="cn-badge cn-badge--cam${over ? "" : " is-ok"}">◉ ${nav.spd_limit} · ${esc(fmtDist(nav.spd_dist, true))}${nav.spd_countdown > 0 ? ` ${nav.spd_countdown}s` : ""}<i style="font-style:normal;font-weight:500;opacity:.8">${esc(type)}</i></span>`);
+  }
+  if (nav.traffic_state > 0) {
+    const info = TRAFFIC[nav.traffic_state] || { c: "#ffd644", t: () => tr("Traffic light") };
+    const cd = nav.traffic_countdown > 0 ? nav.traffic_countdown : nav.left_sec;
+    badges.push(`<span class="cn-badge cn-tlight"><i style="background:${info.c}"></i><span style="color:${info.c}">${info.t()}</span>${cd > 0 ? `${cd}s` : ""}</span>`);
+  }
+  if (nav.v_turn_speed > 0 && nav.v_turn_speed < 120) {
+    badges.push(`<span class="cn-badge cn-badge--vturn">${tr("Curve")} ${nav.v_turn_speed}km/h</span>`);
+  }
+  return badges.length ? `<div class="cn-badges">${badges.join("")}</div>` : "";
 }
 
 function renderPanel(nav, isMetric, speedKph) {
   const tbt = nav.tbt_main_text
-    ? nav.tbt_main_text + (nav.near_dir_name ? " -> " + nav.near_dir_name : "")
+    ? nav.tbt_main_text + (nav.near_dir_name ? " → " + nav.near_dir_name : "")
     : "";
+  const turn = nav.turn_info > 0 ? turnMiniHtml(nav) : "";
   const hasEta = nav.go_pos_dist > 0 && nav.go_pos_time > 0;
-  const eta = hasEta ? `<div class="cn-eta">${esc(etaString(nav.go_pos_time))}</div>` : "";
-  const dest = hasEta
-    ? `<div class="cn-dest">${esc(fmtDist(nav.go_pos_dist, isMetric))}${nav.goal_name ? " 🏁 " + esc(nav.goal_name) : ""}</div>`
-    : (nav.goal_name ? `<div class="cn-dest">🏁 ${esc(nav.goal_name)}</div>` : "");
-  const turn = nav.turn_info > 0 ? turnBlockHtml(nav) : "";
+  let sub = "";
+  if (hasEta) {
+    sub = `${esc(etaString(nav.go_pos_time))} · ${esc(fmtDist(nav.go_pos_dist, isMetric))}${nav.goal_name ? " 🏁 " + esc(nav.goal_name) : ""}`;
+  } else if (nav.goal_name) {
+    sub = `🏁 ${esc(nav.goal_name)}`;
+  }
+  const dist = nav.dist_to_turn > 0 ? `<div class="cn-tdist">${esc(fmtDist(nav.dist_to_turn, isMetric))}</div>` : "";
+  const cd = nav.turn_countdown > 0 ? `<div class="cn-tcd">${nav.turn_countdown}s</div>` : "<div class=\"cn-tcd\"></div>";
+  const badges = badgesHtml(nav, speedKph);
   return `
-    <div class="cn-tbt">${esc(tbt)}</div>
-    <div class="cn-body">
+    <div class="cn-head">
       ${turn}
-      <div class="cn-info">
-        ${eta}${dest}
-        ${roadRowHtml(nav)}
-        ${speedRowHtml(nav, speedKph)}
-        ${cameraRowHtml(nav, speedKph, isMetric)}
-        ${trafficRowHtml(nav)}
+      <div class="cn-headline">
+        <div class="cn-tbt">${esc(tbt)}</div>
+        ${sub ? `<div class="cn-sub">${sub}</div>` : ""}
       </div>
-    </div>`;
+      ${dist || cd ? `<div class="cn-turnmeta">${dist}${cd}</div>` : ""}
+    </div>
+    ${badges}`;
 }
 
 export function updateCarrotNav(st) {
