@@ -153,8 +153,9 @@ def carrot_put(key: str, value: str) -> dict[str, Any]:
     if kind == "bool":
       p.put_bool(key, bool(coerced), block=True)
     else:
-      # Params stores values as strings; int/float round-trip via put().
-      p.put(key, str(coerced), block=True)
+      # Params.put() casts from the Python type matching the registered key type
+      # (int for INT, float for FLOAT, str for STRING); do not pre-serialize.
+      p.put(key, coerced, block=True)
   except Exception as exc:
     return {"ok": False, "error": str(exc)}
   return {"ok": True, "key": key, "value": carrot_value_str(key)}
