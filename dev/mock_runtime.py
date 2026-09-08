@@ -74,11 +74,16 @@ SIM: dict[str, Any] = {
   "engageable": True,
   "torque_bar": True,
   "torque_utilization": 0.42,
+  "road_curve": True,
   "lead_d_rel": 38.0,
   "lead_v_rel": 1.5,
+  "lead_a_lead_k": -0.2,
   "lead2_d_rel": 62.0,
   "lead2_v_rel": 0.8,
   "lead2_y_rel": -3.7,
+  "lite_mode": False,
+  "edge_missing_demo": False,
+  "lane_shift": 0.0,
   "pcm_cruise_speed": False,
   "headless": False,
   "alert_sound": "none",
@@ -202,6 +207,49 @@ class MockParams:
 
   def clear_all(self) -> None:
     MockParams._store = _seed_params()
+
+
+def _mock_road_model(s: dict[str, Any]) -> dict[str, Any]:
+  """Sampled modelV2-style lane geometry for the road-lite scene.
+
+  Lateral offsets are in model frame (+right). A gentle left-hand curve is
+  simulated by drifting the road toward -y with distance when road_curve is on.
+  """
+  dists = [5.0, 15.0, 30.0, 50.0, 80.0, 120.0, 160.0]
+  curve = bool(s.get("road_curve", True))
+  bend = [(d * d * 0.00028) if curve else 0.0 for d in dists]
+  half = 5.55
+  # lateral shift of the ego lane center relative to the car (+right) —
+  # simulates lane departure for the LDW demo
+  shift = float(s.get("lane_shift", 0.0))
+
+  def off(y):
+    return [round(y - b + shift, 2) for b in bend]
+
+  lines = [off(-half), off(-1.85), off(1.85), off(half)]
+  # planned trajectory: follows the ego lane center, same curve
+  path = off(shift)
+  path_std = [0.08 + d * 0.004 for d in dists]
+  # demo for solid shoulder lines: drop the road edges so the outer lane
+  # lines take over as solid lines
+  edges = [off(-half), off(half)]
+  if s.get("edge_missing_demo"):
+    edges = [None, None]
+  line_types = [1 if edges[i] is None else 0 for i in range(2)]
+  line_types = [line_types[0], 0, 0, line_types[1]]
+  return {
+    "dists": dists,
+    "edges": edges,
+    "lines": lines,
+    "probs": [0.92, 0.95, 0.95, 0.9],
+    "line_types": line_types,
+    "leads": [
+      {"d": 55.0, "y": 3.7, "prob": 0.85},
+      {"d": 72.0, "y": -3.7, "prob": 0.8},
+    ],
+    "path": path,
+    "path_std": [round(v, 2) for v in path_std],
+  }
 
 
 def _mock_dev_ui(s: dict[str, Any]) -> dict[str, Any]:
@@ -346,9 +394,12 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "steering_angle_deg": float(s.get("steering_angle_deg", -2.4)),
     "lead_d_rel": float(s.get("lead_d_rel", 38.0)) if s["started"] else None,
     "lead_v_rel": float(s.get("lead_v_rel", 1.5)) if s["started"] else None,
+    "lead_a_lead_k": float(s.get("lead_a_lead_k", -0.2)) if s["started"] else None,
     "lead2_d_rel": float(s.get("lead2_d_rel", 62.0)) if s["started"] else None,
     "lead2_v_rel": float(s.get("lead2_v_rel", 0.8)) if s["started"] else None,
     "lead2_y_rel": float(s.get("lead2_y_rel", -3.7)) if s["started"] else None,
+    "road_model": _mock_road_model(s) if s["started"] else None,
+    "lite_mode": bool(s.get("lite_mode", False)),
     "circular_alert_allowed": s["started"] and s.get("alert_size", "none") in ("none", ""),
     "confidence_ball": {"target": float(s.get("confidence_target", 0.72)), "ui_status": s.get("ui_status", "engaged")} if s["started"] else None,
     "dev_ui": _mock_dev_ui(s) if s["started"] and int(s.get("developer_ui", 0)) > 0 else None,

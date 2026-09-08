@@ -277,6 +277,8 @@ PANELS: list[dict[str, Any]] = [
     "widgets": [
       {"type": "bool", "param": "BlindSpot", "label": "Show Blind Spot Warnings",
        "desc": "Enabling this will display warnings when a vehicle is detected in your blind spot as long as your car has BSM supported."},
+      {"type": "bool", "param": "OnroadLiteMode", "label": "Lite Driving Scene",
+       "desc": "Show the lightweight synthesized driving scene and never pull the camera stream. Saves CPU and bandwidth; also used as a fallback when the stream freezes."},
       {"type": "bool", "param": "TorqueBar", "label": "Steering Arc",
        "desc": "Display steering arc on the driving screen when lateral control is enabled."},
       {"type": "bool", "param": "RainbowMode", "label": "Enable Tesla Rainbow Mode",

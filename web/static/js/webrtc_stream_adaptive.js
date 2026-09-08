@@ -41,6 +41,9 @@ export function getEffectiveQuality() {
 }
 
 export function isPreviewStreamEnabled() {
+  // Persistent lite mode (Params OnroadLiteMode, mirrored by road_lite.js):
+  // never build the RTCPeerConnection, the synthesized scene replaces video.
+  if (window.__opuiLiteMode) return false;
   return getQualityPreference() !== "off";
 }
 

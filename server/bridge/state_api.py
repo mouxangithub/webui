@@ -221,6 +221,139 @@ def _egpu_state(ds, started: bool, sm=None) -> dict[str, Any] | None:
     return None
 
 
+def _lite_mode() -> bool:
+  """Persistent road-lite preference: show the synthesized scene and never pull the stream."""
+  try:
+    from openpilot.common.params import Params
+    return Params().get_bool("OnroadLiteMode")
+  except Exception:
+    return False
+
+
+def _road_model(sm: Any) -> dict[str, Any] | None:
+  """Sample modelV2 lane geometry at fixed distances for the road-lite scene.
+
+  Returns lateral offsets (model frame, +right) of road edges / lane lines at
+  fixed longitudinal distances, plus laneLineProbs, the planned trajectory
+  (model.path, same frame) with its lateral std, and leadsV3 tracks so the
+  frontend can render a curved road with a dynamic lane count, a rainbow
+  planning path and adjacent vehicles. None when no model data — the
+  frontend falls back to a straight road.
+  """
+  if not sm.valid.get("modelV2"):
+    return None
+  try:
+    model = sm["modelV2"]
+    dists = (5.0, 15.0, 30.0, 50.0, 80.0, 120.0, 160.0)
+
+    def _sample_y(line: Any) -> list[float] | None:
+      xs, ys = line.x, line.y
+      n = min(len(xs), len(ys))
+      if n < 2:
+        return None
+      xs_f = [float(xs[i]) for i in range(n)]
+      ys_f = [float(ys[i]) for i in range(n)]
+      if xs_f[-1] <= xs_f[0]:
+        return None
+      out = []
+      for d in dists:
+        if d <= xs_f[0]:
+          out.append(round(ys_f[0], 2))
+          continue
+        if d >= xs_f[-1]:
+          out.append(round(ys_f[-1], 2))
+          continue
+        for i in range(n - 1):
+          if xs_f[i] <= d <= xs_f[i + 1]:
+            t = (d - xs_f[i]) / max(xs_f[i + 1] - xs_f[i], 1e-6)
+            out.append(round(ys_f[i] + t * (ys_f[i + 1] - ys_f[i]), 2))
+            break
+      return out
+
+    edges = [_sample_y(e) if e is not None else None for e in model.roadEdges]
+    lines = [_sample_y(l) for l in model.laneLines]
+    # line style: 0 = dashed divider, 1 = solid. Heuristic — when the road edge
+    # on a side is missing, the outermost lane line acts as the shoulder line
+    # (solid). Real line-type data would need map/carrot sources later.
+    line_types = [
+      1 if (edges[0] is None and lines[0] is not None) else 0,
+      0,
+      0,
+      1 if (edges[1] is None and lines[3] is not None) else 0,
+    ]
+    probs: list[float] = []
+    try:
+      probs = [round(float(p), 2) for p in model.laneLineProbs][:4]
+    except Exception:
+      probs = []
+    if all(e is None for e in edges) and all(l is None for l in lines):
+      return None
+
+    leads = []
+    try:
+      for lead in model.leadsV3:
+        prob = float(lead.prob[0]) if len(lead.prob) else 0.0
+        if prob < 0.3 or len(lead.x) == 0 or len(lead.y) == 0:
+          continue
+        x0, y0 = float(lead.x[0]), float(lead.y[0])
+        if not (2.0 < x0 < 150.0) or x0 != x0 or y0 != y0:
+          continue
+        leads.append({"d": round(x0, 1), "y": round(y0, 2), "prob": round(prob, 2)})
+    except Exception:
+      leads = []
+    leads = leads[:3]
+
+    # planned trajectory: sample model.path (x forward, y lateral, +right,
+    # same model frame as laneLines) at the same distances; path.std gives
+    # the lateral uncertainty used by the frontend for the ribbon width.
+    path: list[float] | None = None
+    path_std: list[float] | None = None
+    try:
+      px = [float(v) for v in model.path.x]
+      py = [float(v) for v in model.path.y]
+      if len(px) >= 2 and len(py) == len(px) and px[-1] > px[0]:
+        path = _interp_at(px, py, dists)
+        try:
+          pstd = [float(v) for v in model.path.std]
+          if len(pstd) == len(px):
+            path_std = _interp_at(px, pstd, dists)
+        except Exception:
+          path_std = None
+    except Exception:
+      path = None
+
+    return {
+      "dists": list(dists),
+      "edges": edges,
+      "lines": lines,
+      "probs": probs,
+      "line_types": line_types,
+      "leads": leads,
+      "path": path,
+      "path_std": path_std,
+    }
+  except Exception:
+    return None
+
+
+def _interp_at(xs: list[float], ys: list[float], dists) -> list[float]:
+  """Linear interp of ys over xs at the requested distances (clamped at ends)."""
+  out: list[float] = []
+  for d in dists:
+    if d <= xs[0]:
+      out.append(round(ys[0], 2))
+      continue
+    if d >= xs[-1]:
+      out.append(round(ys[-1], 2))
+      continue
+    for i in range(len(xs) - 1):
+      if xs[i] <= d <= xs[i + 1]:
+        t = (d - xs[i]) / max(xs[i + 1] - xs[i], 1e-6)
+        out.append(round(ys[i] + t * (ys[i + 1] - ys[i]), 2))
+        break
+  return out
+
+
 def build_state_from_sm(sm) -> dict[str, Any]:
   global _v_ego_cluster_seen
   from webui.server.bridge.car_context import get_car_context
@@ -528,6 +661,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
 
   lead_d_rel = None
   lead_v_rel = None
+  lead_a_lead_k = None
   lead2_d_rel = None
   lead2_v_rel = None
   lead2_y_rel = None
@@ -541,6 +675,10 @@ def build_state_from_sm(sm) -> dict[str, Any]:
           lead_d_rel = round(d_rel, 1)
         if v_rel == v_rel:
           lead_v_rel = round(v_rel, 2)
+        # kalman-filtered lead accel — drives the lead brake lights in road lite
+        a_lead = float(getattr(lead, "aLeadK", 0.0) or 0.0)
+        if a_lead == a_lead:
+          lead_a_lead_k = round(a_lead, 2)
       # adjacent-lane lead (radar's secondary track; yRel is lateral offset, +left)
       lead2 = sm["radarState"].leadTwo
       if lead2 is not None and getattr(lead2, "present", False):
@@ -665,9 +803,12 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "steering_angle_deg": steering_angle_deg,
     "lead_d_rel": lead_d_rel,
     "lead_v_rel": lead_v_rel,
+    "lead_a_lead_k": lead_a_lead_k,
     "lead2_d_rel": lead2_d_rel,
     "lead2_v_rel": lead2_v_rel,
     "lead2_y_rel": lead2_y_rel,
+    "road_model": _road_model(sm),
+    "lite_mode": _lite_mode(),
     "circular_alert_allowed": circular_alert_allowed,
     "confidence_ball": confidence_ball,
     "driver_face": driver_face,
