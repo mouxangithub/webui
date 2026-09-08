@@ -61,8 +61,9 @@ function injectStyle() {
   style.id = "opui-hud-carrot-style";
   style.textContent = `
 .opui-hud-carrot {
-  position: absolute; bottom: 120px; width: 560px;
-  padding: 12px 16px 12px 14px; box-sizing: border-box;
+  position: absolute; bottom: 280px; left: 50%; transform: translateX(-50%);
+  width: 560px; max-width: calc(100% - 20px); box-sizing: border-box;
+  padding: 12px 16px 12px 14px;
   background: rgba(10, 16, 24, 0.55);
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -71,8 +72,8 @@ function injectStyle() {
   color: #fff; font-family: Inter, sans-serif;
   z-index: 5; transition: opacity 0.15s linear;
 }
-.opui-hud-carrot.cn-side-l { left: 12px; }
-.opui-hud-carrot.cn-side-r { right: 12px; }
+/* The card is horizontally centered and raised above the steering torque
+   arc band (bottom 180px), so it never overlaps the arc or the speed block. */
 
 /* head row: turn mini-icon | headline | meta */
 .cn-head { display: flex; align-items: center; gap: 14px; min-height: 60px; }
@@ -243,8 +244,8 @@ export function updateCarrotNav(st) {
   const isMetric = st.is_metric !== false;
   const speedKph = Number(st?.sp_hud?.cluster_speed) || 0;
   el.hidden = false;
-  el.classList.toggle("cn-side-l", Number(nav.panel_side) !== 1);
-  el.classList.toggle("cn-side-r", Number(nav.panel_side) === 1);
+  // horizontally centered, raised above the torque arc band (panel_side is
+  // intentionally no longer used — the user prefers a fixed centered card)
   el.style.opacity = String(Math.max(0.1, Math.min(1, (Number(nav.panel_opacity) || 100) / 100)));
   const sig = JSON.stringify(nav) + "|" + (isMetric ? "m" : "i") + "|" + speedKph;
   if (sig === lastNavSig) return;

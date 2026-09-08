@@ -909,10 +909,27 @@ function navInfo() {
 function drawTbtBanner(w, h) {
   const nav = navInfo();
   if (!nav) return;
-  const bw = Math.min(w * 0.62, 460);
-  const bh = Math.max(52, w * 0.052);
+  const bw = Math.min(w * 0.55, 440);
+  let bh = Math.max(48, Math.min(w * 0.05, 64));
   const bx = (w - bw) / 2;
-  const by = h * 0.045;
+  // Horizontal center. Vertical: fit the free band ABOVE the DOM speed
+  // cluster (which is also horizontally centered, top: 92px) so the two
+  // never overlap regardless of viewport size. getBoundingClientRect is in
+  // scaled screen coords — convert to canvas logical px via the stage scale.
+  let by = h * 0.03;
+  try {
+    const speedEl = document.querySelector("#hud .opui-hud-speed-block");
+    if (speedEl && host) {
+      const sr = speedEl.getBoundingClientRect();
+      const hr = host.getBoundingClientRect();
+      const scale = (hr.width > 0 && host.clientWidth > 0) ? hr.width / host.clientWidth : 1;
+      if (sr.height > 0 && scale > 0) {
+        const speedTop = (sr.top - hr.top) / scale;
+        if (speedTop - 8 < by + bh) bh = Math.max(40, speedTop - by - 16);
+        by = Math.max(8, Math.min(by, speedTop - bh - 8));
+      }
+    }
+  } catch { /* measurement failed — keep fallback position */ }
   ctx.save();
   ctx.globalAlpha = 0.92;
   ctx.fillStyle = "rgba(10, 16, 32, 0.88)";
