@@ -14,6 +14,7 @@ STATE_HUB_SERVICES: tuple[str, ...] = (
   "onroadEvents",
   "extrinsicsCalibration",
   "radarState",
+  "radarTracks",
   "deviceState",
   "pandaStates",
   "carParams",

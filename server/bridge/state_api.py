@@ -741,6 +741,31 @@ def build_state_from_sm(sm) -> dict[str, Any]:
         "panel_side": carrot_panel_side,
         "panel_opacity": max(0, min(100, carrot_panel_opacity)),
       }
+    # Unified longitudinal control diagnostics.
+    if sm.valid.get("longitudinalPlanSP"):
+      lp_sp = sm["longitudinalPlanSP"]
+      src_enum = getattr(lp_sp, "longitudinalPlanSource", None)
+      sp_hud["longitudinal_source"] = str(src_enum).split(".")[-1] if src_enum is not None else ""
+      carrot_plan = getattr(lp_sp, "carrot", None)
+      if carrot_plan is not None and getattr(carrot_plan, "active", False):
+        conv = 3.6 if is_metric else 2.23694
+        sp_hud["carrot_plan"] = {
+          "x_state": str(getattr(carrot_plan, "xState", "")),
+          "driving_mode": str(getattr(carrot_plan, "drivingMode", "")),
+          "v_target": round(float(getattr(carrot_plan, "vTarget", 0) or 0) * conv),
+          "a_target": round(float(getattr(carrot_plan, "aTarget", 0) or 0), 2),
+          "stop_dist": round(float(getattr(carrot_plan, "stopDist", 0) or 0), 1),
+        }
+      traffic_light = getattr(lp_sp, "trafficLight", None)
+      if traffic_light is not None:
+        tl_state_enum = getattr(traffic_light, "lightState", None)
+        tl_src_enum = getattr(traffic_light, "source", None)
+        sp_hud["traffic_light"] = {
+          "state": str(tl_state_enum).split(".")[-1] if tl_state_enum is not None else "",
+          "source": str(tl_src_enum).split(".")[-1] if tl_src_enum is not None else "",
+          "confidence": round(float(getattr(traffic_light, "confidence", 0) or 0), 2),
+          "distance": round(float(getattr(traffic_light, "distance", 0) or 0), 1),
+        }
     try:
       if car_ctx.pcm_cruise_speed is not None:
         sp_hud["pcm_cruise_speed"] = bool(car_ctx.pcm_cruise_speed)

@@ -4366,9 +4366,29 @@ body.opui-system-wait-open {
 }
 
 
-/* HUD (speed / cruise / alerts) stays visible while the lite scene is shown —
-   the default rule hides it until the video plays. */
-.opui-camera-wrap.road-lite-on .opui-hud {
+/* HUD (speed / cruise / alerts) stays visible while the lite scene is shown.
+   NOTE: #hud is a *sibling* of #camera-wrap inside .opui-onroad-stage (see
+   index.html), so this must be keyed off the class road_lite.js puts on #hud
+   itself — the old `.opui-camera-wrap.road-lite-on .opui-hud` descendant
+   selector could never match. */
+#hud.road-lite-on {
   visibility: visible !important;
   pointer-events: none;
+}
+
+/* In lite mode the synthesized canvas draws its own navigation band directly
+   under the speed block, and the sunnypilot SLA circle owns the speed limit.
+   The DOM road-name chip and the carrot card would both be second, conflicting
+   copies, so they are suppressed here. */
+#hud.road-lite-on #hud-road-name,
+#hud.road-lite-on #hud-carrot-nav,
+#hud.road-lite-on .opui-amapbar {
+  display: none !important;
+}
+
+/* The WebGL model overlay (lanes / path / leads) is a *sibling renderer* to the
+   road-lite canvas and sits above it (z-index 6 vs 5). road_lite.js draws the
+   same geometry itself, so leaving it visible double-renders the scene. */
+.opui-camera-wrap.road-lite-on .opui-model-overlay {
+  display: none !important;
 }

@@ -191,9 +191,15 @@ def _limit_gradient(stops: list[dict[str, Any]], max_stops: int = MAX_PATH_GRADI
 
 
 def _pack_coords(payload: dict[str, Any]) -> bytes:
+  # The timestamp field is 64-bit on purpose. `model_mono_time` comes from
+  # cereal `logMonoTime`, which is *nanoseconds* since boot (`time.monotonic_ns`),
+  # so a 32-bit field overflows once the device has been up for ~4.3 seconds and
+  # this function then raises struct.error — taking down every non-empty overlay
+  # frame with it. Only the md5 of these bytes is used (frame dedupe), so the
+  # layout is private to this module and widening it breaks nothing else.
   chunks: list[bytes] = [
     struct.pack(
-      "!IHHBBB",
+      "!QHHBBB",
       int(payload.get("model_mono_time") or 0),
       int(payload.get("width") or 0),
       int(payload.get("height") or 0),

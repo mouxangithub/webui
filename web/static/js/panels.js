@@ -1624,6 +1624,10 @@ function renderWidget(w, panelData) {
     }
     if (w.custom === "webui_update") return renderWebUiUpdateRow();
     if (w.custom === "amap_api_key") return renderAmapApiKeyRow(w);
+    if (w.custom === "speed_limit_sources") return renderSpeedLimitSourcesRow(w);
+    if (w.custom === "navigation_provider") return renderNavigationProviderRow(w);
+    if (w.custom === "longitudinal_source") return renderLongitudinalSourceRow(w);
+    if (w.custom === "traffic_light_fusion") return renderTrafficLightFusionRow(w);
     if (w.custom === "device_calibration") return null;
     return null;
   }
@@ -2361,6 +2365,188 @@ function renderAmapApiKeyRow(w) {
   row.querySelector(".opui-sp-row-actions")?.addEventListener("click", (e) => e.stopPropagation());
   if (w.desc) bindRowExpand(row, { desc: t(w.desc) });
   refresh();
+  return row;
+}
+
+/* Speed-limit source diagnostics: show the raw values from car, map (OSM/Amap)
+   and carrot navigation, plus the merged resolver result. This is read-only. */
+function renderSpeedLimitSourcesRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--readonly";
+  row.dataset.custom = "speed_limit_sources";
+  row.innerHTML = `
+    <div class="opui-sp-row-text" style="width:100%">
+      <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+      <div class="opui-sla-sources" style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:13px;color:rgba(240,244,255,0.85)">
+        <div class="opui-sla-source" data-src="car"><span class="opui-sla-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>车机 <b>--</b></div>
+        <div class="opui-sla-source" data-src="map"><span class="opui-sla-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>地图 <b>--</b></div>
+        <div class="opui-sla-source" data-src="carrot"><span class="opui-sla-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>Carrot <b>--</b></div>
+        <div class="opui-sla-source" data-src="merged"><span class="opui-sla-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>生效 <b>--</b></div>
+      </div>
+    </div>`;
+  const srcEls = {
+    car: row.querySelector('[data-src="car"]'),
+    map: row.querySelector('[data-src="map"]'),
+    carrot: row.querySelector('[data-src="carrot"]'),
+    merged: row.querySelector('[data-src="merged"]'),
+  };
+  const update = () => {
+    const st = opuiWs.lastState;
+    const sources = st?.sp_hud?.speed_limit_sources;
+    if (!sources) return;
+    const labels = { car: "车机", map: "地图", carrot: "Carrot", merged: "生效" };
+    for (const key of Object.keys(srcEls)) {
+      const el = srcEls[key];
+      if (!el) continue;
+      const info = sources[key] || {};
+      const val = info.value;
+      const isActive = key === "merged" ? (sources.merged?.source && val != null)
+                                        : info.valid && val != null;
+      const dot = el.querySelector(".opui-sla-dot");
+      if (dot) dot.style.background = isActive ? "#4ade80" : "#888";
+      const extra = key === "map" && info.provider ? ` (${escapeHtml(info.provider)})`
+                   : key === "merged" && info.source ? ` (${escapeHtml(info.source)})`
+                   : "";
+      const text = val != null ? `${val} <span style="opacity:.7;font-weight:400">${extra}</span>`
+                                : `-- <span style="opacity:.5;font-weight:400">${extra}</span>`;
+      el.innerHTML = `<span class="opui-sla-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${isActive ? "#4ade80" : "#888"};margin-right:6px"></span>${labels[key]} <b style="font-weight:700">${text}</b>`;
+    }
+  };
+  const off = opuiWs.on("state", update);
+  row._cleanup = off;
+  update();
+  if (w.desc) bindRowExpand(row, { desc: t(w.desc) });
+  return row;
+}
+
+/* Navigation provider read-out: shows whether mapd is currently using OSM or
+   the Amap web API for map-based speed limits and road names. */
+function renderNavigationProviderRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--readonly";
+  row.dataset.custom = "navigation_provider";
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+    </div>
+    <div class="opui-row-value" id="nav-provider-value">--</div>`;
+  const update = () => {
+    const st = opuiWs.lastState;
+    const provider = st?.amap_provider || "OSM";
+    const el = row.querySelector("#nav-provider-value");
+    if (el) el.textContent = provider;
+  };
+  const off = opuiWs.on("state", update);
+  row._cleanup = off;
+  update();
+  return row;
+}
+
+/* Longitudinal source read-out: shows which arbitration source currently wins. */
+function renderLongitudinalSourceRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--readonly";
+  row.dataset.custom = "longitudinal_source";
+  row.innerHTML = `
+    <div class="opui-sp-row-text" style="width:100%">
+      <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+      <div class="opui-long-source" style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;color:rgba(240,244,255,0.85)">
+        <div class="opui-long-source-item" data-key="source"><span class="opui-long-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>来源 <b>--</b></div>
+        <div class="opui-long-source-item" data-key="carrot_active"><span class="opui-long-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>Carrot <b>--</b></div>
+        <div class="opui-long-source-item" data-key="carrot_v_target"><span class="opui-long-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>目标车速 <b>--</b></div>
+        <div class="opui-long-source-item" data-key="carrot_stop_dist"><span class="opui-long-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>停车距离 <b>--</b></div>
+      </div>
+    </div>`;
+  const items = {
+    source: row.querySelector('[data-key="source"]'),
+    carrot_active: row.querySelector('[data-key="carrot_active"]'),
+    carrot_v_target: row.querySelector('[data-key="carrot_v_target"]'),
+    carrot_stop_dist: row.querySelector('[data-key="carrot_stop_dist"]'),
+  };
+  const update = () => {
+    const st = opuiWs.lastState;
+    const src = st?.sp_hud?.longitudinal_source || "";
+    const cp = st?.sp_hud?.carrot_plan;
+    const isCarrot = src.toLowerCase() === "carrot";
+    const labels = {
+      source: "来源",
+      carrot_active: "Carrot",
+      carrot_v_target: "目标车速",
+      carrot_stop_dist: "停车距离",
+    };
+    const values = {
+      source: src || "--",
+      carrot_active: cp?.active ? "active" : (cp ? "inactive" : "--"),
+      carrot_v_target: cp?.v_target != null ? `${cp.v_target}` : "--",
+      carrot_stop_dist: cp?.stop_dist != null ? `${cp.stop_dist} m` : "--",
+    };
+    for (const key of Object.keys(items)) {
+      const el = items[key];
+      if (!el) continue;
+      const dot = el.querySelector(".opui-long-dot");
+      const active = key === "source" ? isCarrot : (cp?.active && key.startsWith("carrot"));
+      if (dot) dot.style.background = active ? "#4ade80" : "#888";
+      el.innerHTML = `<span class="opui-long-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${active ? "#4ade80" : "#888"};margin-right:6px"></span>${labels[key]} <b style="font-weight:700">${values[key]}</b>`;
+    }
+  };
+  const off = opuiWs.on("state", update);
+  row._cleanup = off;
+  update();
+  if (w.desc) bindRowExpand(row, { desc: t(w.desc) });
+  return row;
+}
+
+/* Traffic-light fusion read-out: shows fused state and source. */
+function renderTrafficLightFusionRow(w) {
+  const row = document.createElement("div");
+  row.className = "opui-sp-row opui-sp-row--readonly";
+  row.dataset.custom = "traffic_light_fusion";
+  row.innerHTML = `
+    <div class="opui-sp-row-text" style="width:100%">
+      <div class="opui-sp-row-title">${escapeHtml(t(w.label))}</div>
+      <div class="opui-tl-fusion" style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;color:rgba(240,244,255,0.85)">
+        <div class="opui-tl-item" data-key="state"><span class="opui-tl-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>状态 <b>--</b></div>
+        <div class="opui-tl-item" data-key="source"><span class="opui-tl-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>来源 <b>--</b></div>
+        <div class="opui-tl-item" data-key="distance"><span class="opui-tl-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>距离 <b>--</b></div>
+        <div class="opui-tl-item" data-key="confidence"><span class="opui-tl-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#888;margin-right:6px"></span>置信度 <b>--</b></div>
+      </div>
+    </div>`;
+  const items = {
+    state: row.querySelector('[data-key="state"]'),
+    source: row.querySelector('[data-key="source"]'),
+    distance: row.querySelector('[data-key="distance"]'),
+    confidence: row.querySelector('[data-key="confidence"]'),
+  };
+  const stateColors = {
+    red: "#ef4444",
+    redconfirmed: "#ef4444",
+    green: "#22c55e",
+    greenconfirmed: "#22c55e",
+  };
+  const update = () => {
+    const st = opuiWs.lastState;
+    const tl = st?.sp_hud?.traffic_light;
+    const labels = { state: "状态", source: "来源", distance: "距离", confidence: "置信度" };
+    const values = {
+      state: tl?.state || "--",
+      source: tl?.source || "--",
+      distance: tl?.distance != null ? `${tl.distance} m` : "--",
+      confidence: tl?.confidence != null ? `${tl.confidence}` : "--",
+    };
+    for (const key of Object.keys(items)) {
+      const el = items[key];
+      if (!el) continue;
+      const dot = el.querySelector(".opui-tl-dot");
+      const hasData = tl != null && tl.state != null && tl.state !== "";
+      const color = key === "state" ? (stateColors[(tl?.state || "").toLowerCase()] || "#888") : (hasData ? "#4ade80" : "#888");
+      if (dot) dot.style.background = color;
+      el.innerHTML = `<span class="opui-tl-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${labels[key]} <b style="font-weight:700">${values[key]}</b>`;
+    }
+  };
+  const off = opuiWs.on("state", update);
+  row._cleanup = off;
+  update();
+  if (w.desc) bindRowExpand(row, { desc: t(w.desc) });
   return row;
 }
 

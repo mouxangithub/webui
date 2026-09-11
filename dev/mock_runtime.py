@@ -442,6 +442,20 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
       "carrot_nav": _mock_carrot_nav(s) if s["started"] and s.get("carrot_nav_demo", True) else None,
       "amap_lines": ({"valid": True, "left_blocked": False, "right_blocked": True}
                      if s["started"] and s.get("amap_lines_demo", True) else None),
+      "longitudinal_source": s.get("longitudinal_source", "cruise"),
+      "carrot_plan": {
+        "x_state": s.get("carrot_plan_x_state", "e2eCruise"),
+        "driving_mode": s.get("carrot_plan_driving_mode", "normal"),
+        "v_target": s.get("carrot_plan_v_target", s.get("set_speed_kmh", 80)),
+        "a_target": s.get("carrot_plan_a_target", 0.0),
+        "stop_dist": s.get("carrot_plan_stop_dist", 0.0),
+      } if s.get("carrot_plan_demo", True) else None,
+      "traffic_light": {
+        "state": s.get("traffic_light_state", ""),
+        "source": s.get("traffic_light_source", ""),
+        "confidence": s.get("traffic_light_confidence", 0.0),
+        "distance": s.get("traffic_light_distance", 0.0),
+      } if s.get("traffic_light_demo", True) else None,
     },
     "developer_ui": int(s.get("developer_ui", 0)),
     "recording_audio": bool(s.get("recording_audio", False)),

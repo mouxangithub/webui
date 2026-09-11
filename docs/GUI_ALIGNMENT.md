@@ -7,6 +7,35 @@
 
 **图例**：✅ 行为/布局已对齐 · 🟡 近似实现（非像素 1:1）· ❌ 未实现 · ⛔ 架构性不可 1:1
 
+**最后更新：2026-09-11（v81 预览）**
+
+---
+
+## 0.-2 v81 预览（三源限速 + road-lite 完整改造）
+
+| 区域 | 项 | 状态 |
+|------|-----|------|
+| 数据 | `SpeedLimitResolver` 合并 carrot 导航限速到 `map` 源；SDI 走 `LIMIT_ADAPT_ACC` 前瞻语义；carrot 包新鲜度/数值合理性门控 | ✅ |
+| 数据 | `plannerd` 订阅 `carrotManSP`（`ignore_alive`） | ✅ |
+| 数据 | `state_api` 输出 `sp_hud.speed_limit_sources`（车机/地图/Carrot/生效）与顶层 `amap_provider` | ✅ |
+| 数据 | `state_api` 盲区/转向灯改读 `carState`（原 `SelfdriveStateSP` 字段不存在） | ✅ |
+| 数据 | `radarTracks` 加入 `STATE_HUB_SERVICES`，`state_api` 输出 `radar_tracks` | ✅ |
+| HUD | road-lite：导航带移到时速下方居中、字号放大；移除单独限速徽标；SLA 圆环接管 | ✅ |
+| HUD | road-lite：行人/自行车/电动车/卡车/摩托精灵 + 方向箭头 + 前左/前右/侧向车辆（radarTracks） | ✅ |
+| HUD | road-lite：Amap 车道线语义（实白/虚白/实黄/双黄/减速带/路缘）+ `lane_centers` 车道中心 + 路肩碎石 | ✅ |
+| HUD | road-lite：天际线/轮胎痕/街灯杆/暗角/沥青接缝等视觉打磨 | ✅ |
+| HUD | road-lite：红绿灯/倒计时/导航路径接 `carrot_man.py` 真值（此前硬编码为 0/""） | ✅ |
+| 设置 | Cruise→Speed Limit 增加「Speed Limit Sources」实时诊断行 | ✅ |
+| 设置 | Navigation 增加「Map Provider」只读行（OSM/高德） | ✅ |
+| WebUI | 修复 `/api/opui/model/overlay` HTTP 500（`model_mono_time` uint32 溢出） | ✅ |
+| WebUI | road-lite 模式下停止 model overlay WS/HTTP 轮询 | ✅ |
+| WebUI | PC mock 补齐所有顶层 state key；新增 `test_state_contract` 防止契约漂移 | ✅ |
+| 文档 | 修正网络强度图标两行矛盾记载 | ✅ |
+| 已知差异 | road-lite 目标分类为运动学启发式，cereal 无对象类别字段；SDI 减速提前量按 `LIMIT_ADAPT_ACC` 保守估算，未做 per-vehicle jerk 标定 | 🟡 |
+| 未完成 | 实车/设备验证；`CarrotPlanner` 接控制链（影响纵向规划，属单独安全评审） | ❌ |
+
+---
+
 **最后更新：2026-09-06（v80）**
 
 ---
@@ -89,7 +118,7 @@
 | 区域 | 项 | 状态 |
 |------|-----|------|
 | 模型 | WebGL path/lead 多层光晕；mock 前车 chevron | ✅ |
-| 侧栏 | Wi-Fi 类型显示分级图标（`wifi_strength_*.png`）+ 圆点 | ✅ |
+| 侧栏 | Wi-Fi 类型文字 + 5 级圆点强度（`opui-net-dots`）；`sidebar.py` 同样只读 `networkStrength` 但不渲染图标，webui 用圆点做可视化近似 | 🟡 |
 | OSM | 内置 **173 国 + 56 州** 全量离线 JSON；`full` 标记 | ✅ |
 | OSM | 修复 `_save_disk_cache` / `_shm_params` | ✅ |
 | 动效 | 扭矩条 rAF + 真实 dt；DM arc fade 一阶滤波 | ✅ |
@@ -383,7 +412,7 @@ PYTHONPATH=/data/openpilot:/usr/local/venv/lib/python3.12/site-packages \
 |------|-----|------|
 | 告警 | full 尺寸动态高度 | ✅ v54 |
 | Home | Prime 勾选纹理 | ✅ 色值对齐 `prime.py`（✓ #465bea / subscribed #86ff4e） |
-| 侧栏 | Wi-Fi 分级纹理 | ✅ 圆点（与 `sidebar.py` 一致） |
+| 侧栏 | Wi-Fi 分级纹理 | 🟡 5 级圆点（`sidebar.py` 读取 `networkStrength` 但不绘制图标，webui 用圆点近似） |
 | Steering | Torque 版本树 JSON | ✅ `/api/opui/steering/torque-versions` |
 | 模型 | shader 级精度 | 🟡 canvas 近似（架构受限，见 4.1） |
 | 模型 | 车道线/彩虹路径实车 | 🟡 v53 已修，待上车验证 |

@@ -77,6 +77,26 @@ class ModelOverlayTests(unittest.TestCase):
     other = {**base, "lanes": [{"prob": 0.9, "polygon": [[2.0, 2.0]]}]}
     self.assertNotEqual(_digest_geometry(base), _digest_geometry(other))
 
+  def test_digest_accepts_nanosecond_mono_time(self) -> None:
+    """Regression: `model_mono_time` is cereal logMonoTime in nanoseconds, so it
+    passes 2**32 after ~4.3 s of uptime. Packing it as 32-bit made every
+    non-empty overlay frame raise struct.error (HTTP 500)."""
+    frame = {
+      "model_mono_time": 26_049_708_786_700,   # ~7.2 h uptime, ns
+      "width": 2100,
+      "height": 1020,
+      "experimental": True,
+      "rainbow": True,
+      "allow_throttle": True,
+      "lanes": [],
+      "edges": [],
+      "path_polygon": [],
+      "path_gradient": [],
+      "leads": [],
+    }
+    digest = _digest_geometry(frame)          # must not raise
+    self.assertEqual(len(digest), 16)
+
 
 if __name__ == "__main__":
   unittest.main()
