@@ -1015,10 +1015,6 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Reset Carrot Tuning": "重置 Carrot 调参",
     "Reset all Carrot tuning parameters to defaults?": "将所有 Carrot 调参项恢复为默认值？",
     "Restore every Carrot tuning parameter on this page to its compiled-in default.": "将本页所有 Carrot 调参项恢复为内置默认值。",
-    "Lite Driving Scene": "行车简洁画面",
-    "Show the lightweight synthesized driving scene and never pull the camera stream. Saves CPU and bandwidth; also used as a fallback when the stream freezes.": (
-      "显示轻量合成的简洁行车画面，不再拉取摄像头流。节省 CPU 与带宽，同时也是视频流冻帧时的兜底显示。"
-    ),
   },
   "zh-CHT": {
     "Web UI": "Web UI",
@@ -1350,10 +1346,6 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Idle": "閒置",
     "ETA": "剩餘",
     "Curve": "彎道",
-    "Lite Driving Scene": "行車簡潔畫面",
-    "Show the lightweight synthesized driving scene and never pull the camera stream. Saves CPU and bandwidth; also used as a fallback when the stream freezes.": (
-      "顯示輕量合成的簡潔行車畫面，不再拉取攝影機串流。節省 CPU 與頻寬，同時也是視訊流凍結時的兜底顯示。"
-    ),
   },
 }
 

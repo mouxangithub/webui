@@ -268,6 +268,8 @@ PANELS: list[dict[str, Any]] = [
       {"type": "int", "param": "CarrotPanelOpacity", "label": "Carrot Nav Panel Opacity",
        "min": 10, "max": 100, "step": 5, "offroad_only": True,
        "desc": "Opacity of the onroad Carrot navigation panel, in percent. Default 100."},
+      {"type": "custom", "custom": "navigation_provider", "label": "Map Provider",
+       "desc": "Current map data source used for speed limits and road names. Amap requires an API key to be set above."},
       {"type": "subpanel", "target": "navigation__carrot_tuning", "label": "Carrot Tuning", "button": "CUSTOMIZE"},
     ],
   },
@@ -277,8 +279,6 @@ PANELS: list[dict[str, Any]] = [
     "widgets": [
       {"type": "bool", "param": "BlindSpot", "label": "Show Blind Spot Warnings",
        "desc": "Enabling this will display warnings when a vehicle is detected in your blind spot as long as your car has BSM supported."},
-      {"type": "bool", "param": "OnroadLiteMode", "label": "Lite Driving Scene",
-       "desc": "Show the lightweight synthesized driving scene and never pull the camera stream. Saves CPU and bandwidth; also used as a fallback when the stream freezes."},
       {"type": "bool", "param": "TorqueBar", "label": "Steering Arc",
        "desc": "Display steering arc on the driving screen when lateral control is enabled."},
       {"type": "bool", "param": "RainbowMode", "label": "Enable Tesla Rainbow Mode",
@@ -587,6 +587,8 @@ SUBPANELS: dict[str, dict[str, Any]] = {
     "widgets": [
       {"type": "multiple_button", "param": "SpeedLimitMode", "label": "Speed Limit",
        "buttons": ["Off", "Info", "Warning", "Assist"]},
+      {"type": "custom", "custom": "speed_limit_sources", "label": "Speed Limit Sources",
+       "desc": "Real-time values from the car (TSR), map provider (OSM/Amap), and Carrot navigation. The merged value is what the Speed Limit widget currently displays."},
       {"type": "subpanel", "target": "cruise__sla__policy", "label": "Customize Source", "button": "CUSTOMIZE"},
       {"type": "multiple_button", "param": "SpeedLimitOffsetType", "label": "Speed Limit Offset",
        "buttons": ["None", "Fixed", "%"]},

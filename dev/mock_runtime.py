@@ -81,9 +81,11 @@ SIM: dict[str, Any] = {
   "lead2_d_rel": 62.0,
   "lead2_v_rel": 0.8,
   "lead2_y_rel": -3.7,
-  "lite_mode": False,
   "edge_missing_demo": False,
   "lane_shift": 0.0,
+  "lane_kinds_demo": True,
+  "radar_tracks_demo": True,
+  "target_classes_demo": True,
   "pcm_cruise_speed": False,
   "headless": False,
   "alert_sound": "none",
@@ -94,6 +96,11 @@ SIM: dict[str, Any] = {
   "agnos_sim_rebooting": False,
   "agnos_sim_reboot_until": 0.0,
   "is_body": False,
+  "amap_enabled": True,
+  "carrot_road_limit": 120,
+  "car_speed_limit": 120,
+  "map_speed_limit": 120,
+  "speed_limit_source": "map",
 }
 
 
@@ -214,6 +221,11 @@ def _mock_road_model(s: dict[str, Any]) -> dict[str, Any]:
 
   Lateral offsets are in model frame (+right). A gentle left-hand curve is
   simulated by drifting the road toward -y with distance when road_curve is on.
+
+  MUST stay in sync with ``state_api._road_model()`` — this is a parallel
+  implementation of the same wire contract, so a field added there but not here
+  silently disables the feature on the PC preview (and vice versa: the frontend
+  cannot tell the difference). Same for ``snapshot_dev_ui_state``'s top level.
   """
   dists = [5.0, 15.0, 30.0, 50.0, 80.0, 120.0, 160.0]
   curve = bool(s.get("road_curve", True))
@@ -235,21 +247,59 @@ def _mock_road_model(s: dict[str, Any]) -> dict[str, Any]:
   edges = [off(-half), off(half)]
   if s.get("edge_missing_demo"):
     edges = [None, None]
-  line_types = [1 if edges[i] is None else 0 for i in range(2)]
-  line_types = [line_types[0], 0, 0, line_types[1]]
+
+  # Amap lane-line semantics (AmapLineType): 0 unknown · 1 solid white ·
+  # 2 dashed white · 3 solid yellow · 4 double yellow · 5 botts dots · 6 edge.
+  line_kinds = [0, 0, 0, 0]
+  if s.get("lane_kinds_demo", True):
+    line_kinds[1] = 3   # median side: solid yellow
+    line_kinds[2] = 2   # lane side: dashed white
+  if edges[0] is None and lines[0] is not None:
+    line_kinds[0] = 6
+  if edges[1] is None and lines[3] is not None:
+    line_kinds[3] = 6
+  solid_kinds = (1, 3, 4, 6)
+  line_types = [1 if k in solid_kinds else 0 for k in line_kinds]
+
+  leads = [
+    # ego-lane lead
+    {"d": 55.0, "y": 0.25, "prob": 0.85, "v": 18.0, "a": -0.2, "y_std": 0.45, "x_std": 1.20, "heading": 0.01, "i": 0},
+    # front-left vehicle
+    {"d": 72.0, "y": -3.60, "prob": 0.80, "v": 22.0, "a": 0.1, "y_std": 0.40, "x_std": 1.10, "heading": -0.03, "i": 1},
+  ]
+  if s.get("target_classes_demo", True):
+    leads += [
+      # long trailer → truck branch (xStd > 1.6)
+      {"d": 95.0, "y": -1.50, "prob": 0.60, "v": 19.0, "a": 0.0, "y_std": 0.60, "x_std": 2.10, "heading": 0.02, "i": 2},
+      # wobbly, slow, short → e-bike branch
+      {"d": 26.0, "y": 4.00, "prob": 0.55, "v": 7.5, "a": 0.2, "y_std": 0.82, "x_std": 0.85, "heading": 0.06, "i": 3},
+      # nearly stationary at the kerb → pedestrian branch
+      {"d": 18.0, "y": 4.50, "prob": 0.50, "v": 1.1, "a": 0.0, "y_std": 0.30, "x_std": 0.35, "heading": -1.20, "i": 4},
+    ]
+
   return {
     "dists": dists,
     "edges": edges,
     "lines": lines,
     "probs": [0.92, 0.95, 0.95, 0.9],
     "line_types": line_types,
-    "leads": [
-      {"d": 55.0, "y": 3.7, "prob": 0.85},
-      {"d": 72.0, "y": -3.7, "prob": 0.8},
-    ],
+    "line_kinds": line_kinds,
+    # ego-lane centre line = midpoint of the two inner lane lines
+    "lane_centers": off(0),
+    "leads": leads,
     "path": path,
     "path_std": [round(v, 2) for v in path_std],
   }
+
+
+def _mock_radar_tracks(s: dict[str, Any]) -> list[dict[str, Any]]:
+  """Car.RadarData.points equivalent — the only source for front-left /
+  front-right / flanking objects (radarState exposes leadOne/leadTwo only)."""
+  return [
+    {"id": 11, "d": 9.5, "y": 2.35, "v": -0.8},
+    {"id": 12, "d": 14.0, "y": -2.50, "v": -0.4},
+    {"id": 13, "d": 26.0, "y": 4.10, "v": -0.2},
+  ]
 
 
 def _mock_dev_ui(s: dict[str, Any]) -> dict[str, Any]:
@@ -367,6 +417,12 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
       "speed_limit_assist_state": s.get("speed_limit_assist", ""),
       "speed_limit_assist": s.get("speed_limit_assist", ""),
       "speed_limit_assist_active": bool(s.get("speed_limit_assist")),
+      "speed_limit_sources": {
+        "car": {"value": s.get("car_speed_limit"), "valid": s.get("car_speed_limit") is not None},
+        "map": {"value": s.get("map_speed_limit", s.get("speed_limit")), "valid": True, "provider": "高德" if s.get("amap_enabled") else "OSM"},
+        "carrot": {"value": s.get("carrot_road_limit"), "valid": s.get("carrot_road_limit") is not None, "sdi_value": None, "sdi_distance": 0.},
+        "merged": {"value": s.get("speed_limit"), "source": s.get("speed_limit_source", "map")},
+      },
       "road_name": s.get("road_name", ""),
       "standstill_timer": s.get("standstill_timer"),
       "blindspot_left": s.get("blindspot_left", False),
@@ -398,12 +454,41 @@ def snapshot_dev_ui_state() -> dict[str, Any]:
     "lead2_d_rel": float(s.get("lead2_d_rel", 62.0)) if s["started"] else None,
     "lead2_v_rel": float(s.get("lead2_v_rel", 0.8)) if s["started"] else None,
     "lead2_y_rel": float(s.get("lead2_y_rel", -3.7)) if s["started"] else None,
+    "radar_tracks": (_mock_radar_tracks(s)
+                     if s["started"] and s.get("radar_tracks_demo", True) else []),
     "road_model": _mock_road_model(s) if s["started"] else None,
-    "lite_mode": bool(s.get("lite_mode", False)),
     "circular_alert_allowed": s["started"] and s.get("alert_size", "none") in ("none", ""),
     "confidence_ball": {"target": float(s.get("confidence_target", 0.72)), "ui_status": s.get("ui_status", "engaged")} if s["started"] else None,
     "dev_ui": _mock_dev_ui(s) if s["started"] and int(s.get("developer_ui", 0)) > 0 else None,
     "speed_limit_mode": int(s.get("speed_limit_mode", 1)),
+    "amap_provider": "高德" if s.get("amap_enabled") else "OSM",
+    "car_control_enabled": False,
+    "is_cruise_set": bool(s["started"]) and s["set_speed_kmh"] > 0,
+    "is_cruise_available": True,
+    "hide_v_ego_ui": s.get("hide_v_ego_ui", False),
+    "road_name_toggle": s.get("road_name_toggle", True),
+    "screensaver_enabled": s.get("screensaver_enabled", False),
+    "screensaver_timeout_sec": s.get("screensaver_timeout_sec", 300),
+    "has_icbm": False,
+    "icbm_available": False,
+    "enable_bsm": True,
+    "sla_available": True,
+    "custom_model_active": False,
+    "is_sp_release": False,
+    "disable_updates": False,
+    "is_release_branch": False,
+    "is_development_branch": True,
+    "pcm_cruise": s.get("pcm_cruise_speed", False),
+    "torque_control_allowed": True,
+    "lateral_jerk_torque": 0.0,
+    "mads_limited": False,
+    "live_lateral_delay": None,
+    "steer_actuator_delay": 0.1,
+    "tesla_has_vehicle_bus": False,
+    "subaru_sng_available": False,
+    "cp_loaded": True,
+    "models_state": {"qcom_selected": True, "usbgpu_selected": False},
+    "driver_face": None,
     "turn_signals": True,
     "blindspot": True,
     "rocket_fuel_enabled": True,

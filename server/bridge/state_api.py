@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
 from webui.server.bridge.ui_status import derive_engaged, derive_ui_status
+
+# Speed-limit display: keep km/h integers for the UI; m/s values are converted
+# only when needed.
+CV_KPH_TO_MS = 1 / 3.6
 
 NETWORK_TYPES = {
   0: "--",
@@ -57,6 +62,88 @@ def _models_state(p) -> dict[str, bool]:
     }
   except Exception:
     return {"qcom_selected": False, "usbgpu_selected": False}
+
+
+def _safe_kph(value: Any) -> int | None:
+  try:
+    ms = float(value)
+  except (TypeError, ValueError):
+    return None
+  if ms != ms or ms <= 0.:
+    return None
+  return round(ms * 3.6)
+
+
+def _speed_limit_sources(sm: Any, v_ego_ms: float) -> dict[str, Any]:
+  """Return the raw speed-limit values from each source, plus the merged
+  resolver result if longitudinalPlanSP is present."""
+  sources: dict[str, Any] = {
+    "car": {"value": None, "valid": False},
+    "map": {"value": None, "valid": False, "provider": "OSM"},
+    "carrot": {"value": None, "valid": False},
+    "merged": {"value": None, "source": None},
+  }
+
+  try:
+    if sm.valid.get("carStateSP"):
+      cs_sp = sm["carStateSP"]
+      car_kph = _safe_kph(cs_sp.speedLimit)
+      sources["car"]["value"] = car_kph
+      sources["car"]["valid"] = car_kph is not None
+  except Exception:
+    pass
+
+  try:
+    if sm.valid.get("liveMapDataSP"):
+      lm = sm["liveMapDataSP"]
+      if bool(lm.speedLimitValid):
+        map_kph = _safe_kph(lm.speedLimit)
+        sources["map"]["value"] = map_kph
+        sources["map"]["valid"] = map_kph is not None
+      if bool(lm.speedLimitAheadValid):
+        ahead_kph = _safe_kph(lm.speedLimitAhead)
+        sources["map"]["ahead_value"] = ahead_kph
+        sources["map"]["ahead_distance"] = float(lm.speedLimitAheadDistance)
+  except Exception:
+    pass
+
+  try:
+    if sm.valid.get("carrotManSP"):
+      cm = sm["carrotManSP"]
+      active = bool(int(cm.activeCarrot)) if hasattr(cm, "activeCarrot") else False
+      road_kph = _safe_kph(cm.nRoadLimitSpeed) if hasattr(cm, "nRoadLimitSpeed") else None
+      sdi_kph = _safe_kph(cm.xSpdLimit) if hasattr(cm, "xSpdLimit") else None
+      sdi_dist = float(cm.xSpdDist) if hasattr(cm, "xSpdDist") else 0.
+      sources["carrot"]["value"] = road_kph
+      sources["carrot"]["valid"] = active and road_kph is not None
+      sources["carrot"]["sdi_value"] = sdi_kph
+      sources["carrot"]["sdi_distance"] = sdi_dist
+  except Exception:
+    pass
+
+  try:
+    if sm.valid.get("longitudinalPlanSP"):
+      lp_sp = sm["longitudinalPlanSP"]
+      assist = getattr(lp_sp, "speedLimit", None)
+      resolver = getattr(assist, "resolver", None) if assist else None
+      if resolver is not None:
+        merged_ms = float(getattr(resolver, "speedLimit", 0) or 0)
+        if merged_ms > 0.:
+          sources["merged"]["value"] = round(merged_ms * 3.6)
+          sources["merged"]["source"] = str(getattr(resolver, "source", "")).split(".")[-1]
+  except Exception:
+    pass
+
+  return sources
+
+
+def _amap_has_key() -> bool:
+  try:
+    from openpilot.common.params import Params
+    key = Params().get("AmapApiKey") or ""
+    return bool(key.strip())
+  except Exception:
+    return False
 
 
 def _sunnylink_metric() -> dict[str, str]:
@@ -221,13 +308,27 @@ def _egpu_state(ds, started: bool, sm=None) -> dict[str, Any] | None:
     return None
 
 
-def _lite_mode() -> bool:
-  """Persistent road-lite preference: show the synthesized scene and never pull the stream."""
+def _amap_line_types(sm: Any) -> tuple[int, int]:
+  """Amap lane-line codes for the two lines bracketing the ego lane.
+
+  ``amap_fusion.merge_amap_lane_lines`` copies ``amapNaviSP.leftLine/rightLine``
+  into ``carStateSP.amapLeftLineType / amapRightLineType`` and sets
+  ``amapLineValid`` True only while the Amap phone/app sender is feeding data.
+  When no amap source is present the merge is a strict no-op and the flag stays
+  False, so gating on it is enough — no extra Params read (e.g. AmapEnabled) is
+  needed here. Codes are AmapLineType (see amap_fusion.py); 0 means unknown.
+  """
   try:
-    from openpilot.common.params import Params
-    return Params().get_bool("OnroadLiteMode")
+    if not sm.valid.get("carStateSP"):
+      return 0, 0
+    cssp = sm["carStateSP"]
+    if not bool(getattr(cssp, "amapLineValid", False)):
+      return 0, 0
+    left = int(getattr(cssp, "amapLeftLineType", 0) or 0)
+    right = int(getattr(cssp, "amapRightLineType", 0) or 0)
+    return left, right
   except Exception:
-    return False
+    return 0, 0
 
 
 def _road_model(sm: Any) -> dict[str, Any] | None:
@@ -272,15 +373,23 @@ def _road_model(sm: Any) -> dict[str, Any] | None:
 
     edges = [_sample_y(e) if e is not None else None for e in model.roadEdges]
     lines = [_sample_y(l) for l in model.laneLines]
-    # line style: 0 = dashed divider, 1 = solid. Heuristic — when the road edge
-    # on a side is missing, the outermost lane line acts as the shoulder line
-    # (solid). Real line-type data would need map/carrot sources later.
-    line_types = [
-      1 if (edges[0] is None and lines[0] is not None) else 0,
-      0,
-      0,
-      1 if (edges[1] is None and lines[3] is not None) else 0,
-    ]
+
+    # Lane-line style. ``line_types`` keeps its original 0/1 meaning (0 dashed,
+    # 1 solid); ``line_kinds`` carries the richer Amap codes for the two lines
+    # bracketing the ego lane (see AmapLineType in
+    # openpilot/sunnypilot/selfdrive/car/amap_fusion.py):
+    #   0 unknown · 1 solid white · 2 dashed white · 3 solid yellow
+    #   4 double yellow · 5 botts dots · 6 road edge
+    # Order matches model.laneLines: [outer left, inner left, inner right, outer right].
+    amap_l, amap_r = _amap_line_types(sm)
+    # Heuristic fallback: when a road edge is missing, the outermost lane line is
+    # standing in for the shoulder line, which is painted solid.
+    outer_l = 6 if (edges[0] is None and lines[0] is not None) else 0
+    outer_r = 6 if (edges[1] is None and lines[3] is not None) else 0
+    line_kinds = [outer_l, amap_l, amap_r, outer_r]
+    solid_kinds = (1, 3, 4, 6)
+    line_types = [1 if kind in solid_kinds else 0 for kind in line_kinds]
+
     probs: list[float] = []
     try:
       probs = [round(float(p), 2) for p in model.laneLineProbs][:4]
@@ -289,16 +398,60 @@ def _road_model(sm: Any) -> dict[str, Any] | None:
     if all(e is None for e in edges) and all(l is None for l in lines):
       return None
 
+    # Ego-lane centerline per sampled distance: midpoint of the innermost visible
+    # pair bracketing the ego (lateral 0). The frontend uses this for the lane
+    # sheen and the lane-change arch so both follow the real lane rather than the
+    # road centre (which is only correct when the ego happens to sit in the
+    # middle lane). 0.0 where the lane cannot be bracketed.
+    lane_centers: list[float] = []
+    for k in range(len(dists)):
+      neg = [l[k] for l in lines if l is not None and l[k] < -0.2]
+      pos = [l[k] for l in lines if l is not None and l[k] > 0.2]
+      lane_centers.append(round((max(neg) + min(pos)) / 2.0, 2) if neg and pos else 0.0)
+
+    def _first(series: Any, default: float = 0.0) -> float:
+      try:
+        return float(series[0])
+      except Exception:
+        return default
+
     leads = []
     try:
-      for lead in model.leadsV3:
-        prob = float(lead.prob[0]) if len(lead.prob) else 0.0
+      for idx, lead in enumerate(model.leadsV3):
+        prob = _first(lead.prob)
         if prob < 0.3 or len(lead.x) == 0 or len(lead.y) == 0:
           continue
         x0, y0 = float(lead.x[0]), float(lead.y[0])
         if not (2.0 < x0 < 150.0) or x0 != x0 or y0 != y0:
           continue
-        leads.append({"d": round(x0, 1), "y": round(y0, 2), "prob": round(prob, 2)})
+        # v / a and the lateral & longitudinal std feed the road-lite target
+        # classification: small, slow, high-uncertainty blobs read as
+        # two-wheelers or pedestrians rather than cars.
+        #
+        # heading is the target's motion direction in the ego frame, radians,
+        # left-positive: 0 = receding straight ahead, ±pi/2 = crossing,
+        # |heading| > pi/2 = oncoming. Derived from the first two samples of the
+        # predicted trajectory (model frame is x forward, y +right → negated).
+        heading = None
+        try:
+          if len(lead.x) >= 2 and len(lead.y) >= 2:
+            dx = float(lead.x[1]) - float(lead.x[0])
+            dy = float(lead.y[1]) - float(lead.y[0])
+            if abs(dx) > 1e-3 or abs(dy) > 1e-3:
+              heading = round(-math.atan2(dy, dx), 3)
+        except Exception:
+          heading = None
+        leads.append({
+          "d": round(x0, 1),
+          "y": round(y0, 2),
+          "prob": round(prob, 2),
+          "v": round(_first(lead.v), 2),
+          "a": round(_first(lead.a), 2),
+          "y_std": round(_first(lead.yStd), 3),
+          "x_std": round(_first(lead.xStd), 3),
+          "heading": heading,
+          "i": idx,
+        })
     except Exception:
       leads = []
     leads = leads[:3]
@@ -328,6 +481,8 @@ def _road_model(sm: Any) -> dict[str, Any] | None:
       "lines": lines,
       "probs": probs,
       "line_types": line_types,
+      "line_kinds": line_kinds,
+      "lane_centers": lane_centers,
       "leads": leads,
       "path": path,
       "path_std": path_std,
@@ -488,18 +643,16 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "cluster_speed": round(speed_cluster) if speed_cluster > 0 else None,
   }
   try:
-    if sm.valid.get("selfdriveStateSP"):
-      ssp = sm["selfdriveStateSP"]
-      sp_hud.update({
-        "speed_limit": getattr(ssp, "speedLimit", None),
-        "speed_limit_assist": str(getattr(ssp, "speedLimitAssist", "")).split(".")[-1],
-        "road_name": getattr(ssp, "roadName", "") or "",
-        "blindspot_left": bool(getattr(ssp, "blindspotLeft", False)),
-        "blindspot_right": bool(getattr(ssp, "blindspotRight", False)),
-        "turn_signal_left": bool(getattr(ssp, "turnSignalLeft", False)),
-        "turn_signal_right": bool(getattr(ssp, "turnSignalRight", False)),
-        "rocket_fuel": getattr(ssp, "rocketFuel", None),
-      })
+    # Live blind-spot / turn-signal state comes from carState. SelfdriveStateSP
+    # only carries mads/icbm/buttonsPressed/buttonsReleaseToggle, so the old
+    # getattr() calls on it always fell through to False and the road-lite BSM
+    # and turn-signal indicators never lit.
+    sp_hud.update({
+      "blindspot_left": bool(getattr(cs, "leftBlindspot", False)),
+      "blindspot_right": bool(getattr(cs, "rightBlindspot", False)),
+      "turn_signal_left": bool(getattr(cs, "leftBlinker", False)),
+      "turn_signal_right": bool(getattr(cs, "rightBlinker", False)),
+    })
     if sm.valid.get("longitudinalPlanSP"):
       lp_sp = sm["longitudinalPlanSP"]
       assist = getattr(lp_sp, "speedLimit", None)
@@ -597,6 +750,11 @@ def build_state_from_sm(sm) -> dict[str, Any]:
       arrow = _speed_limit_pre_active_arrow(sm, is_metric, sp_hud, display_set_speed if is_cruise_set else 0)
       if arrow:
         sp_hud["pre_active_arrow"] = arrow
+
+    # Raw speed-limit sources for the Speed Limit panel diagnostics. These are
+    # read directly from cereal so the UI can show what each source thinks the
+    # limit is, even when the resolver has chosen a different source.
+    sp_hud["speed_limit_sources"] = _speed_limit_sources(sm, speed_ms)
   except Exception:
     pass
 
@@ -693,6 +851,31 @@ def build_state_from_sm(sm) -> dict[str, Any]:
           lead2_y_rel = round(y2, 2)
   except Exception:
     pass
+
+  # Full radar track list (Car.RadarData.points). radarState only carries
+  # leadOne/leadTwo, so front-left / front-right and flanking objects are
+  # invisible without this. The road-lite scene uses these to place adjacent-
+  # lane and side vehicles on the synthesized road.
+  radar_tracks: list[dict[str, Any]] = []
+  try:
+    if sm.valid.get("radarTracks"):
+      for pt in sm["radarTracks"].points:
+        d_rel = float(pt.dRel)
+        y_rel = float(pt.yRel)
+        v_rel = float(pt.vRel)
+        # Drop NaN and anything outside the scene's draw frustum.
+        if d_rel != d_rel or y_rel != y_rel or v_rel != v_rel:
+          continue
+        if not -5.0 < d_rel < 160.0 or not -8.0 < y_rel < 8.0:
+          continue
+        radar_tracks.append({
+          "id": int(pt.trackId),
+          "d": round(d_rel, 1),
+          "y": round(y_rel, 2),
+          "v": round(v_rel, 2),
+        })
+  except Exception:
+    radar_tracks = []
 
   driver_face = _driver_face(sm)
   confidence_ball = _confidence_ball(sm, ui_status, started)
@@ -791,6 +974,7 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "sp_hud": sp_hud,
     "dm_arc": dm_arc,
     "speed_limit_mode": speed_limit_mode,
+    "amap_provider": "高德" if (amap_enabled and _amap_has_key()) else "OSM",
     "turn_signals": turn_signals,
     "blindspot": blindspot,
     "rocket_fuel_enabled": rocket_fuel_enabled,
@@ -807,8 +991,8 @@ def build_state_from_sm(sm) -> dict[str, Any]:
     "lead2_d_rel": lead2_d_rel,
     "lead2_v_rel": lead2_v_rel,
     "lead2_y_rel": lead2_y_rel,
+    "radar_tracks": radar_tracks,
     "road_model": _road_model(sm),
-    "lite_mode": _lite_mode(),
     "circular_alert_allowed": circular_alert_allowed,
     "confidence_ball": confidence_ball,
     "driver_face": driver_face,
