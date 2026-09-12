@@ -171,6 +171,15 @@ def device_extras() -> dict[str, Any]:
     offroad_mode = False
 
   if os.environ.get("WEBUI_DEV_PC") == "1":
+    try:
+      from openpilot.common.params import Params
+
+      p = Params()
+      driver_view_enabled = p.get_bool("IsDriverViewEnabled")
+      onroad_preview = p.get_bool("IsOnroadPreview")
+    except Exception:
+      driver_view_enabled = False
+      onroad_preview = False
     return {
       "ok": True,
       "calibration": {
@@ -187,8 +196,8 @@ def device_extras() -> dict[str, Any]:
       "offroad_mode": offroad_mode,
       "dev_pc": True,
       "headless": is_headless_mode(),
-      "driver_view_enabled": False,
-      "onroad_preview": False,
+      "driver_view_enabled": driver_view_enabled,
+      "onroad_preview": onroad_preview,
       "chestnut": chestnut_snapshot(),
     }
   try:
