@@ -530,22 +530,25 @@ function drawEdgeLines(w, h, cx, fn, yOf, xOf, edgeLatAt, steps) {
 
 /* Visual style for one Amap lane-line kind. `dash` = world-space dashed white,
    `double` = two parallel solid amber lines, `dots` = botts' dots, `wide` =
-   road-edge / shoulder line. */
+   road-edge / shoulder line.
+
+   Redesigned 2026-09: lower glow, lower saturation, and thinner strokes so the
+   road grid reads as context rather than a noisy foreground pattern. */
 function laneStyle(kind) {
   switch (kind) {
     case LK_SOLID_YELLOW:
     case LK_DOUBLE_YELLOW:
-      return { color: "rgba(238, 198, 96, 0.92)", glow: "rgba(240, 192, 84, 0.13)", dash: false, double: kind === LK_DOUBLE_YELLOW };
+      return { color: "rgba(232, 196, 90, 0.85)", glow: "rgba(240, 190, 70, 0.07)", dash: false, double: kind === LK_DOUBLE_YELLOW };
     case LK_BOTTS_DOTS:
-      return { color: "rgba(228, 236, 250, 0.84)", glow: "rgba(150, 190, 255, 0.10)", dash: false, dots: true };
+      return { color: "rgba(210, 222, 245, 0.72)", glow: "rgba(140, 180, 255, 0.05)", dash: false, dots: true };
     case LK_DASHED_WHITE:
-      return { color: "rgba(222, 231, 246, 0.86)", glow: "rgba(150, 190, 255, 0.11)", dash: true };
+      return { color: "rgba(204, 216, 240, 0.74)", glow: "rgba(130, 170, 255, 0.06)", dash: true };
     case LK_ROAD_EDGE:
-      return { color: "rgba(236, 243, 255, 0.94)", glow: "rgba(160, 200, 255, 0.13)", dash: false, wide: true };
+      return { color: "rgba(198, 210, 235, 0.62)", glow: "rgba(140, 180, 255, 0.05)", dash: false, wide: true };
     case LK_SOLID_WHITE:
-      return { color: "rgba(226, 234, 249, 0.90)", glow: "rgba(150, 190, 255, 0.12)", dash: false };
+      return { color: "rgba(218, 228, 248, 0.78)", glow: "rgba(140, 180, 255, 0.07)", dash: false };
     default:
-      return { color: "rgba(212, 221, 238, 0.84)", glow: "rgba(140, 180, 255, 0.10)", dash: true };
+      return { color: "rgba(194, 208, 234, 0.70)", glow: "rgba(130, 170, 255, 0.05)", dash: true };
   }
 }
 
@@ -562,14 +565,14 @@ function drawLaneLines(w, cx, mToPx, fn, yOf, xOf, dividers, lineLatAt) {
 
   for (const line of dividers) {
     const st = laneStyle(Number(line?.kind ?? LK_UNKNOWN));
-    const baseW = st.wide ? w * 0.0056 : w * 0.0044;
+    const baseW = st.wide ? w * 0.0048 : w * 0.0036;
     const offsets = st.double ? [-0.15, 0.15] : [0];
 
     for (const off of offsets) {
-      // A narrow halo only: a wide one reads as a parallel second line once the
-      // markings converge toward the vanishing point.
+      // Glow is now deliberately faint; two thin strokes in perspective create
+      // a "busy" picket-fence effect when the glow is thick.
       for (const pass of [
-        { width: baseW * 2.3, color: st.glow },
+        { width: baseW * 1.7, color: st.glow },
         { width: baseW, color: st.color },
       ]) {
         ctx.strokeStyle = pass.color;
@@ -580,7 +583,7 @@ function drawLaneLines(w, cx, mToPx, fn, yOf, xOf, dividers, lineLatAt) {
           for (; z < Z_FAR; z += 6.0) {
             const f = fn(z);
             if (f < 0.07) continue;
-            const r = Math.max(0.7, pass.width * 0.55 * Math.max(0.25, f));
+            const r = Math.max(0.6, pass.width * 0.45 * Math.max(0.25, f));
             ctx.beginPath();
             ctx.arc(xOf(z, lineLatAt(line, z) + off), yOf(z), r, 0, Math.PI * 2);
             ctx.fill();
@@ -606,7 +609,7 @@ function drawLaneLines(w, cx, mToPx, fn, yOf, xOf, dividers, lineLatAt) {
 
         for (const [za, zb] of segs) {
           const zm = (za + zb) * 0.5;
-          ctx.lineWidth = Math.max(1.0, pass.width * (0.38 + 0.62 * fn(zm)));
+          ctx.lineWidth = Math.max(1.0, pass.width * (0.32 + 0.68 * fn(zm)));
           ctx.beginPath();
           ctx.moveTo(xOf(za, lineLatAt(line, za) + off), yOf(za));
           ctx.lineTo(xOf(zb, lineLatAt(line, zb) + off), yOf(zb));
@@ -741,7 +744,10 @@ function drawAlcArch(w, h, cx, mToPx, fn, yOf, xOf, geom, lineLatAt) {
    — modelV2.path sampled server-side at the same distances as the lane lines
    (model frame, +right). Ribbon half-width follows path.std (lateral
    uncertainty); hue sweeps pink-red near the ego car → yellow-green mid-range
-   → cyan far, matching the model canvas rainbow gradient. */
+   → cyan far, matching the model canvas rainbow gradient.
+
+   Redesigned 2026-09: wider, brighter, drawn after lane lines so it sits on top
+   of the road, with a crisp centre guide line so the intended path is obvious. */
 function drawPlanPath(w, cx, mToPx, fn, yOf, xOf, geom, steps) {
   const path = geom?.path;
   if (!path || path.length < 3) return;
@@ -750,25 +756,29 @@ function drawPlanPath(w, cx, mToPx, fn, yOf, xOf, geom, steps) {
   const z1 = steps[steps.length - 1];
   const dists = geom.dists;
 
+  // Use a fixed comfortable lane-half width; path std only modulates the edge
+  // softness, not the usable width, so the ribbon remains visible even when
+  // uncertainty is low.
   const halfAt = (z) => {
-    let s = 0.15;
+    let s = 0.12;
     if (std) s = sampleCurve(std, dists, z);
-    return Math.max(0.32, Math.min(0.85, 0.34 + s * 0.8));
+    return Math.max(0.55, Math.min(0.95, 0.58 + s * 0.55));
   };
   const hueAt = (z) => {
-    // full pink→cyan sweep within the visually meaningful range (~85 m)
-    const t = Math.max(0, Math.min(1, (z - z0) / 85));
-    return (335 + t * 205) % 360;
+    const t = Math.max(0, Math.min(1, (z - z0) / 90));
+    return (330 + t * 210) % 360;
   };
   const alphaAt = (z) => {
     const t = Math.max(0, Math.min(1, (z - z0) / (z1 - z0)));
-    return 0.14 + 0.42 * Math.pow(1 - t, 0.55);
+    // Brighter near the car, soft glow far away
+    return 0.34 + 0.46 * Math.pow(1 - t, 0.6);
   };
 
-  // soft glow along the centerline
   ctx.save();
   ctx.lineJoin = "round";
-  ctx.lineCap = "round";
+
+  // Outer glow: large, additive, drawn first so the ribbon pops against asphalt.
+  ctx.globalCompositeOperation = "lighter";
   ctx.beginPath();
   for (let i = 0; i < steps.length; i++) {
     const z = steps[i];
@@ -776,15 +786,14 @@ function drawPlanPath(w, cx, mToPx, fn, yOf, xOf, geom, steps) {
     if (i === 0) ctx.moveTo(x, yOf(z));
     else ctx.lineTo(x, yOf(z));
   }
-  ctx.strokeStyle = "rgba(255, 90, 165, 0.22)";
-  ctx.shadowColor = "rgba(255, 60, 140, 0.6)";
-  ctx.shadowBlur = Math.max(6, w * 0.012);
-  ctx.lineWidth = Math.max(2, w * 0.007);
+  ctx.strokeStyle = "rgba(255, 80, 160, 0.28)";
+  ctx.shadowColor = "rgba(255, 60, 140, 0.85)";
+  ctx.shadowBlur = Math.max(14, w * 0.022);
+  ctx.lineWidth = Math.max(6, w * 0.018);
   ctx.stroke();
-  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
 
-  // ribbon segments, one quad per step pair, colored by distance
-  ctx.lineJoin = "round";
+  // Ribbon segments, one quad per step pair, colored by distance.
   for (let i = 0; i < steps.length - 1; i++) {
     const za = steps[i];
     const zb = steps[i + 1];
@@ -797,9 +806,30 @@ function drawPlanPath(w, cx, mToPx, fn, yOf, xOf, geom, steps) {
     ctx.lineTo(xOf(zb, sampleCurve(path, dists, zb) + halfAt(zb)), yOf(zb));
     ctx.lineTo(xOf(za, sampleCurve(path, dists, za) + halfAt(za)), yOf(za));
     ctx.closePath();
-    ctx.fillStyle = `hsla(${hue.toFixed(0)}, 90%, 62%, ${alpha.toFixed(3)})`;
+    ctx.fillStyle = `hsla(${hue.toFixed(0)}, 95%, 65%, ${alpha.toFixed(3)})`;
     ctx.fill();
+
+    // Soft inner edge shadow to separate ribbon from lane paint.
+    ctx.strokeStyle = `hsla(${hue.toFixed(0)}, 90%, 45%, ${(alpha * 0.55).toFixed(3)})`;
+    ctx.lineWidth = Math.max(1, w * 0.0016);
+    ctx.stroke();
   }
+
+  // Crisp centre guide line — this is what the driver actually follows.
+  ctx.beginPath();
+  for (let i = 0; i < steps.length; i++) {
+    const z = steps[i];
+    const x = xOf(z, sampleCurve(path, dists, z));
+    if (i === 0) ctx.moveTo(x, yOf(z));
+    else ctx.lineTo(x, yOf(z));
+  }
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.82)";
+  ctx.shadowColor = "rgba(255, 255, 255, 0.55)";
+  ctx.shadowBlur = Math.max(4, w * 0.005);
+  ctx.lineWidth = Math.max(1.4, w * 0.0024);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawPoles(w, h, cx, mToPx, fn, yOf, xOf, edgeLatAt) {
@@ -1430,12 +1460,13 @@ function drawEgoCar(w, h, cx) {
 
   ctx.save();
 
-  // underglow
-  const ug = ctx.createRadialGradient(cx, y - carH * 0.4, 0, cx, y - carH * 0.4, carW * 0.85);
-  ug.addColorStop(0, "rgba(90, 130, 210, 0.20)");
-  ug.addColorStop(1, "rgba(90, 130, 210, 0)");
+  // Stronger underglow for the ego car so it feels anchored and "present".
+  const ug = ctx.createRadialGradient(cx, y - carH * 0.4, 0, cx, y - carH * 0.4, carW * 1.05);
+  ug.addColorStop(0, "rgba(70, 160, 255, 0.28)");
+  ug.addColorStop(0.55, "rgba(60, 130, 220, 0.10)");
+  ug.addColorStop(1, "rgba(60, 130, 220, 0)");
   ctx.fillStyle = ug;
-  ctx.fillRect(cx - carW, y - carH * 1.7, carW * 2, carH * 2.3);
+  ctx.fillRect(cx - carW * 1.2, y - carH * 1.9, carW * 2.4, carH * 2.5);
 
   const braking = lastState?.a_ego != null && Number(lastState.a_ego) < -0.6;
   drawCarSprite(x, y, carW, carH, { tone: "ego", brake: braking });
@@ -1444,18 +1475,18 @@ function drawEgoCar(w, h, cx) {
   const sp = lastState?.sp_hud || {};
   const blinkOn = Math.floor(performance.now() / 400) % 2 === 0;
   if (blinkOn) {
-    ctx.fillStyle = "rgba(255, 180, 40, 0.98)";
+    ctx.fillStyle = "rgba(255, 190, 45, 0.98)";
     ctx.shadowColor = "rgba(255, 170, 30, 0.95)";
-    ctx.shadowBlur = Math.max(6, carW * 0.16);
-    const lampR = Math.max(2.5, carW * 0.055);
+    ctx.shadowBlur = Math.max(8, carW * 0.22);
+    const lampR = Math.max(3, carW * 0.065);
     if (sp.turn_signal_left) {
       ctx.beginPath();
-      ctx.arc(x + carW * 0.015, y - carH * 0.06, lampR, 0, Math.PI * 2);
+      ctx.arc(x + carW * 0.025, y - carH * 0.06, lampR, 0, Math.PI * 2);
       ctx.fill();
     }
     if (sp.turn_signal_right) {
       ctx.beginPath();
-      ctx.arc(x + carW * 0.985, y - carH * 0.06, lampR, 0, Math.PI * 2);
+      ctx.arc(x + carW * 0.975, y - carH * 0.06, lampR, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.shadowBlur = 0;
@@ -1464,129 +1495,129 @@ function drawEgoCar(w, h, cx) {
   ctx.restore();
 }
 
-/* Detailed top-view sedan sprite: body silhouette, wheels, greenhouse glass,
-   roof, mirrors, tail lights, headlight hints, specular sheen. */
+/* Modern top-down vehicle glyph: a simplified, softly-lit rounded capsule
+   inspired by FSD/Autopilot visualizations. Fewer details, stronger silhouette,
+   and a glowing rim so vehicles read instantly against the dark road.
+
+   The shape is defined by one rounded rect plus a tapered nose; it replaces the
+   previous detailed sedan outline which looked flat and noisy at small sizes. */
 
 function carBodyPath(x, y, carW, carH) {
   // x: left edge, y: rear bumper baseline; nose points up (-y)
+  const r = carW * 0.22;
+  const noseR = carW * 0.38;
   ctx.beginPath();
-  ctx.moveTo(x + carW * 0.10, y);
-  // rear bumper
-  ctx.bezierCurveTo(x + carW * 0.12, y + carH * 0.025, x + carW * 0.88, y + carH * 0.025, x + carW * 0.90, y);
-  // right side, slight waist then front shoulder
-  ctx.bezierCurveTo(x + carW * 1.015, y - carH * 0.12, x + carW * 0.995, y - carH * 0.55, x + carW * 0.895, y - carH * 0.80);
-  ctx.bezierCurveTo(x + carW * 0.855, y - carH * 0.965, x + carW * 0.70, y - carH * 1.02, x + carW * 0.57, y - carH * 1.02);
-  // hood
-  ctx.bezierCurveTo(x + carW * 0.52, y - carH * 1.045, x + carW * 0.48, y - carH * 1.045, x + carW * 0.43, y - carH * 1.02);
-  // left front shoulder and side
-  ctx.bezierCurveTo(x + carW * 0.30, y - carH * 1.02, x + carW * 0.145, y - carH * 0.965, x + carW * 0.105, y - carH * 0.80);
-  ctx.bezierCurveTo(x + carW * 0.005, y - carH * 0.55, x - carW * 0.015, y - carH * 0.12, x + carW * 0.10, y);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + carW - r, y);
+  ctx.quadraticCurveTo(x + carW, y, x + carW, y - r);
+  ctx.lineTo(x + carW, y - carH + noseR);
+  // tapered nose
+  ctx.quadraticCurveTo(x + carW, y - carH, x + carW * 0.82, y - carH);
+  ctx.lineTo(x + carW * 0.18, y - carH);
+  ctx.quadraticCurveTo(x, y - carH, x, y - carH + noseR);
+  ctx.lineTo(x, y - r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
 }
 
 function drawCarSprite(x, y, carW, carH, opts = {}) {
   const ego = opts.tone === "ego";
+  const body = () => carBodyPath(x, y, carW, carH);
 
-  // wheels poking out slightly
-  ctx.fillStyle = "#0a0e18";
-  const ww = Math.max(2, carW * 0.055), wh = carH * 0.15;
-  for (const [wx, wy] of [
-    [x - ww * 0.45, y - carH * 0.86],
-    [x + carW - ww * 0.55, y - carH * 0.86],
-    [x - ww * 0.45, y - carH * 0.26],
-    [x + carW - ww * 0.55, y - carH * 0.26],
-  ]) {
-    roundRect(wx, wy, ww, wh, ww * 0.4);
-    ctx.fill();
-  }
+  // Soft underglow / rim light (drawn first so it sits behind the body).
+  ctx.save();
+  ctx.shadowColor = ego ? "rgba(80, 190, 255, 0.75)" : "rgba(140, 175, 230, 0.45)";
+  ctx.shadowBlur = ego ? Math.max(14, carW * 0.35) : Math.max(8, carW * 0.22);
+  ctx.strokeStyle = "rgba(0,0,0,0)";
+  ctx.lineWidth = Math.max(2, carW * 0.06);
+  body();
+  ctx.stroke();
+  ctx.restore();
 
-  // body
+  // Body fill: dark, slightly cool, with a subtle vertical gradient so the
+  // capsule has volume without drawing windows/mirrors.
   const bg = ctx.createLinearGradient(x, y - carH, x + carW, y);
   if (ego) {
-    bg.addColorStop(0, "#3d4e78");
-    bg.addColorStop(0.5, "#253252");
-    bg.addColorStop(1, "#141d32");
+    bg.addColorStop(0, "#2b3a5e");
+    bg.addColorStop(0.55, "#1d2745");
+    bg.addColorStop(1, "#111829");
   } else {
-    bg.addColorStop(0, "#52648f");
-    bg.addColorStop(0.55, "#354266");
-    bg.addColorStop(1, "#232d49");
+    bg.addColorStop(0, "#384668");
+    bg.addColorStop(0.55, "#252f4d");
+    bg.addColorStop(1, "#151d33");
   }
-  carBodyPath(x, y, carW, carH);
+  body();
   ctx.fillStyle = bg;
   ctx.fill();
-  ctx.strokeStyle = ego ? "rgba(175, 198, 238, 0.5)" : "rgba(160, 182, 218, 0.34)";
-  ctx.lineWidth = Math.max(1, carW * 0.012);
+
+  // Bright rim stroke — the main readable feature.
+  ctx.strokeStyle = ego ? "rgba(110, 200, 255, 0.82)" : "rgba(180, 205, 245, 0.62)";
+  ctx.lineWidth = Math.max(1.4, carW * 0.026);
+  body();
   ctx.stroke();
 
   // BSM alert: amber outline + stronger glow
   if (opts.bsm) {
+    ctx.save();
     ctx.strokeStyle = "rgba(255, 182, 66, 0.95)";
-    ctx.shadowColor = "rgba(255, 160, 30, 0.85)";
-    ctx.shadowBlur = Math.max(6, carW * 0.18);
-    ctx.lineWidth = Math.max(1.5, carW * 0.022);
-    carBodyPath(x, y, carW, carH);
+    ctx.shadowColor = "rgba(255, 160, 30, 0.90)";
+    ctx.shadowBlur = Math.max(10, carW * 0.32);
+    ctx.lineWidth = Math.max(2, carW * 0.042);
+    body();
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   // forward collision risk: pulsing red outline
   if (opts.risk > 0.35) {
     const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 160);
+    ctx.save();
     ctx.strokeStyle = `rgba(255, 46, 30, ${Math.min(1, 0.55 + 0.45 * pulse)})`;
     ctx.shadowColor = "rgba(255, 30, 20, 0.95)";
-    ctx.shadowBlur = Math.max(8, carW * 0.26);
-    ctx.lineWidth = Math.max(2, carW * 0.03);
-    carBodyPath(x, y, carW, carH);
+    ctx.shadowBlur = Math.max(12, carW * 0.42);
+    ctx.lineWidth = Math.max(2.2, carW * 0.05);
+    body();
     ctx.stroke();
-    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
-  // greenhouse glass
-  const gg = ctx.createLinearGradient(0, y - carH * 0.95, 0, y - carH * 0.25);
-  gg.addColorStop(0, "rgba(11, 16, 30, 0.96)");
-  gg.addColorStop(1, "rgba(32, 44, 68, 0.92)");
-  ctx.fillStyle = gg;
-  roundRect(x + carW * 0.185, y - carH * 0.93, carW * 0.63, carH * 0.58, carW * 0.13);
+  // Windshield band: a single dark horizontal strip for the cabin.
+  const cabinTop = y - carH * 0.76;
+  const cabinH = carH * 0.34;
+  const cabinGrad = ctx.createLinearGradient(0, cabinTop, 0, cabinTop + cabinH);
+  cabinGrad.addColorStop(0, "rgba(10, 15, 28, 0.92)");
+  cabinGrad.addColorStop(1, "rgba(24, 34, 56, 0.78)");
+  ctx.fillStyle = cabinGrad;
+  roundRect(x + carW * 0.18, cabinTop, carW * 0.64, cabinH, carW * 0.12);
   ctx.fill();
 
-  // roof panel
-  ctx.fillStyle = ego ? "rgba(78, 96, 140, 0.55)" : "rgba(104, 122, 160, 0.5)";
-  roundRect(x + carW * 0.25, y - carH * 0.73, carW * 0.50, carH * 0.27, carW * 0.08);
+  // Subtle specular highlight down the centre.
+  const sheen = ctx.createLinearGradient(x + carW * 0.35, 0, x + carW * 0.65, 0);
+  sheen.addColorStop(0, "rgba(215, 230, 255, 0)");
+  sheen.addColorStop(0.5, ego ? "rgba(140, 210, 255, 0.14)" : "rgba(190, 215, 250, 0.10)");
+  sheen.addColorStop(1, "rgba(215, 230, 255, 0)");
+  ctx.fillStyle = sheen;
+  roundRect(x + carW * 0.36, y - carH * 0.92, carW * 0.28, carH * 0.84, carW * 0.14);
   ctx.fill();
 
-  // side mirrors
-  ctx.fillStyle = ego ? "#2b3752" : "#3e4c70";
-  roundRect(x - carW * 0.055, y - carH * 0.73, carW * 0.09, carH * 0.075, carW * 0.03);
+  // Headlight wash at the nose (faint, so it doesn't fight the rim).
+  ctx.fillStyle = ego ? "rgba(120, 205, 255, 0.22)" : "rgba(190, 215, 250, 0.16)";
+  roundRect(x + carW * 0.22, y - carH * 0.98, carW * 0.22, carH * 0.06, carH * 0.03);
   ctx.fill();
-  roundRect(x + carW * 0.965, y - carH * 0.73, carW * 0.09, carH * 0.075, carW * 0.03);
-  ctx.fill();
-
-  // center specular sheen
-  const sp = ctx.createLinearGradient(x + carW * 0.32, 0, x + carW * 0.68, 0);
-  sp.addColorStop(0, "rgba(215, 230, 255, 0)");
-  sp.addColorStop(0.5, ego ? "rgba(215, 230, 255, 0.12)" : "rgba(215, 230, 255, 0.10)");
-  sp.addColorStop(1, "rgba(215, 230, 255, 0)");
-  ctx.fillStyle = sp;
-  roundRect(x + carW * 0.30, y - carH * 0.98, carW * 0.40, carH * 0.95, carW * 0.2);
+  roundRect(x + carW * 0.56, y - carH * 0.98, carW * 0.22, carH * 0.06, carH * 0.03);
   ctx.fill();
 
-  // headlight hints at the nose
-  ctx.fillStyle = "rgba(195, 214, 244, 0.22)";
-  roundRect(x + carW * 0.17, y - carH * 0.985, carW * 0.155, carH * 0.05, carH * 0.02);
-  ctx.fill();
-  roundRect(x + carW * 0.675, y - carH * 0.985, carW * 0.155, carH * 0.05, carH * 0.02);
-  ctx.fill();
-
-  // tail lights: two wrap-around strips (glow; brighter when braking)
+  // Tail lights: two small glow strips.
   const brake = !!opts.brake;
+  ctx.save();
   ctx.shadowColor = "rgba(255, 66, 50, 0.9)";
-  ctx.shadowBlur = brake ? carW * 0.26 : Math.max(5, carW * 0.11);
-  ctx.fillStyle = brake ? "#ff4a38" : "rgba(255, 80, 62, 0.92)";
-  roundRect(x + carW * 0.07, y - carH * 0.115, carW * 0.35, Math.max(2, carH * 0.07), carH * 0.035);
+  ctx.shadowBlur = brake ? carW * 0.30 : Math.max(4, carW * 0.10);
+  ctx.fillStyle = brake ? "#ff4a38" : "rgba(255, 86, 70, 0.85)";
+  roundRect(x + carW * 0.12, y - carH * 0.10, carW * 0.28, Math.max(2, carH * 0.06), carH * 0.03);
   ctx.fill();
-  roundRect(x + carW * 0.58, y - carH * 0.115, carW * 0.35, Math.max(2, carH * 0.07), carH * 0.035);
+  roundRect(x + carW * 0.60, y - carH * 0.10, carW * 0.28, Math.max(2, carH * 0.06), carH * 0.03);
   ctx.fill();
-  ctx.shadowBlur = 0;
+  ctx.restore();
 }
 
 /* ---------- navigation band ---------- */
