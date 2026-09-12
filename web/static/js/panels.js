@@ -1375,6 +1375,22 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
     }
     return;
   }
+
+  // Same-panel refresh: keep the existing DOM and only patch values/state.
+  // This avoids the loading flash and preserves scroll position when the user
+  // edits a setting (e.g. tapping +/- on a numeric row).
+  const hasRealContent = container && container.childNodes.length > 0
+    && !(container.childNodes.length === 1 && isPanelLoadingNode(container.firstChild));
+  if (!options.force && prevPanel === panelId && hasRealContent) {
+    const data = await apiGet(`/api/opui/panels/${encodeURIComponent(panelId)}`);
+    if (data?.ok) {
+      if (titleEl) applyPanelTitle(panelId, titleEl, data, options);
+      applyPanelSync(data);
+      return;
+    }
+    // On failure fall through to a full re-render.
+  }
+
   if (container && !container.querySelector(".opui-panel-loading")) {
     container.innerHTML = '<p class="opui-muted opui-panel-loading" style="padding:48px;text-align:center">' + escapeHtml(t("Loading...")) + '</p>';
   }
