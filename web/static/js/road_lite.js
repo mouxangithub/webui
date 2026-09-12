@@ -1600,24 +1600,6 @@ function drawCarSprite(x, y, carW, carH, opts = {}) {
   roundRect(x + carW * 0.36, y - carH * 0.92, carW * 0.28, carH * 0.84, carW * 0.14);
   ctx.fill();
 
-  // Headlight wash at the nose (faint, so it doesn't fight the rim).
-  ctx.fillStyle = ego ? "rgba(120, 205, 255, 0.22)" : "rgba(190, 215, 250, 0.16)";
-  roundRect(x + carW * 0.22, y - carH * 0.98, carW * 0.22, carH * 0.06, carH * 0.03);
-  ctx.fill();
-  roundRect(x + carW * 0.56, y - carH * 0.98, carW * 0.22, carH * 0.06, carH * 0.03);
-  ctx.fill();
-
-  // Tail lights: two small glow strips.
-  const brake = !!opts.brake;
-  ctx.save();
-  ctx.shadowColor = "rgba(255, 66, 50, 0.9)";
-  ctx.shadowBlur = brake ? carW * 0.30 : Math.max(4, carW * 0.10);
-  ctx.fillStyle = brake ? "#ff4a38" : "rgba(255, 86, 70, 0.85)";
-  roundRect(x + carW * 0.12, y - carH * 0.10, carW * 0.28, Math.max(2, carH * 0.06), carH * 0.03);
-  ctx.fill();
-  roundRect(x + carW * 0.60, y - carH * 0.10, carW * 0.28, Math.max(2, carH * 0.06), carH * 0.03);
-  ctx.fill();
-  ctx.restore();
 }
 
 /* ---------- navigation band ---------- */
