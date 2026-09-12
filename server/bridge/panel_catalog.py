@@ -257,8 +257,6 @@ PANELS: list[dict[str, Any]] = [
        "desc": "Serve the carrot tuning page (/nav_params) and four-corner radar visualisation (/radar) on port 8088."},
       {"type": "readonly", "param": "CarName", "label": "Car Model",
        "desc": "Identified car model, sent automatically with Carrot FTP uploads and shown in the companion app."},
-      {"type": "int", "param": "AmapNaviUdpPort", "label": "Amap Navi UDP Port", "min": 1024, "max": 65535, "step": 1,
-       "offroad_only": True, "desc": "UDP port used to receive Amap navigation instructions."},
       {"type": "custom", "custom": "amap_api_key", "label": "Amap API Key", "offroad_only": True,
        "desc": "API key for Amap services. Tap EDIT to enter or update the key."},
       {"type": "separator"},
