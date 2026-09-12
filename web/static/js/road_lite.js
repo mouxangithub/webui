@@ -911,7 +911,10 @@ function classifyTarget(k) {
   const yStd = Number(k.yStd) || 0;
   if (xStd > 1.6) return OBJ_TRUCK;
   const nearEdge = Math.abs(k.offM) > 3.0;
-  if (v < 2.2 && (nearEdge || (Number(k.d) || 0) < 26)) return OBJ_PED;
+  // At highway speeds a stationary roadside blob is almost never a pedestrian;
+  // degrading it to a car avoids alarming false positives.
+  const vEgoKph = (Math.max(0, Number(lastState?.speed_raw) || 0)) * 3.6;
+  if (v < 2.2 && (nearEdge || (Number(k.d) || 0) < 26) && vEgoKph < 70) return OBJ_PED;
   if (v < 10.5 && yStd > 0.75 && xStd < 1.0) return v < 5.6 ? OBJ_BIKE : OBJ_EBIKE;
   if (v < 13 && xStd < 0.7 && yStd < 0.6) return OBJ_MOTO;
   return OBJ_CAR;
@@ -942,6 +945,12 @@ function drawPerception(w, cx, mToPx, fn, yOf) {
 
   const near = (d, offM, tolD, tolY) => placed.some((p) => Math.abs(p.d - d) < tolD && Math.abs(p.offM - offM) < tolY);
 
+  /* Road-edge aware lateral gate. HALF_ROAD_M is the default three-lane
+     half-width; when model edges are available the scene uses those, so we
+     clip perceived targets to the same envelope. This keeps radar noise and
+     dropped tracks from being painted on the shoulder / beyond the road. */
+  const LAT_GATE_M = HALF_ROAD_M;
+
   /* 1) full radar track list: front-left / front-right and flanking objects.
         radarState only exposes leadOne/leadTwo, so without this the adjacent
         lanes stay empty. Deduped against the leads drawn below. */
@@ -952,18 +961,18 @@ function drawPerception(w, cx, mToPx, fn, yOf) {
     const offM = Number(t?.y);
     if (!Number.isFinite(d) || !Number.isFinite(offM)) continue;
     if (d <= 1.0 || d > 120) continue;
-    if (Math.abs(offM) > 6.0) continue;
+    if (Math.abs(offM) > LAT_GATE_M) continue;
     const id = t?.id;
     liveIds.add(id);
     const heading = trackHeading(id, d, offM, now, vEgo);
-    if (near(d, offM, 6, 1.6)) continue;
+    if (near(d, offM, 5, 1.2)) continue;
     // a track that lines up with the ego-lane lead is the same vehicle
     const dl = Number(st.lead_d_rel);
     if (Number.isFinite(dl) && Math.abs(offM) < 1.9 && Math.abs(d - dl) < 7) continue;
     const classId = classifyTarget({ d, offM, v: Number(t?.v) + vEgo, xStd: 0, yStd: 0, radarOnly: true });
     placed.push({ d, offM });
     drawTarget(w, cx, mToPx, fn, yOf, {
-      d, offM, classId, heading, alphaMul: 0.6, bsm: sideOf(offM),
+      d, offM, classId, heading, alphaMul: 0.55, bsm: sideOf(offM),
     });
   }
   pruneTrackHist(now, liveIds);
@@ -973,13 +982,13 @@ function drawPerception(w, cx, mToPx, fn, yOf) {
     const d = Number(ml?.d);
     const y = Number(ml?.y);
     if (!Number.isFinite(d) || !Number.isFinite(y)) continue;
-    const offM = Math.max(-6.0, Math.min(6.0, -y));   // +left like radar yRel
-    if (near(d, offM, 7, 2.2)) continue;
+    const offM = Math.max(-LAT_GATE_M, Math.min(LAT_GATE_M, -y));   // +left like radar yRel
+    if (near(d, offM, 6, 1.8)) continue;
     placed.push({ d, offM });
     const classId = classifyTarget({ d, offM, v: ml.v, xStd: ml.x_std, yStd: ml.y_std });
     drawTarget(w, cx, mToPx, fn, yOf, {
       d, offM, classId, heading: ml.heading ?? null,
-      alphaMul: 0.72, bsm: sideOf(offM),
+      alphaMul: 0.68, bsm: sideOf(offM),
       diag: { v: ml.v, xStd: ml.x_std, yStd: ml.y_std },
     });
   }
@@ -988,12 +997,12 @@ function drawPerception(w, cx, mToPx, fn, yOf) {
         full track list is unavailable (some cars report tracks only for a
         subset of objects). */
   if (st.lead2_d_rel != null && st.lead2_d_rel > 0 && st.lead2_d_rel <= 140) {
-    const offM = Math.max(-6.0, Math.min(6.0, Number(st.lead2_y_rel) || 0));
-    if (!near(st.lead2_d_rel, offM, 6, 1.8)) {
+    const offM = Math.max(-LAT_GATE_M, Math.min(LAT_GATE_M, Number(st.lead2_y_rel) || 0));
+    if (!near(st.lead2_d_rel, offM, 5, 1.4)) {
       placed.push({ d: st.lead2_d_rel, offM });
       drawTarget(w, cx, mToPx, fn, yOf, {
         d: st.lead2_d_rel, offM, classId: OBJ_CAR, heading: null,
-        alphaMul: 0.6, bsm: sideOf(offM),
+        alphaMul: 0.55, bsm: sideOf(offM),
       });
     }
   }
@@ -1119,7 +1128,10 @@ function drawObject(w, cx, mToPx, fn, yOf, d, offM, o) {
   const groundY = yOf(z);
   const sw = Math.max(5, Math.min(w * 0.26, s[0] * mToPx * f));
   const sh = Math.max(4, Math.min(w * 0.34, s[1] * mToPx * f * 0.55));
-  const xCenter = Math.max(cx - mToPx * 6.4 * f, Math.min(cx + mToPx * 6.4 * f, cx - offM * mToPx * f));
+  // Clamp laterally to the road surface so a noisy track beyond the edge is
+  // not drawn on the shoulder. HALF_ROAD_M is the default three-lane half-width;
+  // the lane-line rendering already respects model edges when available.
+  const xCenter = Math.max(cx - mToPx * HALF_ROAD_M * f, Math.min(cx + mToPx * HALF_ROAD_M * f, cx - offM * mToPx * f));
 
   const baseAlpha = Math.max(0.28, Math.min(1, (1.15 - d / 160) * (o.alphaMul ?? 1)));
   ctx.save();
