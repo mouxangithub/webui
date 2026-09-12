@@ -82,6 +82,7 @@ export function clearPanelDomCache() {
 
 const panelDomCache = new Map();
 const panelChromeCache = new Map();
+let panelScrollTopRestore = null;
 
 function isPanelLoadingNode(node) {
   return node?.nodeType === Node.ELEMENT_NODE && node.classList?.contains("opui-panel-loading");
@@ -346,6 +347,11 @@ let onNavigateSubpanel = null;
 let deviceExtrasCache = null;
 
 async function putParam(key, value, needsCycle = false, skipEffects = false) {
+  // Snapshot scroll position before any async work so it survives re-renders.
+  // Only capture on the first putParam of an interaction; side-effect puts
+  // must not overwrite the original user scroll position.
+  const panel = document.getElementById("panel-content");
+  if (panel && panelScrollTopRestore === null) panelScrollTopRestore = panel.scrollTop;
   let res;
   try {
     if (opuiWs.connected) {
@@ -1554,9 +1560,19 @@ function disposePanelWidgets(container) {
 }
 
 function renderGenericPanel(container, data, panelId = "") {
+  // Preserve scroll position when the same panel is re-rendered after a param change.
+  const scrollHost = container?.closest(".opui-panel-scroll-host") || container;
+  // Interaction-driven save takes precedence because some code paths reset
+  // scrollTop before we get here (e.g. focus/mouse handlers).
+  const savedScrollTop = panelScrollTopRestore ?? (scrollHost ? scrollHost.scrollTop : 0);
+  panelScrollTopRestore = null;
   disposePanelWidgets(container);
   container.innerHTML = "";
   appendPanelWidgets(container, data);
+  if (scrollHost && savedScrollTop > 0) {
+    // Re-apply the captured scroll offset once the DOM has settled.
+    requestAnimationFrame(() => { scrollHost.scrollTop = savedScrollTop; });
+  }
 }
 
 function renderWidget(w, panelData) {
