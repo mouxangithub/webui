@@ -66,6 +66,19 @@ CARROT_TUNING_DEFAULTS: dict[str, tuple[str, Any]] = {
   "AutoEnTurnNewLaneTimeH": ("int", 0),
   "AutoEnTurnNewLaneTime": ("int", 0),
   "NewLaneWidthDiff": ("int", 8),
+  # Planner / cruise (float params stored as FLOAT in Params; defaults aligned
+  # with openpilot/common/params_keys.h).
+  "TFollowGap1": ("float", 1.8),
+  "TFollowGap2": ("float", 1.5),
+  "TFollowGap3": ("float", 1.2),
+  "TFollowGap4": ("float", 1.0),
+  "CruiseMaxVals0": ("float", 1.5),
+  "CruiseMaxVals1": ("float", 1.8),
+  "CruiseMaxVals2": ("float", 2.0),
+  "CruiseMaxVals3": ("float", 2.2),
+  "CruiseMaxVals4": ("float", 2.4),
+  "CruiseMaxVals5": ("float", 2.6),
+  "CruiseMaxVals6": ("float", 2.8),
   # Navi speed / sound
   "StopDistanceCarrot": ("int", 550),
   "AutoNaviSpeedCtrlMode": ("int", 0),

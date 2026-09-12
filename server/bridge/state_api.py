@@ -309,14 +309,16 @@ def _egpu_state(ds, started: bool, sm=None) -> dict[str, Any] | None:
 
 
 def _amap_line_types(sm: Any) -> tuple[int, int]:
-  """Amap lane-line codes for the two lines bracketing the ego lane.
+  """Carrot 7714 lane-blocked flags for the lines bracketing the ego lane.
 
-  ``amap_fusion.merge_amap_lane_lines`` copies ``amapNaviSP.leftLine/rightLine``
-  into ``carStateSP.amapLeftLineType / amapRightLineType`` and sets
-  ``amapLineValid`` True only while the Amap phone/app sender is feeding data.
-  When no amap source is present the merge is a strict no-op and the flag stays
-  False, so gating on it is enough — no extra Params read (e.g. AmapEnabled) is
-  needed here. Codes are AmapLineType (see amap_fusion.py); 0 means unknown.
+  ``carrot_navi_fusion.merge_carrot_navi_lanes`` derives
+  ``carStateSP.carrotLeftLineBlocked / carrotRightLineBlocked`` from
+  ``carrotNaviSP.laneCurrent.available`` and sets ``carrotLaneValid`` True only
+  while the Carrot 7714 v2 sender is feeding lane data.  When no v2 source is
+  present the merge is a strict no-op and the flag stays False, so gating on it
+  is enough — no extra Params read is needed here.  Returns (left, right) where
+  True means the adjacent lane is blocked and a lane change toward that side
+  should not be initiated from nav data alone; 0 (False) means unknown/clear.
   """
   try:
     if not sm.valid.get("carStateSP"):
