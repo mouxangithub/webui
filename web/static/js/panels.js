@@ -440,7 +440,16 @@ export function setGlobalState(st) {
   updateVehicleBrandCapabilities(st);
   syncMadsLimitedParams(st);
   updateSubpanelStates();
-  refreshDualButtonRows();
+  // Preview/driver-view state may change from the car GUI; refresh extras when
+  // on the device panel so dual-button labels (ENTER/EXIT) stay in sync.
+  if (currentPanelRef === "device") {
+    apiGet("/api/opui/device/extras").then((ex) => {
+      if (ex?.ok) deviceExtrasCache = ex;
+      refreshDualButtonRows();
+    });
+  } else {
+    refreshDualButtonRows();
+  }
 }
 
 function refreshDualButtonRows() {
@@ -1290,8 +1299,18 @@ function updateDualButtonRow(root, w) {
     const cfg = w[side];
     const btn = row.querySelector(`[data-side="${side}"]`);
     if (!btn) continue;
+    // Sync dynamic labels (ENTER/EXIT, ON/OFF, etc.) and preview-state styling.
+    if (cfg?.dynamic_button_label) {
+      btn.textContent = t(resolveDualButtonLabel(cfg));
+    }
     if (cfg?.toggle && cfg.param) {
       btn.classList.toggle("primary", paramIsOn(cfg.value));
+    }
+    if (cfg?.action === "onroad_preview" || cfg?.action === "driver_view") {
+      const active = cfg.action === "onroad_preview"
+        ? !!deviceExtrasCache?.onroad_preview
+        : !!deviceExtrasCache?.driver_view_enabled;
+      btn.classList.toggle("primary", active);
     }
     if (cfg?.offroad_only) {
       const isOnroadPreview = cfg.action === "onroad_preview";
@@ -1382,7 +1401,15 @@ export async function renderPanel(panelId, container, titleEl, options = {}) {
   const hasRealContent = container && container.childNodes.length > 0
     && !(container.childNodes.length === 1 && isPanelLoadingNode(container.firstChild));
   if (!options.force && prevPanel === panelId && hasRealContent) {
-    const data = await apiGet(`/api/opui/panels/${encodeURIComponent(panelId)}`);
+    // Device panel extras (preview/driver-view states) can change outside the
+    // web UI (e.g. from the car GUI). Refresh the cache in parallel with the
+    // panel payload so dual-button labels (ENTER/EXIT) stay in sync.
+    const extrasPromise = panelId === "device" ? apiGet("/api/opui/device/extras") : Promise.resolve(null);
+    const [ex, data] = await Promise.all([
+      extrasPromise,
+      apiGet(`/api/opui/panels/${encodeURIComponent(panelId)}`),
+    ]);
+    if (ex?.ok) deviceExtrasCache = ex;
     if (data?.ok) {
       if (titleEl) applyPanelTitle(panelId, titleEl, data, options);
       applyPanelSync(data);
@@ -2200,6 +2227,7 @@ function dualButtonClass(side) {
   if (side.style) return side.style;
   if (side.action === "shutdown") return "danger";
   if (side.action === "onroad_preview" && deviceExtrasCache?.onroad_preview) return "primary";
+  if (side.action === "driver_view" && deviceExtrasCache?.driver_view_enabled) return "primary";
   return "";
 }
 
