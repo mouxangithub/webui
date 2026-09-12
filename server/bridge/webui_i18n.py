@@ -412,7 +412,72 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Curve Speed": "Curve Speed",
     "Blind Spot (BSD)": "Blind Spot (BSD)",
     "Lane Change / Blinker": "Lane Change / Blinker",
+    "Carrot Planner / Cruise": "Carrot Planner / Cruise",
     "Navi Speed / Sound": "Navi Speed / Sound",
+    "Enable Carrot Navi v2 (7714)": "Enable Carrot Navi v2 (7714)",
+    "Use the 7714 WebSocket v2 rich navigation stream (traffic, lanes, crossroad images).": (
+      "Use the 7714 WebSocket v2 rich navigation stream (traffic, lanes, crossroad images)."
+    ),
+    "Carrot Nav Panel Side": "Carrot Nav Panel Side",
+    "Place the onroad Carrot navigation panel on the left or right side of the screen.": (
+      "Place the onroad Carrot navigation panel on the left or right side of the screen."
+    ),
+    "Carrot Driving Mode": "Carrot Driving Mode",
+    "Carrot driving style preset.": "Carrot driving style preset.",
+    "Traffic Light Assist": "Traffic Light Assist",
+    "Stop at red lights and optionally resume on green when using model-based stop line detection.": (
+      "Stop at red lights and optionally resume on green when using model-based stop line detection."
+    ),
+    "Navigation Curve Speed": "Navigation Curve Speed",
+    "Slow down for curves using navigation route curvature.": "Slow down for curves using navigation route curvature.",
+    "Navigation Cruise Speed": "Navigation Cruise Speed",
+    "Use navigation desired speed to limit cruise set speed.": "Use navigation desired speed to limit cruise set speed.",
+    "Extended HUD Info": "Extended HUD Info",
+    "Show blind spot state, side vehicle distance, and traffic light info on the HUD.": (
+      "Show blind spot state, side vehicle distance, and traffic light info on the HUD."
+    ),
+    "Follow Gap 1": "Follow Gap 1",
+    "Following distance multiplier for the most aggressive mode. Default 1.8.": (
+      "Following distance multiplier for the most aggressive mode. Default 1.8."
+    ),
+    "Follow Gap 2": "Follow Gap 2",
+    "Following distance multiplier for the sport mode. Default 1.5.": (
+      "Following distance multiplier for the sport mode. Default 1.5."
+    ),
+    "Follow Gap 3": "Follow Gap 3",
+    "Following distance multiplier for the normal mode. Default 1.2.": (
+      "Following distance multiplier for the normal mode. Default 1.2."
+    ),
+    "Follow Gap 4": "Follow Gap 4",
+    "Following distance multiplier for the eco/safe mode. Default 1.0.": (
+      "Following distance multiplier for the eco/safe mode. Default 1.0."
+    ),
+    "Max Accel 0": "Max Accel 0",
+    "Maximum acceleration at low speed (m/s^2). Default 1.5.": "Maximum acceleration at low speed (m/s^2). Default 1.5.",
+    "Max Accel 1": "Max Accel 1",
+    "Maximum acceleration at moderate speed (m/s^2). Default 1.8.": (
+      "Maximum acceleration at moderate speed (m/s^2). Default 1.8."
+    ),
+    "Max Accel 2": "Max Accel 2",
+    "Maximum acceleration at higher speed (m/s^2). Default 2.0.": (
+      "Maximum acceleration at higher speed (m/s^2). Default 2.0."
+    ),
+    "Max Accel 3": "Max Accel 3",
+    "Maximum acceleration at highway speed (m/s^2). Default 2.2.": (
+      "Maximum acceleration at highway speed (m/s^2). Default 2.2."
+    ),
+    "Max Accel 4": "Max Accel 4",
+    "Maximum acceleration at high speed (m/s^2). Default 2.4.": (
+      "Maximum acceleration at high speed (m/s^2). Default 2.4."
+    ),
+    "Max Accel 5": "Max Accel 5",
+    "Maximum acceleration at very high speed (m/s^2). Default 2.6.": (
+      "Maximum acceleration at very high speed (m/s^2). Default 2.6."
+    ),
+    "Max Accel 6": "Max Accel 6",
+    "Maximum acceleration at top speed (m/s^2). Default 2.8.": (
+      "Maximum acceleration at top speed (m/s^2). Default 2.8."
+    ),
     "ATC Turn Distance Offset": "ATC Turn Distance Offset",
     "Extra distance subtracted from the ATC turn trigger distance. Default 0.": "Extra distance subtracted from the ATC turn trigger distance. Default 0.",
     "Fork Distance Offset": "Fork Distance Offset",
@@ -921,7 +986,72 @@ _WEBUI_STRINGS: dict[str, dict[str, str]] = {
     "Curve Speed": "弯道限速",
     "Blind Spot (BSD)": "盲区 (BSD)",
     "Lane Change / Blinker": "变道 / 转向灯",
+    "Carrot Planner / Cruise": "Carrot 规划 / 巡航",
     "Navi Speed / Sound": "导航限速 / 音量",
+    "Enable Carrot Navi v2 (7714)": "启用 Carrot Navi v2 (7714)",
+    "Use the 7714 WebSocket v2 rich navigation stream (traffic, lanes, crossroad images).": (
+      "使用 7714 WebSocket v2 富导航流（红绿灯、车道、复杂路口图像）。"
+    ),
+    "Carrot Nav Panel Side": "Carrot 导航面板位置",
+    "Place the onroad Carrot navigation panel on the left or right side of the screen.": (
+      "将 Carrot 导航面板放在屏幕左侧或右侧。"
+    ),
+    "Carrot Driving Mode": "Carrot 驾驶模式",
+    "Carrot driving style preset.": "Carrot 驾驶风格预设。",
+    "Traffic Light Assist": "红绿灯辅助",
+    "Stop at red lights and optionally resume on green when using model-based stop line detection.": (
+      "红灯停车，并可选在绿灯时起步（需启用模型停止线检测）。"
+    ),
+    "Navigation Curve Speed": "导航弯道限速",
+    "Slow down for curves using navigation route curvature.": "按导航路线曲率弯道减速。",
+    "Navigation Cruise Speed": "导航巡航限速",
+    "Use navigation desired speed to limit cruise set speed.": "使用导航目标速度限制巡航设定速度。",
+    "Extended HUD Info": "扩展 HUD 信息",
+    "Show blind spot state, side vehicle distance, and traffic light info on the HUD.": (
+      "在 HUD 显示盲区状态、侧方车距与红绿灯信息。"
+    ),
+    "Follow Gap 1": "跟车距离 1",
+    "Following distance multiplier for the most aggressive mode. Default 1.8.": (
+      "最激进模式下的跟车距离倍数。默认 1.8。"
+    ),
+    "Follow Gap 2": "跟车距离 2",
+    "Following distance multiplier for the sport mode. Default 1.5.": (
+      "运动模式下的跟车距离倍数。默认 1.5。"
+    ),
+    "Follow Gap 3": "跟车距离 3",
+    "Following distance multiplier for the normal mode. Default 1.2.": (
+      "普通模式下的跟车距离倍数。默认 1.2。"
+    ),
+    "Follow Gap 4": "跟车距离 4",
+    "Following distance multiplier for the eco/safe mode. Default 1.0.": (
+      "经济/安全模式下的跟车距离倍数。默认 1.0。"
+    ),
+    "Max Accel 0": "最大加速度 0",
+    "Maximum acceleration at low speed (m/s^2). Default 1.5.": "低速最大加速度（m/s²）。默认 1.5。",
+    "Max Accel 1": "最大加速度 1",
+    "Maximum acceleration at moderate speed (m/s^2). Default 1.8.": (
+      "中低速最大加速度（m/s²）。默认 1.8。"
+    ),
+    "Max Accel 2": "最大加速度 2",
+    "Maximum acceleration at higher speed (m/s^2). Default 2.0.": (
+      "中高速最大加速度（m/s²）。默认 2.0。"
+    ),
+    "Max Accel 3": "最大加速度 3",
+    "Maximum acceleration at highway speed (m/s^2). Default 2.2.": (
+      "高速最大加速度（m/s²）。默认 2.2。"
+    ),
+    "Max Accel 4": "最大加速度 4",
+    "Maximum acceleration at high speed (m/s^2). Default 2.4.": (
+      "较高速度最大加速度（m/s²）。默认 2.4。"
+    ),
+    "Max Accel 5": "最大加速度 5",
+    "Maximum acceleration at very high speed (m/s^2). Default 2.6.": (
+      "很高速度最大加速度（m/s²）。默认 2.6。"
+    ),
+    "Max Accel 6": "最大加速度 6",
+    "Maximum acceleration at top speed (m/s^2). Default 2.8.": (
+      "最高速度最大加速度（m/s²）。默认 2.8。"
+    ),
     "ATC Turn Distance Offset": "ATC 转向距离偏移",
     "Extra distance subtracted from the ATC turn trigger distance. Default 0.": "从 ATC 转向触发距离中减去的额外距离。默认 0。",
     "Fork Distance Offset": "岔路距离偏移",
