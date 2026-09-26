@@ -4941,40 +4941,6 @@ body.opui-system-wait-open {
   gap: 16px;
 }
 
-.opui-bt-rssi {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 5px;
-  width: 48px;
-  height: 32px;
-}
-
-.opui-bt-rssi::before,
-.opui-bt-rssi::after {
-  content: '';
-  width: 10px;
-  background: #666;
-  border-radius: 2px;
-}
-
-.opui-bt-rssi::before { height: 12px; }
-.opui-bt-rssi::after { height: 22px; }
-
-.opui-bt-rssi[data-level="1"]::before,
-.opui-bt-rssi[data-level="1"]::after,
-.opui-bt-rssi[data-level="2"]::before,
-.opui-bt-rssi[data-level="2"]::after,
-.opui-bt-rssi[data-level="3"]::before,
-.opui-bt-rssi[data-level="3"]::after { background: #1C65BA; }
-
-.opui-bt-rssi[data-level="0"]::before,
-.opui-bt-rssi[data-level="0"]::after { background: #555; }
-
-.opui-bt-rssi[data-level="2"]::after,
-.opui-bt-rssi[data-level="3"]::after { height: 32px; }
-
-.opui-bt-rssi[data-level="3"]::before { height: 20px; }
-
 .opui-bt-device-mapstatus {
   font-size: 34px;
   color: #7ea1ff;
@@ -4988,10 +4954,10 @@ body.opui-system-wait-open {
 }
 
 .opui-bt-device-signal {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  width: 56px;
+  font-size: 34px;
+  color: #78b4ff;
+  text-align: right;
+  min-width: 120px;
   flex-shrink: 0;
 }
 

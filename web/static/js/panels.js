@@ -212,6 +212,20 @@ const MADS_STEERING_MODE_DESCS = [
   "Disengage: ALC will disengage when the brake pedal is pressed.",
 ];
 
+const EGPU_STATE_LABELS = {
+  gray: "eGPU Not Active",
+  green: "eGPU Active",
+  failed: "eGPU Failed",
+  loading: "eGPU Loading...",
+};
+
+const EGPU_STATE_DESCS = {
+  gray: "No eGPU (big model) is selected. The default model is running.",
+  green: "eGPU big model is running and healthy.",
+  failed: "eGPU was selected but failed to start. Check device connection and model files.",
+  loading: "eGPU big model is being loaded. This may take a moment.",
+};
+
 function platformDisplayText(value) {
   if (value == null || value === "") return "";
   if (typeof value === "string") return value;
@@ -3329,10 +3343,9 @@ async function renderBluetoothPanel(container, data) {
     root.appendChild(wrap);
   }
 
-  function rssiBars(rssi) {
+  function rssiText(rssi) {
     if (rssi == null) return '';
-    const level = rssi >= -50 ? 3 : rssi >= -70 ? 2 : rssi >= -85 ? 1 : 0;
-    return `<span class="opui-bt-rssi" data-level="${level}" aria-label="RSSI ${rssi} dBm"></span>`;
+    return `${rssi} dBm`;
   }
 
   function renderHeader() {
@@ -3413,7 +3426,7 @@ async function renderBluetoothPanel(container, data) {
 
     const signal = document.createElement('div');
     signal.className = 'opui-bt-device-signal';
-    signal.innerHTML = rssiBars(dev.rssi);
+    signal.textContent = rssiText(dev.rssi);
 
     const actions = document.createElement('div');
     actions.className = 'opui-bt-device-actions';
@@ -3811,56 +3824,6 @@ async function renderBluetoothAdvancedPanel(container, data) {
     return label;
   }
 
-  function renderPairedList() {
-    const paired = (state.devices || []).filter(d => d.paired);
-    const group = document.createElement('div');
-    group.className = 'opui-bt-advanced-group';
-
-    const title = document.createElement('div');
-    title.className = 'opui-bt-advanced-group-title';
-    title.textContent = t('Paired devices');
-    group.appendChild(title);
-
-    if (!paired.length) {
-      const empty = document.createElement('div');
-      empty.className = 'opui-bt-advanced-empty';
-      empty.textContent = t('No paired devices');
-      group.appendChild(empty);
-      return group;
-    }
-
-    for (const dev of paired) {
-      const row = document.createElement('div');
-      row.className = 'opui-bt-advanced-device';
-      const info = document.createElement('div');
-      info.className = 'opui-bt-advanced-device-info';
-      const nameEl = document.createElement('div');
-      nameEl.className = 'opui-bt-advanced-device-name';
-      nameEl.textContent = dev.name || dev.address;
-      info.appendChild(nameEl);
-      const addrEl = document.createElement('div');
-      addrEl.className = 'opui-bt-advanced-device-addr';
-      addrEl.textContent = dev.address;
-      info.appendChild(addrEl);
-      row.appendChild(info);
-
-      const forgetBtn = document.createElement('button');
-      forgetBtn.type = 'button';
-      forgetBtn.className = 'opui-btn opui-btn--danger';
-      forgetBtn.textContent = t('Forget');
-      forgetBtn.addEventListener('click', async () => {
-        const ok = await showConfirm(t('Forget "{}"?').replace('{}', dev.name || dev.address));
-        if (!ok) return;
-        try { await api('forget', { address: dev.address }); await refresh(); }
-        catch (e) { toast(e.message); }
-      });
-      row.appendChild(forgetBtn);
-      group.appendChild(row);
-    }
-
-    return group;
-  }
-
   function render() {
     if (panelRenderStale(gen) || !state) return;
     root.innerHTML = '';
@@ -3906,12 +3869,9 @@ async function renderBluetoothAdvancedPanel(container, data) {
       catch (e) { toast(e.message); }
     });
     nameWrap.appendChild(nameValue);
-    nameWrap.appendChild(nameEditBtn);
     nameWrap.appendChild(nameSaveBtn);
+    nameWrap.appendChild(nameEditBtn);
     root.appendChild(makeRow(t('Device name'), t('Name shown to other Bluetooth devices.'), nameWrap));
-
-    // Paired devices
-    root.appendChild(renderPairedList());
 
     // Reset section
     const resetGroup = document.createElement('div');
