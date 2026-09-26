@@ -3302,65 +3302,60 @@ async function renderBluetoothPanel(container, data) {
     if (!state) return;
     root.innerHTML = '';
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'opui-bt-header';
+    // Top bar: Scan (left) and Bluetooth radio toggle (right)
+    const topbar = document.createElement('div');
+    topbar.className = 'opui-bt-topbar';
 
-    const title = document.createElement('div');
-    title.className = 'opui-bt-title';
-    title.textContent = t('Bluetooth Remotes');
-    header.appendChild(title);
+    const discovering = state.adapters?.some(a => a.discovering) || false;
+    const canAct = !!state.runtime?.stationary && state.available;
 
-    // Status
+    const scanBtn = document.createElement('button');
+    scanBtn.type = 'button';
+    scanBtn.className = 'opui-bt-scan-btn';
+    scanBtn.textContent = discovering ? t('Stop') : t('Scan');
+    scanBtn.disabled = !canAct || (!discovering && !state.radioEnabled);
+    scanBtn.onclick = async () => {
+      scanBtn.disabled = true;
+      try { await api(discovering ? 'cancel' : 'scan'); await refresh(); }
+      catch (e) { toast(e.message); }
+    };
+    topbar.appendChild(scanBtn);
+
+    const radioEnabled = !!state.radioEnabled;
+    const radioDisabled = !canAct;
+    const toggleWrap = document.createElement('div');
+    toggleWrap.className = 'opui-bt-toggle';
+    toggleWrap.innerHTML = `
+      <label class="opui-sp-toggle${radioDisabled ? ' disabled' : ''}${radioEnabled ? ' on' : ''}" aria-label="${t('Bluetooth')}">
+        <input type="checkbox" ${radioEnabled ? 'checked' : ''} ${radioDisabled ? 'disabled' : ''} />
+        <span class="opui-sp-toggle-track"><span class="opui-sp-toggle-thumb"></span></span>
+      </label>`;
+    const radioInput = toggleWrap.querySelector('input');
+    radioInput?.addEventListener('change', async () => {
+      try { await api('radio', { enabled: radioInput.checked }); await refresh(); }
+      catch (e) { toast(e.message); }
+    });
+    topbar.appendChild(toggleWrap);
+
+    root.appendChild(topbar);
+
+    // Status line
     const statusEl = document.createElement('div');
     statusEl.className = 'opui-bt-status';
     if (!state.available) statusEl.textContent = t('Bluetooth adapter unavailable');
     else if (!state.runtime?.stationary) statusEl.textContent = t('Requires stationary & disengaged state');
-    else if (state.adapters?.some(a => a.discovering)) statusEl.textContent = t('Scanning...');
+    else if (discovering) statusEl.textContent = t('Scanning...');
+    else if (!state.radioEnabled) statusEl.textContent = t('Bluetooth disabled');
     else statusEl.textContent = t('Ready');
-    header.appendChild(statusEl);
+    root.appendChild(statusEl);
 
     // Error
     if (state.error) {
       const errEl = document.createElement('div');
       errEl.className = 'opui-bt-error';
       errEl.textContent = state.error;
-      header.appendChild(errEl);
+      root.appendChild(errEl);
     }
-
-    // Action buttons
-    const actionsEl = document.createElement('div');
-    actionsEl.className = 'opui-bt-actions';
-
-    const radioBtn = document.createElement('button');
-    radioBtn.type = 'button';
-    radioBtn.className = 'opui-btn opui-btn--normal';
-    radioBtn.textContent = state.radioEnabled ? t('Disable Bluetooth') : t('Enable Bluetooth');
-    radioBtn.disabled = !state.runtime?.stationary;
-    radioBtn.onclick = async () => {
-      try { await api('radio', { enabled: !state.radioEnabled }); await refresh(); }
-      catch (e) { toast(e.message); }
-    };
-    actionsEl.appendChild(radioBtn);
-
-    const scanBtn = document.createElement('button');
-    scanBtn.type = 'button';
-    scanBtn.className = 'opui-btn opui-btn--normal';
-    scanBtn.textContent = t('Scan (30s)');
-    scanBtn.disabled = !state.runtime?.stationary || state.adapters?.some(a => a.discovering);
-    scanBtn.onclick = async () => { try { await api('scan'); await refresh(); } catch (e) { toast(e.message); } };
-    actionsEl.appendChild(scanBtn);
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'opui-btn opui-btn--normal';
-    cancelBtn.textContent = t('Cancel');
-    cancelBtn.disabled = !state.adapters?.some(a => a.discovering);
-    cancelBtn.onclick = async () => { try { await api('cancel'); await refresh(); } catch (e) { toast(e.message); } };
-    actionsEl.appendChild(cancelBtn);
-
-    header.appendChild(actionsEl);
-    root.appendChild(header);
 
     // Device list
     const listEl = document.createElement('div');

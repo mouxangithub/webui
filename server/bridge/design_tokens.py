@@ -58,6 +58,7 @@ PANEL_ICONS: dict[str, str] = {
   "device": "sunnypilot/selfdrive/assets/offroad/icon_home.png",
   "imu_calibration": "sunnypilot/selfdrive/assets/offroad/icon_lateral.png",
   "network": "icons/network.png",
+  "bluetooth": "icons/bluetooth.svg",
   "sunnylink": "icons/wifi_strength_full.png",
   "toggles": "sunnypilot/selfdrive/assets/offroad/icon_toggle.png",
   "software": "sunnypilot/selfdrive/assets/offroad/icon_software.png",

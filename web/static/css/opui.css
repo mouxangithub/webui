@@ -4483,16 +4483,36 @@ body.opui-system-wait-open {
   box-sizing: border-box;
 }
 
-.opui-bt-header {
+.opui-bt-topbar {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  justify-content: flex-start;
+  align-items: center;
+  min-height: 120px;
+  margin-bottom: 8px;
 }
 
-.opui-bt-title {
-  font-size: 56px;
-  font-weight: 600;
+.opui-bt-scan-btn {
+  border: none;
+  border-radius: 30px;
+  background: #393939;
   color: #fff;
+  cursor: pointer;
+  min-width: 360px;
+  height: 100px;
+  font-size: 60px;
+}
+
+.opui-bt-scan-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.opui-bt-toggle {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .opui-bt-status {
@@ -4503,13 +4523,6 @@ body.opui-system-wait-open {
 .opui-bt-error {
   font-size: 36px;
   color: #f55;
-}
-
-.opui-bt-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
 }
 
 .opui-bt-devices {
