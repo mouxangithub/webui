@@ -3384,7 +3384,9 @@ async function renderBluetoothPanel(container, data) {
     const discovering = isScanningActive();
     const el = document.createElement('div');
     el.className = 'opui-bt-status-line';
-    if (!state.hasUart || !state.hasBtpower) el.textContent = t('Bluetooth radio hardware not detected');
+    if (!state.hasUart && !state.hasBtpower) el.textContent = t('Bluetooth radio hardware not detected');
+    else if (!state.hasUart) el.textContent = t('Bluetooth UART not exposed by this AGNOS kernel');
+    else if (!state.hasBtpower) el.textContent = t('Bluetooth power node not detected');
     else if (!state.available) el.textContent = t('Bluetooth adapter unavailable');
     else if (!state.runtime?.stationary) el.textContent = t('Requires stationary & disengaged state');
     else if (discovering) el.textContent = t('Scanning...');
@@ -3707,13 +3709,18 @@ async function renderBluetoothPanel(container, data) {
     }
 
     if (!state.hasUart || !state.hasBtpower) {
-      renderEmptyState({
-        icon: '📵',
-        title: t('Bluetooth radio hardware not detected'),
-        desc: t('This AGNOS or device variant lacks the required Bluetooth UART/power nodes.'),
-        actionText: t('Retry'),
-        action: () => refresh(),
-      });
+      let title, desc;
+      if (!state.hasUart && !state.hasBtpower) {
+        title = t('Bluetooth radio hardware not detected');
+        desc = t('This device or AGNOS build lacks the required Bluetooth UART and power nodes.');
+      } else if (!state.hasUart) {
+        title = t('Bluetooth UART not available');
+        desc = t('This AGNOS kernel does not expose /dev/ttyHS1. Reflash to a Bluetooth-capable AGNOS build.');
+      } else {
+        title = t('Bluetooth power node not detected');
+        desc = t('This device or AGNOS build lacks /dev/btpower.');
+      }
+      renderEmptyState({ icon: '📵', title, desc, actionText: t('Retry'), action: () => refresh() });
       return;
     }
 
@@ -3844,33 +3851,36 @@ async function renderBluetoothAdvancedPanel(container, data) {
     });
     root.appendChild(makeRow(t('Discoverable'), t('Allow other devices to find this device.'), discToggle));
 
-    // Device name
+    // Device name: value on the left, single Edit/Save button on the right.
     const nameWrap = document.createElement('div');
     nameWrap.className = 'opui-bt-advanced-name';
     const nameValue = document.createElement('span');
     nameValue.className = 'opui-bt-advanced-name-value';
     nameValue.textContent = state.localName || '';
-    const nameEditBtn = document.createElement('button');
-    nameEditBtn.type = 'button';
-    nameEditBtn.className = 'opui-btn opui-btn--normal';
-    nameEditBtn.textContent = t('Edit');
-    nameEditBtn.disabled = !canAct;
-    nameEditBtn.addEventListener('click', async () => {
-      const val = await showKeyboard({ title: t('Device name'), value: nameValue.textContent || '', maxLen: 248 });
-      if (val !== null) nameValue.textContent = val;
-    });
-    const nameSaveBtn = document.createElement('button');
-    nameSaveBtn.type = 'button';
-    nameSaveBtn.className = 'opui-btn opui-btn--primary';
-    nameSaveBtn.textContent = t('Save');
-    nameSaveBtn.disabled = !canAct;
-    nameSaveBtn.addEventListener('click', async () => {
-      try { await api('name', { name: nameValue.textContent.trim() }); toast(t('Saved')); await refresh(); }
-      catch (e) { toast(e.message); }
+    const nameActionBtn = document.createElement('button');
+    nameActionBtn.type = 'button';
+    nameActionBtn.className = 'opui-btn opui-btn--normal';
+    nameActionBtn.textContent = t('Edit');
+    nameActionBtn.disabled = !canAct;
+    const updateActionState = () => {
+      const changed = nameValue.textContent.trim() !== (state.localName || '').trim();
+      nameActionBtn.textContent = t(changed ? 'Save' : 'Edit');
+      nameActionBtn.className = changed ? 'opui-btn opui-btn--primary' : 'opui-btn opui-btn--normal';
+    };
+    nameActionBtn.addEventListener('click', async () => {
+      if (nameValue.textContent.trim() !== (state.localName || '').trim()) {
+        try { await api('name', { name: nameValue.textContent.trim() }); toast(t('Saved')); await refresh(); }
+        catch (e) { toast(e.message); }
+      } else {
+        const val = await showKeyboard({ title: t('Device name'), value: nameValue.textContent || '', maxLen: 248 });
+        if (val !== null) {
+          nameValue.textContent = val;
+          updateActionState();
+        }
+      }
     });
     nameWrap.appendChild(nameValue);
-    nameWrap.appendChild(nameSaveBtn);
-    nameWrap.appendChild(nameEditBtn);
+    nameWrap.appendChild(nameActionBtn);
     root.appendChild(makeRow(t('Device name'), t('Name shown to other Bluetooth devices.'), nameWrap));
 
     // Reset section
