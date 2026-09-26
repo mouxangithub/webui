@@ -4,7 +4,7 @@
  */
 
 import { apiGet, apiPost, toast } from "./api.js";
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 
 const SESSION_KEY = "opui_system_wait_v1";
 const BOOTSTRAP_TIMEOUT_MS = 6000;

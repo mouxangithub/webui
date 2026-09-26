@@ -1,6 +1,6 @@
 /** Body (notCar) home layout — mirrors openpilot/selfdrive/ui/body/layouts/onroad.py + animations.py */
 
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 
 const GRID_COLS = 16;
 const GRID_ROWS = 8;

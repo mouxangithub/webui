@@ -1,6 +1,6 @@
 /** E2E circular alerts + standstill timer — mirrors circular_alerts.py */
 
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 import { TARGET_FPS } from "./fade_anim.js";
 
 const GREEN_IMG = "/api/opui/assets/sunnypilot/selfdrive/assets/images/green_light.png";

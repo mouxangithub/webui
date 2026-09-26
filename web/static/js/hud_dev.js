@@ -1,6 +1,6 @@
 /** Developer UI overlay — bottom bar + right column (developer_ui/__init__.py). */
 
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 
 export function updateDevUi(st) {
   const bottom = document.getElementById("dev-ui-bottom");

@@ -14,7 +14,7 @@
  * Also keeps the left/right AmapLaneIndicators edge bars (state.sp_hud.amap_lines).
  */
 
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 import { apiGet } from "./api.js";
 
 const ASSET_BASE = "/api/opui/assets/sunnypilot/selfdrive/assets/images";

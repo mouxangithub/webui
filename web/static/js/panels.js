@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut, toast } from "./api.js";
-import { loadI18n, tr } from "./i18n.js";
+import { loadI18n, tr } from "./i18n.js?v=3";
 import { getQualityPreference, setQualityPreference, QUALITY_LEVELS } from "./webrtc_stream_adaptive.js";
 import {
   getWebCodecsPreference, setWebCodecsPreference, webCodecsCapable, webCodecsCapability, getStreamDecodePath,
@@ -5165,7 +5165,7 @@ function renderLanguageRow() {
     if (res.ok) {
       toast(`${t("Language")}: ${lang.label}`);
       deviceExtrasCache = { ...ex, current_language: lang.id };
-      const { loadI18n } = await import("./i18n.js");
+      const { loadI18n } = await import("./i18n.js?v=3");
       await loadI18n(true);
       requestPanelRefresh();
       window.dispatchEvent(new CustomEvent("opui:language-changed"));
@@ -5545,7 +5545,7 @@ async function renderSunnylinkPanel(container, data) {
 
 async function renderStoragePanel(container, opts = {}) {
   const force = Boolean(opts.force);
-  const { loadI18n } = await import("./i18n.js");
+  const { loadI18n } = await import("./i18n.js?v=3");
   await loadI18n(true);
   container.innerHTML = `<p class="opui-muted opui-panel-loading" style="padding:48px;text-align:center">${escapeHtml(t("Calculating..."))}</p>`;
   const data = await apiGet(`/api/opui/storage${force ? "?force=1" : ""}`);

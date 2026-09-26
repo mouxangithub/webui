@@ -1,7 +1,7 @@
 /** Adaptive WebRTC preview tuning — safety-first; only affects livestream path. */
 
 import { toast } from "./api.js";
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 
 export const QUALITY_PREF_KEY = "opui-preview-quality";
 export const QUALITY_LEVELS = ["auto", "low", "med", "high", "off"];

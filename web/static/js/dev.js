@@ -1,6 +1,6 @@
 import { apiGet, apiPost } from "./api.js";
 import { opuiWs } from "./ws.js";
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 import { updateHomeScreen } from "./home.js";
 import { replayAlertSoundFromState } from "./soundd_browser.js";
 

@@ -827,10 +827,12 @@ def register_routes(app: web.Application) -> None:
 
   app.router.add_get("/api/opui/params/toggles", api_toggles_legacy)
 
-  app.router.add_static("/static/", path=str(WEB_DIR), name="static")
+  app.router.add_static("/static/", path=str(WEB_DIR), name="static", cache_max_age=0)
+
+  _NO_CACHE_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
 
   async def index(_request: web.Request) -> web.FileResponse:
-    return web.FileResponse(WEB_DIR / "index.html")
+    return web.FileResponse(WEB_DIR / "index.html", headers=_NO_CACHE_HEADERS)
 
   app.router.add_get("/", index)
 

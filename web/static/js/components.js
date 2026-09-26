@@ -2,7 +2,7 @@
  * sunnypilot BIG UI widget kit — dialogs + list rows matching raylib interactions.
  */
 
-import { tr } from "./i18n.js";
+import { tr } from "./i18n.js?v=3";
 
 const stack = [];
 
