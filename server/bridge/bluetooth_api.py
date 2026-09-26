@@ -71,7 +71,7 @@ async def _has_bluez() -> bool:
   )
   try:
     stdout, _ = await asyncio.wait_for(process.communicate(), 3)
-    return process.returncode == 0 and stdout.strip()
+    return process.returncode == 0 and stdout.strip().decode(errors='replace')
   except TimeoutError:
     process.kill()
     await process.wait()
