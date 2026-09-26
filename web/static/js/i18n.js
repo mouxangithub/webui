@@ -156,7 +156,6 @@ const LOCAL_FALLBACKS = {
     "Lead speed": "前车速度",
     "CPU temp": "CPU温度",
     "Memory": "内存",
-  },
     "A beautiful rainbow effect on the path the model wants to take. It does not affect driving in any way.": "A beautiful rainbow effect on the path the model wants to take. It does not affect driving in any way.",
     "A chime and on-screen alert will play when the traffic light you are waiting for turns green and you have no vehicle in front of you. Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.": "A chime and on-screen alert will play when the traffic light you are waiting for turns green and you have no vehicle in front of you. Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.",
     "A chime and on-screen alert will play when you are stopped, and the vehicle in front of you start moving. Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.": "A chime and on-screen alert will play when you are stopped, and the vehicle in front of you start moving. Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.",
