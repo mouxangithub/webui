@@ -1869,6 +1869,13 @@ SUBPANELS: dict[str, dict[str, Any]] = {
        "desc": "Prevent large data uploads when on a metered cellular connection"},
     ],
   },
+  "bluetooth__advanced": {
+    "id": "bluetooth__advanced",
+    "title": "Bluetooth Advanced",
+    "parent": "bluetooth",
+    "custom": "bluetooth_advanced",
+    "widgets": [],
+  },
   # eGPU status subpanel — mirrors sidebarSP eGPU icon state
   "carrot__egpu": {
     "id": "carrot__egpu",

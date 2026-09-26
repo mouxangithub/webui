@@ -4787,3 +4787,406 @@ body.opui-system-wait-open {
   color: #fff;
   min-width: 120px;
 }
+
+/* Bluetooth panel --------------------------------------------------------- */
+
+.opui-bt-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 600px;
+  gap: 32px;
+  padding: 48px;
+}
+
+.opui-bt-empty-icon {
+  font-size: 120px;
+  line-height: 1;
+}
+
+.opui-bt-empty-title {
+  font-size: 52px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.opui-bt-empty-desc {
+  font-size: 38px;
+  color: #aaa;
+  max-width: 900px;
+}
+
+.opui-bt-empty-btn {
+  min-width: 420px;
+  height: 110px;
+  font-size: 46px;
+  border-radius: 24px;
+}
+
+.opui-bt-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  min-height: 120px;
+  margin-bottom: 8px;
+}
+
+.opui-bt-scan-btn {
+  border: none;
+  border-radius: 30px;
+  background: #393939;
+  color: #fff;
+  cursor: pointer;
+  flex: 0 1 auto;
+  min-width: 240px;
+  max-width: 50%;
+  height: 100px;
+  padding: 0 40px;
+  font-size: 60px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opui-bt-scan-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.opui-bt-adv-btn {
+  border: none;
+  border-radius: 30px;
+  background: rgba(255,255,255,0.12);
+  color: #e0e0e0;
+  cursor: pointer;
+  min-width: 260px;
+  height: 100px;
+  padding: 0 40px;
+  font-size: 46px;
+  white-space: nowrap;
+}
+
+.opui-bt-adv-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.opui-bt-status-line {
+  font-size: 38px;
+  color: #aaa;
+  margin-bottom: 24px;
+}
+
+.opui-bt-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.opui-bt-device-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.opui-bt-device-group-title {
+  font-size: 36px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 4px;
+}
+
+.opui-bt-device-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 24px;
+  padding: 24px 28px;
+  min-height: 130px;
+}
+
+.opui-bt-device-card.paired {
+  background: rgba(69,96,230,0.12);
+}
+
+.opui-bt-device-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.opui-bt-device-name {
+  font-size: 44px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opui-bt-device-meta {
+  font-size: 34px;
+  color: #aaa;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.opui-bt-rssi {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 5px;
+  width: 48px;
+  height: 32px;
+}
+
+.opui-bt-rssi::before,
+.opui-bt-rssi::after {
+  content: '';
+  width: 10px;
+  background: #666;
+  border-radius: 2px;
+}
+
+.opui-bt-rssi::before { height: 12px; }
+.opui-bt-rssi::after { height: 22px; }
+
+.opui-bt-rssi[data-level="1"]::before,
+.opui-bt-rssi[data-level="1"]::after,
+.opui-bt-rssi[data-level="2"]::before,
+.opui-bt-rssi[data-level="2"]::after,
+.opui-bt-rssi[data-level="3"]::before,
+.opui-bt-rssi[data-level="3"]::after { background: #1C65BA; }
+
+.opui-bt-rssi[data-level="0"]::before,
+.opui-bt-rssi[data-level="0"]::after { background: #555; }
+
+.opui-bt-rssi[data-level="2"]::after,
+.opui-bt-rssi[data-level="3"]::after { height: 32px; }
+
+.opui-bt-rssi[data-level="3"]::before { height: 20px; }
+
+.opui-bt-device-mapstatus {
+  font-size: 34px;
+  color: #7ea1ff;
+}
+
+.opui-bt-device-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.opui-bt-device-actions .opui-btn {
+  min-width: 140px;
+  height: 80px;
+  font-size: 36px;
+  border-radius: 16px;
+}
+
+.opui-bt-empty {
+  font-size: 38px;
+  color: #888;
+  text-align: center;
+  padding: 48px 24px;
+}
+
+.opui-bt-prompt {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: #1f1f1f;
+  border-radius: 32px;
+  padding: 48px;
+  max-width: 80%;
+  font-size: 40px;
+  color: #fff;
+  z-index: 100;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.opui-bt-prompt-input {
+  font-size: 44px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.opui-bt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.opui-bt-editor-header {
+  font-size: 44px;
+  font-weight: 600;
+  color: #fff;
+  padding: 12px 0;
+}
+
+.opui-bt-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 100px;
+  font-size: 40px;
+  color: #fff;
+}
+
+.opui-bt-row label {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.opui-bt-section-title {
+  font-size: 40px;
+  font-weight: 600;
+  color: #fff;
+  padding: 24px 0 12px;
+}
+
+.opui-bt-mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 90px;
+}
+
+.opui-bt-mapping-btn-name {
+  width: 220px;
+  font-size: 36px;
+  color: #ddd;
+}
+
+.opui-bt-mapping-gesture {
+  flex: 1 1 0;
+}
+
+.opui-bt-mapping-gesture .opui-select {
+  width: 100%;
+}
+
+.opui-bt-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-top: 24px;
+}
+
+.opui-bt-capture-status {
+  font-size: 36px;
+  color: #aaa;
+  width: 100%;
+}
+
+/* Bluetooth advanced panel ------------------------------------------------ */
+
+.opui-bt-advanced-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.opui-bt-advanced-name {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.opui-bt-advanced-name .opui-text-input {
+  font-size: 38px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  min-width: 360px;
+}
+
+.opui-bt-advanced-name .opui-btn {
+  height: 80px;
+  font-size: 36px;
+  border-radius: 16px;
+}
+
+.opui-bt-advanced-group {
+  background: rgba(255,255,255,0.05);
+  border-radius: 24px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.opui-bt-advanced-group--danger {
+  background: rgba(226,44,44,0.08);
+}
+
+.opui-bt-advanced-group-title {
+  font-size: 40px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.opui-bt-advanced-empty {
+  font-size: 36px;
+  color: #888;
+  padding: 16px 0;
+}
+
+.opui-bt-advanced-device {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 16px;
+  padding: 20px 24px;
+  min-height: 100px;
+}
+
+.opui-bt-advanced-device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.opui-bt-advanced-device-name {
+  font-size: 40px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opui-bt-advanced-device-addr {
+  font-size: 32px;
+  color: #888;
+}
+
+.opui-bt-advanced-device .opui-btn {
+  height: 76px;
+  font-size: 34px;
+  border-radius: 14px;
+}
