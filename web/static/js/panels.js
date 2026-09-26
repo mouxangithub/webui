@@ -3278,8 +3278,13 @@ async function renderBluetoothPanel(container, data) {
   let promptId = null;
   let autoScanned = false;
   let installing = false;
+  let scanningUntil = 0;
 
   const api = (op, payload) => op ? apiPost(`/api/opui/bluetooth/${op}`, payload || {}) : apiGet('/api/opui/bluetooth');
+
+  function isScanningActive() {
+    return (state.adapters?.some(a => a.discovering) || false) && Date.now() < scanningUntil;
+  }
 
   async function refresh() {
     try {
@@ -3331,7 +3336,7 @@ async function renderBluetoothPanel(container, data) {
   }
 
   function renderHeader() {
-    const discovering = state.adapters?.some(a => a.discovering) || false;
+    const discovering = isScanningActive();
     const canAct = !!state.runtime?.stationary && state.available;
 
     const header = document.createElement('div');
@@ -3339,8 +3344,16 @@ async function renderBluetoothPanel(container, data) {
 
     const scanBtn = makeBtn(discovering ? t('Stop') : t('Scan'), 'opui-bt-scan-btn', async () => {
       scanBtn.disabled = true;
-      try { await api(discovering ? 'cancel' : 'scan'); await refresh(); }
-      catch (e) { toast(e.message); }
+      try {
+        if (discovering) {
+          scanningUntil = 0;
+          await api('cancel');
+        } else {
+          scanningUntil = Date.now() + 32000;
+          await api('scan');
+        }
+        await refresh();
+      } catch (e) { toast(e.message); }
     });
     scanBtn.disabled = !canAct || (!discovering && !state.radioEnabled);
     header.appendChild(scanBtn);
@@ -3355,7 +3368,7 @@ async function renderBluetoothPanel(container, data) {
   }
 
   function renderStatusLine() {
-    const discovering = state.adapters?.some(a => a.discovering) || false;
+    const discovering = isScanningActive();
     const el = document.createElement('div');
     el.className = 'opui-bt-status-line';
     if (!state.available) el.textContent = t('Bluetooth adapter unavailable');
@@ -3384,7 +3397,7 @@ async function renderBluetoothPanel(container, data) {
     if (dev.connected) badges.push(t('Connected'));
     else if (dev.paired) badges.push(t('Paired'));
     if (dev.battery != null) badges.push(`${t('Battery')} ${dev.battery}%`);
-    metaEl.innerHTML = `${escapeHtml(dev.address)}${badges.length ? ' · ' + escapeHtml(badges.join(' · ')) : ''}${rssiBars(dev.rssi)}`;
+    metaEl.innerHTML = `${escapeHtml(dev.address)}${badges.length ? ' · ' + escapeHtml(badges.join(' · ')) : ''}`;
     main.appendChild(metaEl);
 
     const cfg = state.config?.devices?.[dev.address];
@@ -3397,11 +3410,17 @@ async function renderBluetoothPanel(container, data) {
 
     card.appendChild(main);
 
+    const signal = document.createElement('div');
+    signal.className = 'opui-bt-device-signal';
+    signal.innerHTML = rssiBars(dev.rssi);
+
     const actions = document.createElement('div');
     actions.className = 'opui-bt-device-actions';
 
     if (!dev.paired) {
       actions.appendChild(makeBtn(t('Pair'), 'opui-btn opui-btn--primary', async () => {
+        const ok = await showConfirm(t('Pair with "{}"?').replace('{}', dev.name || dev.address));
+        if (!ok) return;
         try { await api('pair', { address: dev.address }); await refresh(); }
         catch (e) { toast(e.message); }
       }));
@@ -3412,13 +3431,18 @@ async function renderBluetoothPanel(container, data) {
       }));
       actions.appendChild(makeBtn(t('Edit'), 'opui-btn opui-btn--normal', () => selectDevice(dev)));
       actions.appendChild(makeBtn(t('Forget'), 'opui-btn opui-btn--danger', async () => {
-        if (!confirm(t('Forget this device?') + ` (${dev.name || dev.address})`)) return;
+        const ok = await showConfirm(t('Forget "{}"?').replace('{}', dev.name || dev.address));
+        if (!ok) return;
         try { await api('forget', { address: dev.address }); if (selected === dev.address) { selected = null; draft = null; } await refresh(); }
         catch (e) { toast(e.message); }
       }));
     }
 
-    card.appendChild(actions);
+    const right = document.createElement('div');
+    right.className = 'opui-bt-device-right';
+    right.appendChild(signal);
+    right.appendChild(actions);
+    card.appendChild(right);
     return card;
   }
 
@@ -3461,28 +3485,27 @@ async function renderBluetoothPanel(container, data) {
     root.appendChild(listEl);
   }
 
-  function renderPrompt() {
+  async function handlePrompt() {
     if (!state.prompt || state.prompt.id === promptId) return;
-    promptId = state.prompt.id;
-    const promptEl = document.createElement('div');
-    promptEl.className = 'opui-bt-prompt';
-    promptEl.innerHTML = `<b>${t('Pairing confirmation')}</b><br>${t('Enter the code shown on the other device')}: <b>${escapeHtml(state.prompt.value || '')}</b><br>`;
-    if (['RequestPinCode', 'RequestPasskey'].includes(state.prompt.kind)) {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'opui-bt-prompt-input';
-      input.placeholder = 'PIN';
-      promptEl.appendChild(input);
-    }
-    promptEl.appendChild(makeBtn(t('Confirm'), 'opui-btn opui-btn--primary', async () => {
-      try { await api('answer', { id: state.prompt.id, value: true }); promptId = null; await refresh(); }
-      catch (e) { toast(e.message); }
-    }));
-    promptEl.appendChild(makeBtn(t('Cancel'), 'opui-btn opui-btn--normal', async () => {
-      try { await api('cancel'); promptId = null; await refresh(); }
-      catch (e) { toast(e.message); }
-    }));
-    root.appendChild(promptEl);
+    const pid = state.prompt.id;
+    const kind = state.prompt.kind;
+    const value = state.prompt.value || '';
+    promptId = pid;
+    try {
+      if (['DisplayPinCode', 'DisplayPasskey'].includes(kind)) {
+        await showConfirm({ message: `${t('Pairing code')}: ${escapeHtml(value)}`, confirmText: t('OK'), single: true });
+      } else if (['RequestConfirmation', 'RequestAuthorization', 'AuthorizeService'].includes(kind)) {
+        const ok = await showConfirm(t('Confirm pairing with "{}"?').replace('{}', value));
+        await api('answer', { id: pid, value: ok });
+      } else if (kind === 'RequestPinCode') {
+        const pin = await showKeyboard({ title: t('Enter PIN'), value: '', password: false, minLen: 1, maxLen: 16 });
+        await api('answer', { id: pid, value: pin === null ? false : pin });
+      } else if (kind === 'RequestPasskey') {
+        const pass = await showKeyboard({ title: t('Enter passkey'), value: '', password: false, minLen: 1, maxLen: 6 });
+        await api('answer', { id: pid, value: pass === null ? false : pass });
+      }
+      await refresh();
+    } catch (e) { toast(e.message); }
   }
 
   function renderEditor() {
@@ -3684,7 +3707,7 @@ async function renderBluetoothPanel(container, data) {
     renderStatusLine();
     if (!draft) {
       renderDeviceList();
-      renderPrompt();
+      handlePrompt();
     } else {
       renderEditor();
     }
@@ -3692,6 +3715,7 @@ async function renderBluetoothPanel(container, data) {
     // Auto-scan once when entering a ready state
     if (!autoScanned && state.radioEnabled && state.runtime?.stationary) {
       autoScanned = true;
+      scanningUntil = Date.now() + 32000;
       api('scan').catch(() => {});
     }
   }
@@ -3813,7 +3837,8 @@ async function renderBluetoothAdvancedPanel(container, data) {
       forgetBtn.className = 'opui-btn opui-btn--danger';
       forgetBtn.textContent = t('Forget');
       forgetBtn.addEventListener('click', async () => {
-        if (!confirm(t('Forget this device?') + ` (${dev.name || dev.address})`)) return;
+        const ok = await showConfirm(t('Forget "{}"?').replace('{}', dev.name || dev.address));
+        if (!ok) return;
         try { await api('forget', { address: dev.address }); await refresh(); }
         catch (e) { toast(e.message); }
       });
@@ -3847,23 +3872,30 @@ async function renderBluetoothAdvancedPanel(container, data) {
     // Device name
     const nameWrap = document.createElement('div');
     nameWrap.className = 'opui-bt-advanced-name';
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'opui-text-input';
-    nameInput.value = state.localName || '';
-    nameInput.placeholder = t('Device name');
-    nameInput.disabled = !canAct;
-    const nameBtn = document.createElement('button');
-    nameBtn.type = 'button';
-    nameBtn.className = 'opui-btn opui-btn--primary';
-    nameBtn.textContent = t('Save');
-    nameBtn.disabled = !canAct;
-    nameBtn.addEventListener('click', async () => {
-      try { await api('name', { name: nameInput.value.trim() }); toast(t('Saved')); await refresh(); }
+    const nameValue = document.createElement('span');
+    nameValue.className = 'opui-bt-advanced-name-value';
+    nameValue.textContent = state.localName || '';
+    const nameEditBtn = document.createElement('button');
+    nameEditBtn.type = 'button';
+    nameEditBtn.className = 'opui-btn opui-btn--normal';
+    nameEditBtn.textContent = t('Edit');
+    nameEditBtn.disabled = !canAct;
+    nameEditBtn.addEventListener('click', async () => {
+      const val = await showKeyboard({ title: t('Device name'), value: nameValue.textContent || '', maxLen: 248 });
+      if (val !== null) nameValue.textContent = val;
+    });
+    const nameSaveBtn = document.createElement('button');
+    nameSaveBtn.type = 'button';
+    nameSaveBtn.className = 'opui-btn opui-btn--primary';
+    nameSaveBtn.textContent = t('Save');
+    nameSaveBtn.disabled = !canAct;
+    nameSaveBtn.addEventListener('click', async () => {
+      try { await api('name', { name: nameValue.textContent.trim() }); toast(t('Saved')); await refresh(); }
       catch (e) { toast(e.message); }
     });
-    nameWrap.appendChild(nameInput);
-    nameWrap.appendChild(nameBtn);
+    nameWrap.appendChild(nameValue);
+    nameWrap.appendChild(nameEditBtn);
+    nameWrap.appendChild(nameSaveBtn);
     root.appendChild(makeRow(t('Device name'), t('Name shown to other Bluetooth devices.'), nameWrap));
 
     // Paired devices
@@ -3886,7 +3918,8 @@ async function renderBluetoothAdvancedPanel(container, data) {
     resetBtn.textContent = t('Reset Bluetooth');
     resetBtn.disabled = !canAct;
     resetBtn.addEventListener('click', async () => {
-      if (!confirm(t('Remove all Bluetooth pairings and restart the service?'))) return;
+      const ok = await showConfirm(t('Remove all Bluetooth pairings and restart the service?'));
+      if (!ok) return;
       try {
         for (const dev of (state.devices || []).filter(d => d.paired)) {
           await api('forget', { address: dev.address });
