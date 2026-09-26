@@ -131,7 +131,11 @@ async def api_bluetooth_status(request: web.Request) -> web.Response:
     result.update(await client.snapshot())
     result['available'] = True
   except Exception as exc:
-    result.update(available=False, error=str(exc), devices=[], adapters=[])
+    error_str = str(exc)
+    # DBus service unavailable — provide a clean user-facing message
+    if "ServiceUnknown" in error_str or "org.bluez" in error_str:
+      error_str = "Bluetooth adapter not found. BlueZ is not installed or the DBus bluetooth service is not running on this device."
+    result.update(available=False, error=error_str, devices=[], adapters=[])
   return web.json_response(result)
 
 
