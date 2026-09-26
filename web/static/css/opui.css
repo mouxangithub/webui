@@ -4486,8 +4486,9 @@ body.opui-system-wait-open {
 .opui-bt-topbar {
   position: relative;
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
+  gap: 24px;
   min-height: 120px;
   margin-bottom: 8px;
 }
@@ -4498,9 +4499,15 @@ body.opui-system-wait-open {
   background: #393939;
   color: #fff;
   cursor: pointer;
-  min-width: 360px;
+  flex: 0 1 auto;
+  min-width: 240px;
+  max-width: 50%;
   height: 100px;
+  padding: 0 40px;
   font-size: 60px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .opui-bt-scan-btn:disabled {
@@ -4509,10 +4516,8 @@ body.opui-system-wait-open {
 }
 
 .opui-bt-toggle {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .opui-bt-status {
