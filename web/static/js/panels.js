@@ -2924,14 +2924,6 @@ async function renderNetworkPanel(container, data) {
   container.innerHTML = "";
   const body = createPanelBody(container, "opui-panel-body--wifi");
 
-  // Render the Bluetooth subpanel entry if the panel schema provides it.
-  const btWidget = data.widgets?.find((w) => w.type === "subpanel" && w.target === "network__bluetooth");
-  if (btWidget) {
-    const btRow = renderSubpanelRow(btWidget);
-    btRow.classList.add("opui-network-bt-row");
-    body.appendChild(btRow);
-  }
-
   const header = document.createElement("div");
   header.className = "opui-wifi-header";
   const scanBtn = document.createElement("button");

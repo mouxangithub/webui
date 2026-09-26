@@ -177,8 +177,14 @@ PANELS: list[dict[str, Any]] = [
     "custom": "network",
     "widgets": [
       {"type": "subpanel", "target": "network__advanced", "label": "Advanced Network", "button": "ADVANCED"},
-      {"type": "subpanel", "target": "network__bluetooth", "label": "Bluetooth", "button": "BT"},
     ],
+  },
+  {
+    "id": "bluetooth",
+    "title": "Bluetooth",
+    "custom": "bluetooth",
+    "icon": "icons/network.png",
+    "widgets": [],
   },
   {
     "id": "sunnylink",
@@ -1869,14 +1875,6 @@ SUBPANELS: dict[str, dict[str, Any]] = {
     "title": "eGPU",
     "parent": "carrot",
     "custom": "egpu",
-    "widgets": [],
-  },
-  # Bluetooth HID remote subpanel — renders the CarrotBluetooth web panel
-  "network__bluetooth": {
-    "id": "network__bluetooth",
-    "title": "Bluetooth",
-    "parent": "network",
-    "custom": "bluetooth",
     "widgets": [],
   },
   "cruise__longitudinal_mpc_tuning": {
