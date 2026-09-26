@@ -3371,7 +3371,8 @@ async function renderBluetoothPanel(container, data) {
     const discovering = isScanningActive();
     const el = document.createElement('div');
     el.className = 'opui-bt-status-line';
-    if (!state.available) el.textContent = t('Bluetooth adapter unavailable');
+    if (!state.hasUart || !state.hasBtpower) el.textContent = t('Bluetooth radio hardware not detected');
+    else if (!state.available) el.textContent = t('Bluetooth adapter unavailable');
     else if (!state.runtime?.stationary) el.textContent = t('Requires stationary & disengaged state');
     else if (discovering) el.textContent = t('Scanning...');
     else if (!state.radioEnabled) el.textContent = t('Bluetooth disabled');
@@ -3688,6 +3689,17 @@ async function renderBluetoothPanel(container, data) {
         desc: t('Start the Bluetooth service to scan and pair devices.'),
         actionText: t('Enable Bluetooth'),
         action: doEnableService,
+      });
+      return;
+    }
+
+    if (!state.hasUart || !state.hasBtpower) {
+      renderEmptyState({
+        icon: '📵',
+        title: t('Bluetooth radio hardware not detected'),
+        desc: t('This AGNOS or device variant lacks the required Bluetooth UART/power nodes.'),
+        actionText: t('Retry'),
+        action: () => refresh(),
       });
       return;
     }

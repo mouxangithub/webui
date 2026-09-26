@@ -907,6 +907,8 @@ const LOCAL_FALLBACKS = {
     "Reset Bluetooth": "重置蓝牙",
     "Remove all pairings and restart the Bluetooth service.": "移除所有配对并重启蓝牙服务。",
     "Remove all Bluetooth pairings and restart the service?": "移除所有蓝牙配对并重启服务？",
+    "Bluetooth radio hardware not detected": "未检测到蓝牙射频硬件",
+    "This AGNOS or device variant lacks the required Bluetooth UART/power nodes.": "当前 AGNOS 或设备变种缺少所需的蓝牙 UART / 电源节点。",
     "Bluetooth reset": "蓝牙已重置",
     "Saved": "已保存",
     "Pair": "配对",

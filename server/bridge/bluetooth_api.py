@@ -25,6 +25,7 @@ Endpoints exposed via routes/__init__.py:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from urllib.parse import urlsplit
 
@@ -163,6 +164,8 @@ async def api_bluetooth_status(request: web.Request) -> web.Response:
     'radioEnabled': await _radio_enabled(),
     'discoverable': False,
     'localName': None,
+    'hasUart': os.path.exists('/dev/ttyHS1'),
+    'hasBtpower': os.path.exists('/dev/btpower'),
   }
 
   client, _ = _get_client()
