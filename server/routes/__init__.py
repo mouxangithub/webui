@@ -827,12 +827,18 @@ def register_routes(app: web.Application) -> None:
 
   app.router.add_get("/api/opui/params/toggles", api_toggles_legacy)
 
-  app.router.add_static("/static/", path=str(WEB_DIR), name="static", cache_max_age=0)
+  app.router.add_static("/static/", path=str(WEB_DIR), name="static")
 
-  _NO_CACHE_HEADERS = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+  async def _disable_static_cache(_request: web.Request, response: web.StreamResponse) -> None:
+    path = _request.path
+    if path == "/" or path.startswith("/static/"):
+      response.headers.setdefault("Cache-Control", "no-cache, no-store, must-revalidate")
+      response.headers.setdefault("Pragma", "no-cache")
+      response.headers.setdefault("Expires", "0")
+  app.on_response_prepare.append(_disable_static_cache)
 
   async def index(_request: web.Request) -> web.FileResponse:
-    return web.FileResponse(WEB_DIR / "index.html", headers=_NO_CACHE_HEADERS)
+    return web.FileResponse(WEB_DIR / "index.html")
 
   app.router.add_get("/", index)
 
