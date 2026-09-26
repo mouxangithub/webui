@@ -306,7 +306,7 @@ async def api_bluetooth_mutate(request: web.Request) -> web.Response:
       elif operation == 'install':
         proc = await asyncio.create_subprocess_exec(
           'sudo', '-n', 'bash', '-c',
-          'apt-get update && apt-get install -y bluez && systemctl enable --now bluetooth',
+          'apt-get update && apt-get install -y bluez && systemctl start bluetooth',
           stdout=asyncio.subprocess.PIPE,
           stderr=asyncio.subprocess.PIPE,
         )
@@ -322,7 +322,7 @@ async def api_bluetooth_mutate(request: web.Request) -> web.Response:
       elif operation == 'service':
         if type(body.get('start')) is not bool:
           raise ValueError('start must be boolean')
-        command = ['sudo', '-n', 'systemctl', 'enable', '--now', 'bluetooth'] if body['start'] else ['sudo', '-n', 'systemctl', 'stop', 'bluetooth']
+        command = ['sudo', '-n', 'systemctl', 'start', 'bluetooth'] if body['start'] else ['sudo', '-n', 'systemctl', 'stop', 'bluetooth']
         proc = await asyncio.create_subprocess_exec(
           *command,
           stdout=asyncio.subprocess.DEVNULL,
