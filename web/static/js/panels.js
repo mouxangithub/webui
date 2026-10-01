@@ -4044,7 +4044,102 @@ function buildModelSlots(m, data, gen, container) {
     }
   }
 
+  const accelRow = buildAcceleratorRow(m);
+  if (accelRow) wrap.appendChild(accelRow);
+
   return wrap;
+}
+
+// -- Accelerator Link (jetlink) ------------------------------------------------
+// Mirrors the native Models panel row: Off / USB / iOS buttons bound to the
+// JetlinkLink param, plus the live connection status. An Android phone rides
+// the USB mode exactly like a Jetson or a Mac (jetlink docs/android-app.md),
+// so USB is described as covering it.
+
+const ACCELERATOR_DESC = "Run the big driving model on an attached accelerator: USB for a Jetson, a Linux PC, a Mac or an Android phone; iOS for an iPhone.";
+
+function acceleratorStatusText(accel) {
+  if (!accel) return "";
+  if (accel.reason && accel.mode !== "off") return accel.reason;
+  if (accel.progress && accel.progress.stage) {
+    const frac = typeof accel.progress.frac === "number" ? ` ${Math.round(accel.progress.frac * 100)}%` : "";
+    const msg = accel.progress.msg ? ` — ${accel.progress.msg}` : "";
+    return `${accel.progress.stage}${frac}${msg}`;
+  }
+  const key = accel.status?.key;
+  if (key === "accelerator_connected") {
+    return t("Accelerator connected: {transport}.").replace("{transport}", accel.status.transport || "USB");
+  }
+  if (key === "port_empty") return t("Nothing on the USB port.");
+  if (key === "port_device") return t("A device is on the USB port.");
+  return "";
+}
+
+function buildAcceleratorRow(m) {
+  const accel = m?.accelerator;
+  if (!accel || !accel.meaningful) return null;
+
+  const row = document.createElement("div");
+  row.className = "opui-sp-row";
+  row.dataset.modelsAccelerator = "1";
+
+  const desc = document.createElement("div");
+  desc.className = "opui-sp-row-desc";
+  desc.dataset.accelDesc = "1";
+  row.innerHTML = `
+    <div class="opui-sp-row-text">
+      <div class="opui-sp-row-title">${escapeHtml(t("Accelerator Link"))}</div>
+      <div class="opui-sp-row-desc" data-accel-status="1"></div>
+    </div>
+    <div class="opui-multi-btn-group" data-accel-buttons="1"></div>`;
+  row.insertBefore(desc, row.querySelector(".opui-multi-btn-group"));
+
+  const group = row.querySelector("[data-accel-buttons]");
+  for (const mode of accel.modes || ["off", "usb", "ios"]) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = mode === "off" ? t("Off") : mode === "usb" ? t("USB") : t("iOS");
+    btn.dataset.mode = mode;
+    btn.disabled = !globalState.is_offroad;
+    btn.addEventListener("click", async () => {
+      if (!globalState.is_offroad) {
+        toast(t("Changing the accelerator link is only allowed while offroad."));
+        return;
+      }
+      if (btn.dataset.mode === accel.mode) return;
+      try {
+        const res = await apiPost("/api/opui/models/accelerator", { mode: btn.dataset.mode });
+        if (res.ok) {
+          accel.mode = res.mode;
+          paintAcceleratorButtons(row, accel);
+          toast(t("Accelerator Link updated"));
+        } else {
+          toast(res.error || t("Failed"));
+        }
+      } catch {
+        toast(t("Failed"));
+      }
+    });
+    group.appendChild(btn);
+  }
+  paintAcceleratorButtons(row, accel);
+  updateAcceleratorStatus(row, accel);
+  return row;
+}
+
+function paintAcceleratorButtons(row, accel) {
+  row.querySelectorAll("[data-accel-buttons] button").forEach((btn) => {
+    const selected = btn.dataset.mode === accel.mode;
+    btn.classList.toggle("selected", selected);
+    btn.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+}
+
+function updateAcceleratorStatus(row, accel) {
+  const el = row.querySelector("[data-accel-status]");
+  if (!el) return;
+  const status = acceleratorStatusText(accel);
+  el.textContent = status ? `${t(ACCELERATOR_DESC)}\n${status}` : t(ACCELERATOR_DESC);
 }
 
 function buildModelsStatusNote(m) {
@@ -4256,6 +4351,11 @@ function updateModelsPanelLive(m, container) {
   const statusRow = container.querySelector("[data-models-status-row]");
   if (statusRow) {
     statusRow.replaceWith(buildModelStatusRow(m));
+  }
+  const accelRow = container.querySelector("[data-models-accelerator]");
+  if (accelRow && m.accelerator) {
+    paintAcceleratorButtons(accelRow, m.accelerator);
+    updateAcceleratorStatus(accelRow, m.accelerator);
   }
   const noteRow = container.querySelector("[data-models-status-note]");
   if (noteRow) {

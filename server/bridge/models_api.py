@@ -124,6 +124,103 @@ def _cache_size_mb() -> float:
     return 0.0
 
 
+# -- Accelerator Link (jetlink) -------------------------------------------------
+# Mirrors the native Models panel's Accelerator Link row: the mode setting, why
+# an enabled link cannot run, and the live connection status. An Android phone
+# rides the USB mode exactly like a Jetson or a Mac (jetlink docs/android-app.md).
+
+def _adapter() -> Any | None:
+  """The jetlink adapter module, or None where it cannot import. The adapter is
+  built to degrade safely (an absent jetlink checkout is a normal state), so the
+  import itself only fails on a broken checkout."""
+  try:
+    from openpilot.sunnypilot import jetlink_adapter
+    return jetlink_adapter
+  except Exception:
+    return None
+
+
+def _accelerator_mode(p: Any, modes: list[str], link_param: str) -> str:
+  try:
+    index = p.get(link_param, return_default=True)
+  except Exception:
+    index = None
+  return modes[index] if isinstance(index, int) and 0 <= index < len(modes) else "off"
+
+
+def _accelerator_status_text(s: Any) -> dict[str, Any]:
+  """Structured form of the native accelerator_link.link_status() one-liner; the
+  frontend translates the key and interpolates the transport."""
+  if s.present:
+    return {"key": "accelerator_connected", "transport": s.transport}
+  if s.port is None:
+    return {"key": ""}
+  return {"key": "port_empty" if s.port == "empty" else "port_device"}
+
+
+def _accelerator_state(p: Any) -> dict[str, Any]:
+  adapter = _adapter()
+  modes = list(adapter.MODES) if adapter is not None else ["off", "usb", "ios"]
+  link_param = str(adapter.KEYS.link) if adapter is not None else "JetlinkLink"
+
+  mode = _accelerator_mode(p, modes, link_param)
+
+  s = None
+  if adapter is not None:
+    try:
+      s = adapter.status()
+    except Exception:
+      s = None
+
+  chestnut = bool((_device_state() or {}).get("chestnutPresent"))
+  # native link_toggle_meaningful(): hidden beside a chestnut, which runs the
+  # big model itself; offered while the link is on even if jetlink cannot run
+  meaningful = (not chestnut) and (s is not None or mode != "off")
+
+  status: dict[str, Any] = {"key": ""}
+  progress: dict[str, Any] | None = None
+  reason: str | None = None
+  model: str | None = None
+  default_model: str | None = None
+  if s is not None:
+    try:
+      status = _accelerator_status_text(s)
+      progress = dict(s.progress) if s.progress else None
+      reason = s.reason
+      model = s.model
+      default_model = s.default_model
+    except Exception:
+      pass
+
+  return {
+    "modes": modes,
+    "mode": mode,
+    "meaningful": meaningful,
+    "status": status,
+    "progress": progress,
+    "reason": reason,
+    "model": model,
+    "default_model": default_model,
+  }
+
+
+def accelerator_link_set(mode: str) -> dict[str, Any]:
+  """Write the Accelerator Link setting (an index into the adapter's MODES), the
+  same param the native multiple_button_item_sp and jetlinkd both read."""
+  adapter = _adapter()
+  if adapter is None:
+    return {"ok": False, "error": "jetlink adapter unavailable"}
+  modes = list(adapter.MODES)
+  if mode not in modes:
+    return {"ok": False, "error": f"unknown mode: {mode}"}
+  try:
+    from openpilot.common.params import Params
+    Params().put(str(adapter.KEYS.link), modes.index(mode))
+  except Exception as exc:
+    return {"ok": False, "error": str(exc)}
+  return {"ok": True, "mode": mode}
+
+
 def _default_model_label(source: str) -> str:
   try:
     if source == "usbgpu":
@@ -434,6 +531,7 @@ def _models_status_impl() -> dict[str, Any]:
     "cache_size_mb": _cache_size_mb(),
     "model_manager_online": mm is not None,
     "started": bool(state and state.get("started")),
+    "accelerator": _accelerator_state(p),
   }
 
 
@@ -569,4 +667,14 @@ def _mock_models() -> dict[str, Any]:
     "model_manager_online": True,
     "started": False,
     "dev_pc": True,
+    "accelerator": {
+      "modes": ["off", "usb", "ios"],
+      "mode": "off",
+      "meaningful": True,
+      "status": {"key": ""},
+      "progress": None,
+      "reason": None,
+      "model": None,
+      "default_model": None,
+    },
   }
