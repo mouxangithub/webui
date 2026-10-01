@@ -321,22 +321,32 @@ def _active_source(state: dict[str, Any] | None) -> str:
   return "usbgpu" if big_active else "qcom"
 
 
+_MM_CACHE_TS: float = 0.0
+_MM_CACHE_TTL = 0.3  # s — modelManagerSP is high-frequency; a 300 ms cache is fresh
+
+
 def _read_live_model_manager(timeout_ms: int = 1000) -> Any | None:
   """Return the latest modelManagerSP message.
 
-  Uses the background warmer cache when available; falls back to a short poll.
+  Uses the background warmer cache when available; otherwise takes a short
+  non-blocking peek (modelManagerSP is published at high frequency, so a
+  peek is enough) and caches the result. Never blocks the event loop.
   """
+  global _MM_CACHE_TS
   _start_submaster_warmers()
   try:
-    if _MM_CACHE is not None:
+    if _MM_CACHE is not None and time.monotonic() - _MM_CACHE_TS < _MM_CACHE_TTL:
       return _MM_CACHE
     sm = _get_mm_sm()
-    deadline = time.monotonic() + timeout_ms / 1000.0
+    deadline = time.monotonic() + 0.1  # cap the wait: modelManagerSP is ~1 Hz, the next poll retries
     while time.monotonic() < deadline:
       with _SM_LOCK:
-        sm.update(200)
+        sm.update(30)
       if sm.valid.get("modelManagerSP"):
-        return sm["modelManagerSP"]
+        _MM_CACHE = sm["modelManagerSP"]
+        _MM_CACHE_TS = time.monotonic()
+        break
+    return _MM_CACHE
   except Exception:
     pass
   return None
