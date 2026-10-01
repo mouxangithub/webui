@@ -4106,18 +4106,26 @@ function buildAcceleratorRow(m) {
         toast(t("Changing the accelerator link is only allowed while offroad."));
         return;
       }
-      if (btn.dataset.mode === accel.mode) return;
+      if (btn.dataset.mode === accel.mode || row.dataset.accelPending === "1") return;
+      // Optimistic paint first: the POST itself is fast (~20 ms), but a 500 ms
+      // status poll blocked behind a slow GET used to delay the feedback by
+      // seconds. Roll back if the write fails.
+      const prev = accel.mode;
+      accel.mode = btn.dataset.mode;
+      row.dataset.accelPending = "1";
+      paintAcceleratorButtons(row, accel);
       try {
         const res = await apiPost("/api/opui/models/accelerator", { mode: btn.dataset.mode });
-        if (res.ok) {
-          accel.mode = res.mode;
-          paintAcceleratorButtons(row, accel);
-          toast(t("Accelerator Link updated"));
-        } else {
+        if (!res.ok) {
+          accel.mode = prev;
           toast(res.error || t("Failed"));
         }
       } catch {
+        accel.mode = prev;
         toast(t("Failed"));
+      } finally {
+        delete row.dataset.accelPending;
+        paintAcceleratorButtons(row, accel);
       }
     });
     group.appendChild(btn);
@@ -4353,7 +4361,8 @@ function updateModelsPanelLive(m, container) {
     statusRow.replaceWith(buildModelStatusRow(m));
   }
   const accelRow = container.querySelector("[data-models-accelerator]");
-  if (accelRow && m.accelerator) {
+  if (accelRow && m.accelerator && accelRow.dataset.accelPending !== "1") {
+    // skip while an optimistic write is in flight so the poll can't flash the old mode back
     paintAcceleratorButtons(accelRow, m.accelerator);
     updateAcceleratorStatus(accelRow, m.accelerator);
   }

@@ -48,7 +48,11 @@ def _warm_submasters() -> None:
     mm_sm = _get_mm_sm()
     while True:
       with _SM_LOCK:
-        state_sm.update(100)
+        # deviceState publishes at 2 Hz — waiting less than ~500 ms per update
+        # usually times out with no message, so valid stays False and the
+        # cache is never filled (which sent every handler into its 400 ms
+        # fallback poll).
+        state_sm.update(500)
         if state_sm.valid.get("deviceState"):
           ds = state_sm["deviceState"]
           try:
@@ -158,7 +162,7 @@ def _accelerator_status_text(s: Any) -> dict[str, Any]:
   return {"key": "port_empty" if s.port == "empty" else "port_device"}
 
 
-def _accelerator_state(p: Any) -> dict[str, Any]:
+def _accelerator_state(p: Any, chestnut_present: bool | None = None) -> dict[str, Any]:
   adapter = _adapter()
   modes = list(adapter.MODES) if adapter is not None else ["off", "usb", "ios"]
   link_param = str(adapter.KEYS.link) if adapter is not None else "JetlinkLink"
@@ -172,10 +176,11 @@ def _accelerator_state(p: Any) -> dict[str, Any]:
     except Exception:
       s = None
 
-  chestnut = bool((_device_state() or {}).get("chestnutPresent"))
+  if chestnut_present is None:
+    chestnut_present = bool((_device_state() or {}).get("chestnutPresent"))
   # native link_toggle_meaningful(): hidden beside a chestnut, which runs the
   # big model itself; offered while the link is on even if jetlink cannot run
-  meaningful = (not chestnut) and (s is not None or mode != "off")
+  meaningful = (not chestnut_present) and (s is not None or mode != "off")
 
   status: dict[str, Any] = {"key": ""}
   progress: dict[str, Any] | None = None
@@ -240,21 +245,32 @@ def _usbgpu_present() -> bool:
     return False
 
 
+_DEVICE_STATE_CACHE: dict[str, Any] | None = None
+_DEVICE_STATE_TS: float = 0.0
+_DEVICE_STATE_TTL = 0.3  # s — deviceState is 2 Hz; poll at most ~3x a second
+
+
 def _device_state() -> dict[str, Any] | None:
   """Read the live usbgpu status from deviceState + Params.
 
   Uses the background warmer cache when available so the HTTP handler can
-  return immediately; falls back to a short poll if the cache is empty.
+  return immediately; falls back to a short poll if the cache is empty. A
+  short-TTL request cache guards against callers polling twice per request
+  (the accelerator section used to, which doubled the wait).
   """
+  global _DEVICE_STATE_CACHE, _DEVICE_STATE_TS
   _start_submaster_warmers()
   try:
     if _STATE_CACHE is not None:
       return _STATE_CACHE
+    if _DEVICE_STATE_CACHE is not None and time.monotonic() - _DEVICE_STATE_TS < _DEVICE_STATE_TTL:
+      return _DEVICE_STATE_CACHE
     sm = _get_state_sm()
-    deadline = time.monotonic() + 0.4
+    deadline = time.monotonic() + 0.6
     while time.monotonic() < deadline:
       with _SM_LOCK:
-        sm.update(120)
+        # 2 Hz publisher: a short wait here usually returns nothing
+        sm.update(250)
       if sm.valid.get("deviceState"):
         ds = sm["deviceState"]
         try:
@@ -262,15 +278,17 @@ def _device_state() -> dict[str, Any] | None:
           p = Params()
         except Exception:
           p = None
-        return {
+        _DEVICE_STATE_CACHE = {
           "started": bool(getattr(ds, "started", False)),
           "chestnutPresent": bool(getattr(ds, "chestnutPresent", False)),
           "usbgpuActive": p.get_bool("UsbGpuActive") if p else None,
           "usbgpuLoading": p.get_bool("UsbGpuLoading") if p else False,
         }
+        _DEVICE_STATE_TS = time.monotonic()
+        return _DEVICE_STATE_CACHE
   except Exception:
     pass
-  return None
+  return _DEVICE_STATE_CACHE
 
 
 def _active_source(state: dict[str, Any] | None) -> str:
@@ -531,7 +549,7 @@ def _models_status_impl() -> dict[str, Any]:
     "cache_size_mb": _cache_size_mb(),
     "model_manager_online": mm is not None,
     "started": bool(state and state.get("started")),
-    "accelerator": _accelerator_state(p),
+    "accelerator": _accelerator_state(p, chestnut_present=bool(state and state.get("chestnutPresent"))),
   }
 
 
