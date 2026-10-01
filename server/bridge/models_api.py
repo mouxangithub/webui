@@ -28,7 +28,11 @@ def _get_state_sm() -> Any:
   global _STATE_SM
   if _STATE_SM is None:
     import openpilot.cereal.messaging as messaging
-    _STATE_SM = messaging.SubMaster(["deviceState"], poll="deviceState")
+    # No poll=: a polled service is read non-blocking by update(), so
+    # update(500) would return immediately without a message (deviceState
+    # publishes at 2 Hz) and valid would stay False forever. Without poll,
+    # update() blocks until the message or the timeout, whichever first.
+    _STATE_SM = messaging.SubMaster(["deviceState"])
   return _STATE_SM
 
 
