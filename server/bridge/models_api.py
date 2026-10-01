@@ -255,12 +255,14 @@ _DEVICE_STATE_TTL = 0.3  # s — deviceState is 2 Hz; poll at most ~3x a second
 
 
 def _device_state() -> dict[str, Any] | None:
-  """Read the live usbgpu status from deviceState + Params.
+  """Best-effort device state for the Models panel.
 
-  Uses the background warmer cache when available so the HTTP handler can
-  return immediately; falls back to a short poll if the cache is empty. A
-  short-TTL request cache guards against callers polling twice per request
-  (the accelerator section used to, which doubled the wait).
+  The warmer cache serves deviceState when it is publishing normally. But
+  hardware_thread paces itself on pandaStates, and with no panda attached
+  that loop slows far below deviceState's nominal 2 Hz — a subscriber can
+  wait seconds without a frame. So never block: peek non-blocking, then
+  fall back to Params (IsOffroad mirrors `started`; the chestnut is probed
+  on USB directly).
   """
   global _DEVICE_STATE_CACHE, _DEVICE_STATE_TS
   _start_submaster_warmers()
@@ -270,26 +272,36 @@ def _device_state() -> dict[str, Any] | None:
     if _DEVICE_STATE_CACHE is not None and time.monotonic() - _DEVICE_STATE_TS < _DEVICE_STATE_TTL:
       return _DEVICE_STATE_CACHE
     sm = _get_state_sm()
-    deadline = time.monotonic() + 0.6
-    while time.monotonic() < deadline:
-      with _SM_LOCK:
-        # 2 Hz publisher: a short wait here usually returns nothing
-        sm.update(250)
-      if sm.valid.get("deviceState"):
-        ds = sm["deviceState"]
-        try:
-          from openpilot.common.params import Params
-          p = Params()
-        except Exception:
-          p = None
-        _DEVICE_STATE_CACHE = {
-          "started": bool(getattr(ds, "started", False)),
-          "chestnutPresent": bool(getattr(ds, "chestnutPresent", False)),
-          "usbgpuActive": p.get_bool("UsbGpuActive") if p else None,
-          "usbgpuLoading": p.get_bool("UsbGpuLoading") if p else False,
-        }
-        _DEVICE_STATE_TS = time.monotonic()
-        return _DEVICE_STATE_CACHE
+    with _SM_LOCK:
+      sm.update(30)  # peek: a blocking wait here stalls the whole event loop
+    if sm.valid.get("deviceState"):
+      ds = sm["deviceState"]
+      try:
+        from openpilot.common.params import Params
+        p = Params()
+      except Exception:
+        p = None
+      _DEVICE_STATE_CACHE = {
+        "started": bool(getattr(ds, "started", False)),
+        "chestnutPresent": bool(getattr(ds, "chestnutPresent", False)),
+        "usbgpuActive": p.get_bool("UsbGpuActive") if p else None,
+        "usbgpuLoading": p.get_bool("UsbGpuLoading") if p else False,
+      }
+      _DEVICE_STATE_TS = time.monotonic()
+      return _DEVICE_STATE_CACHE
+
+    from openpilot.common.params import Params
+    from openpilot.selfdrive.modeld.helpers import chestnut_present
+    p = Params()
+    state = {
+      "started": not p.get_bool("IsOffroad"),
+      "chestnutPresent": chestnut_present(),
+      "usbgpuActive": p.get_bool("UsbGpuActive"),
+      "usbgpuLoading": p.get_bool("UsbGpuLoading"),
+    }
+    _DEVICE_STATE_CACHE = state
+    _DEVICE_STATE_TS = time.monotonic()
+    return state
   except Exception:
     pass
   return _DEVICE_STATE_CACHE
