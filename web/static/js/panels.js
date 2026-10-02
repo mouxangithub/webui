@@ -4131,7 +4131,7 @@ function buildAcceleratorRow(m) {
     group.appendChild(btn);
   }
   paintAcceleratorButtons(row, accel);
-  updateAcceleratorStatus(row, accel);
+  updateAcceleratorStatus(row, accel, m);
   return row;
 }
 
@@ -4143,11 +4143,24 @@ function paintAcceleratorButtons(row, accel) {
   });
 }
 
-function updateAcceleratorStatus(row, accel) {
+const BIG_MODEL_SOURCE_TEXT = {
+  jetlink: "Big model: running on the accelerator",
+  chestnut: "Big model: running on the eGPU",
+  device: "Big model: running on the device",
+};
+
+function bigModelSourceText(m) {
+  const key = m?.big_model_source;
+  return BIG_MODEL_SOURCE_TEXT[key] ? t(BIG_MODEL_SOURCE_TEXT[key]) : "";
+}
+
+function updateAcceleratorStatus(row, accel, m) {
   const el = row.querySelector("[data-accel-status]");
   if (!el) return;
   const status = acceleratorStatusText(accel);
-  el.textContent = status ? `${t(ACCELERATOR_DESC)}\n${status}` : t(ACCELERATOR_DESC);
+  const source = bigModelSourceText(m);
+  const parts = [t(ACCELERATOR_DESC), source, status].filter(Boolean);
+  el.textContent = parts.join("\n");
 }
 
 function buildModelsStatusNote(m) {
@@ -4364,7 +4377,7 @@ function updateModelsPanelLive(m, container) {
   if (accelRow && m.accelerator && accelRow.dataset.accelPending !== "1") {
     // skip while an optimistic write is in flight so the poll can't flash the old mode back
     paintAcceleratorButtons(accelRow, m.accelerator);
-    updateAcceleratorStatus(accelRow, m.accelerator);
+    updateAcceleratorStatus(accelRow, m.accelerator, m);
   }
   const noteRow = container.querySelector("[data-models-status-note]");
   if (noteRow) {

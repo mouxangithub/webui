@@ -44,6 +44,20 @@ def _get_mm_sm() -> Any:
   return _MM_SM
 
 
+_MDV2SP_SM: Any = None
+
+
+def _get_mdv2sp_sm() -> Any:
+  """modelDataV2SP carries acceleratorState — the ground truth for where the
+  big model is actually running right now (jetlink joining/running vs the
+  chestnut big bundle vs the on-device small model)."""
+  global _MDV2SP_SM
+  if _MDV2SP_SM is None:
+    import openpilot.cereal.messaging as messaging
+    _MDV2SP_SM = messaging.SubMaster(["modelDataV2SP"], poll="modelDataV2SP")
+  return _MDV2SP_SM
+
+
 def _warm_submasters() -> None:
   """Background thread: keep SubMaster sockets warm and cache latest values."""
   global _STATE_CACHE, _MM_CACHE
@@ -154,6 +168,33 @@ def _accelerator_mode(p: Any, modes: list[str], link_param: str) -> str:
   except Exception:
     index = None
   return modes[index] if isinstance(index, int) and 0 <= index < len(modes) else "off"
+
+
+def _big_model_source(p: Any, state: dict[str, Any] | None, accel: dict[str, Any] | None) -> str:
+  """Where the big driving model is running right now: 'jetlink' (off-board
+  accelerator), 'chestnut' (on the eGPU), or 'device' (on-device small model).
+  Judged from modelDataV2SP.acceleratorState first — that is what modeld is
+  actually driving with — then falling back to the chestnut state."""
+  try:
+    sm = _get_mdv2sp_sm()
+    with _SM_LOCK:
+      sm.update(30)
+    state_name = str(sm["modelDataV2SP"].acceleratorState)
+    if state_name in ("running", "joining"):
+      return "jetlink"
+  except Exception:
+    pass
+
+  usbgpu = bool(state and state.get("chestnutPresent")) or _usbgpu_present()
+  if usbgpu:
+    usbgpu_active = state.get("usbgpuActive")
+    usbgpu_loading = state.get("usbgpuLoading")
+    started = state.get("started")
+    big_active = usbgpu_active is True or usbgpu_loading or (not started)
+    if big_active:
+      return "chestnut"
+
+  return "device"
 
 
 def _accelerator_status_text(s: Any) -> dict[str, Any]:
@@ -558,9 +599,11 @@ def _models_status_impl() -> dict[str, Any]:
   carry_internal = carry_slot["selected"].get("internal") or carry_slot["default_label"]
 
   download = _bundle_download(mm)
+  accel_state = _accelerator_state(p, chestnut_present=bool(state and state.get("chestnutPresent")))
   return {
     "ok": True,
     "active_source": active,
+    "big_model_source": _big_model_source(p, state, accel_state),
     "usbgpu_enabled": usbgpu_enabled,
     "big_state": big_state,
     "carry_source": carry_source,
@@ -575,7 +618,7 @@ def _models_status_impl() -> dict[str, Any]:
     "cache_size_mb": _cache_size_mb(),
     "model_manager_online": mm is not None,
     "started": bool(state and state.get("started")),
-    "accelerator": _accelerator_state(p, chestnut_present=bool(state and state.get("chestnutPresent"))),
+    "accelerator": accel_state,
   }
 
 
@@ -674,6 +717,7 @@ def _mock_models() -> dict[str, Any]:
   return {
     "ok": True,
     "active_source": "qcom",
+    "big_model_source": "device",
     "usbgpu_enabled": False,
     "big_state": None,
     "carry_source": "qcom",
